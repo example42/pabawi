@@ -9,62 +9,103 @@ env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
 
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   build-and-publish:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [amd64, arm64]
     permissions:
-      contents: write
+      contents: read
       packages: write
       id-token: write
       attestations: write
-
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Extract metadata
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - name: Extract release metadata
         id: meta
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{major}}
-            type=raw,value=latest
-            type=sha
-
-      - name: Build and push Docker image
-        id: build
+          tags: type=semver,pattern={{version}}
+      - name: Build release candidate locally
         uses: docker/build-push-action@v5
         with:
           context: .
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
+          platforms: linux/${{ matrix.arch }}
+          load: true
+          push: false
+          tags: pabawi:candidate
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          platforms: linux/amd64,linux/arm64
-
-      - name: Generate artifact attestation
+          cache-from: type=gha,scope=release-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=release-${{ matrix.arch }}
+      - name: Verify release candidate
+        env:
+          DOCKER_DEFAULT_PLATFORM: linux/${{ matrix.arch }}
+        run: |
+          bash scripts/supply-chain/image-smoke.sh pabawi:candidate
+          mkdir -p artifacts
+          docker run --rm -i --entrypoint node pabawi:candidate < scripts/supply-chain/dependency-graph.cjs > artifacts/dependencies.json
+      - name: Scan release candidate
+        run: bash scripts/supply-chain/scan-image.sh pabawi:candidate artifacts
+      - name: Retain release evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-evidence-${{ matrix.arch }}
+          path: artifacts/*.json
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Push the verified image without rebuilding
+        id: push
+        run: |
+          tag="${REGISTRY}/${IMAGE_NAME}:${GITHUB_REF_NAME}-${{ matrix.arch }}"
+          docker tag pabawi:candidate "$tag"
+          docker push "$tag"
+          digest=$(docker inspect --format '{{index .RepoDigests 0}}' "$tag")
+          echo "digest=${digest#*@}" >> "$GITHUB_OUTPUT"
+      - name: Attest the verified image
         uses: actions/attest-build-provenance@v1
         with:
           subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          subject-digest: ${{ steps.build.outputs.digest }}
+          subject-digest: ${{ steps.push.outputs.digest }}
           push-to-registry: true
 
-  create-release:
+  publish-manifest:
     needs: build-and-publish
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+    steps:
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Publish verified architecture images
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          image="${REGISTRY}/${IMAGE_NAME}"
+          tags=(--tag "$image:$version" --tag "$image:sha-${GITHUB_SHA:0:7}")
+          if [[ "$version" != *-* ]]; then
+            tags+=(--tag "$image:${version%.*}" --tag "$image:${version%%.*}" --tag "$image:latest")
+          fi
+          docker buildx imagetools create "${tags[@]}" \
+            "$image:${GITHUB_REF_NAME}-amd64" "$image:${GITHUB_REF_NAME}-arm64"
+
+  create-release:
+    needs: publish-manifest
     runs-on: ubuntu-latest
     permissions:
       contents: write

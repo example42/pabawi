@@ -27,14 +27,14 @@ header "Pabawi Setup"
 
 # Check Node.js
 if ! command -v node &>/dev/null; then
-  error "Node.js is not installed. Please install Node.js 18+ and try again."
+  error "Node.js is not installed. Please install Node.js 24 LTS and try again."
   exit 1
 fi
 
 NODE_VERSION=$(node -v | sed 's/v//')
 NODE_MAJOR=$(echo "$NODE_VERSION" | cut -d. -f1)
-if (( NODE_MAJOR < 18 )); then
-  error "Node.js 18+ is required (found v${NODE_VERSION})."
+if (( NODE_MAJOR != 24 )); then
+  error "Node.js 24 LTS is required (found v${NODE_VERSION})."
   exit 1
 fi
 success "Node.js v${NODE_VERSION} detected"

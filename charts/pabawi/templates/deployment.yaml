@@ -34,9 +34,14 @@ spec:
   selector:
     matchLabels:
       {{- include "pabawi.selectorLabels" . | nindent 6 }}
+  {{- if or (eq .Values.database.type "sqlite") (eq .Values.strategy.type "Recreate") }}
+  strategy:
+    type: Recreate
+  {{- else }}
   {{- with .Values.strategy }}
   strategy:
     {{- toYaml . | nindent 4 }}
+  {{- end }}
   {{- end }}
   template:
     metadata:
@@ -45,10 +50,13 @@ spec:
         {{- with .Values.podLabels }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
-      {{- with .Values.podAnnotations }}
       annotations:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
+        {{- $annotations := deepCopy .Values.podAnnotations }}
+        {{- $_ := set $annotations "checksum/config" (include (print $.Template.BasePath "/configmap.yaml") . | sha256sum) }}
+        {{- if and .Values.secrets.create (not .Values.secrets.existingSecret) }}
+        {{- $_ := set $annotations "checksum/secret" (include (print $.Template.BasePath "/secret.yaml") . | sha256sum) }}
+        {{- end }}
+        {{- toYaml $annotations | nindent 8 }}
     spec:
       serviceAccountName: {{ include "pabawi.serviceAccountName" . }}
       {{- with .Values.imagePullSecrets }}

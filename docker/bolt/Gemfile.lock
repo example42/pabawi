@@ -1,0 +1,380 @@
+PATH
+  remote: vendor/winrm-fs
+  specs:
+    winrm-fs (1.3.5.pabawi.1)
+      erubi (~> 1.8)
+      logging (>= 1.6.1, < 3.0)
+      rubyzip (~> 3.6)
+      winrm (~> 2.0)
+
+GEM
+  remote: https://rubygems.org/
+  specs:
+    CFPropertyList (4.0.0)
+      base64
+      nkf
+      rexml
+    addressable (2.9.0)
+      public_suffix (>= 2.0.2, < 8.0)
+    aws-eventstream (1.4.0)
+    aws-partitions (1.1285.0)
+    aws-sdk-core (3.255.0)
+      aws-eventstream (~> 1, >= 1.3.0)
+      aws-partitions (~> 1, >= 1.992.0)
+      aws-sigv4 (~> 1.9)
+      base64
+      bigdecimal
+      jmespath (~> 1, >= 1.6.1)
+      logger
+      rexml (~> 3.4, >= 3.4.2)
+    aws-sdk-ec2 (1.647.0)
+      aws-sdk-core (~> 3, >= 3.255.0)
+      aws-sigv4 (~> 1.5)
+    aws-sigv4 (1.12.1)
+      aws-eventstream (~> 1, >= 1.0.2)
+    base64 (0.3.0)
+    benchmark (0.5.0)
+    bigdecimal (4.1.2)
+    bindata (3.0.0)
+    builder (3.3.0)
+    colored2 (4.0.3)
+    concurrent-ruby (1.3.8)
+    cri (2.15.12)
+    deep_merge (1.2.2)
+    erb (6.0.7)
+    erubi (1.13.1)
+    faraday (2.14.3)
+      faraday-net_http (>= 2.0, < 3.5)
+      json
+      logger
+    faraday-follow_redirects (0.5.0)
+      faraday (>= 1, < 3)
+    faraday-net_http (3.4.4)
+      net-http (~> 0.5)
+    fast_gettext (4.1.1)
+      prime
+      racc
+    ffi (1.17.4)
+    ffi (1.17.4-aarch64-linux-gnu)
+    ffi (1.17.4-aarch64-linux-musl)
+    ffi (1.17.4-arm-linux-gnu)
+    ffi (1.17.4-arm-linux-musl)
+    ffi (1.17.4-arm64-darwin)
+    ffi (1.17.4-x86-linux-gnu)
+    ffi (1.17.4-x86-linux-musl)
+    ffi (1.17.4-x86_64-darwin)
+    ffi (1.17.4-x86_64-linux-gnu)
+    ffi (1.17.4-x86_64-linux-musl)
+    fiddle (1.1.8)
+    forwardable (1.4.0)
+    getoptlong (0.2.1)
+    gettext (3.5.2)
+      erubi
+      locale (>= 2.0.5)
+      prime
+      racc
+      text (>= 1.3.0)
+    gettext-setup (1.1.1)
+      fast_gettext (>= 2.1, < 5.0)
+      gettext (~> 3.4)
+      locale
+    gssapi (1.3.1)
+      ffi (>= 1.0.1)
+    gyoku (1.4.0)
+      builder (>= 2.1.2)
+      rexml (~> 3.0)
+    hiera-eyaml (4.3.0)
+      highline (>= 2.1, < 4)
+      optimist (~> 3.1)
+    highline (3.1.2)
+      reline
+    hocon (1.4.0)
+    httpclient (2.9.0)
+      mutex_m
+    io-console (0.9.2)
+    irb (1.18.0)
+      pp (>= 0.6.0)
+      prism (>= 1.3.0)
+      rdoc (>= 4.0.0)
+      reline (>= 0.4.2)
+    jmespath (1.6.2)
+    json (2.21.2)
+    jwt (2.10.3)
+      base64
+    little-plugger (1.1.4)
+    locale (2.1.5)
+      fiddle
+    log4r (1.1.10)
+    logger (1.7.0)
+    logging (2.4.0)
+      little-plugger (~> 1.1)
+      multi_json (~> 1.14)
+    minitar (1.1.0)
+    molinillo (0.8.0)
+    multi_json (1.21.2)
+    mutex_m (0.3.0)
+    net-http (0.9.1)
+      uri (>= 0.11.1)
+    net-scp (4.1.0)
+      net-ssh (>= 2.6.5, < 8.0.0)
+    net-ssh (7.3.3)
+    net-ssh-krb (0.5.1)
+      gssapi (~> 1.3.0)
+      net-ssh (>= 2.0)
+    nkf (0.3.0)
+    nori (2.9.1)
+      bigdecimal
+      stringio
+    openbolt (5.1.0)
+      CFPropertyList (>= 2.2)
+      addressable (~> 2.5)
+      aws-sdk-ec2 (~> 1)
+      concurrent-ruby (~> 1.0)
+      ffi (>= 1.9.25, < 2.0.0)
+      hiera-eyaml (>= 3.0.0, < 5.0.0)
+      json (~> 2.12)
+      jwt (~> 2.2)
+      logging (~> 2.2)
+      minitar (>= 0.6, < 2.0)
+      net-scp (>= 1.2, < 5.0)
+      net-ssh (>= 4.0, < 8.0)
+      net-ssh-krb (~> 0.5)
+      openvox (~> 8.0)
+      openvox-strings (>= 5.0, < 7)
+      puppet-resource_api (>= 1.8.1)
+      puppetfile-resolver (>= 0.6.2, < 1.0)
+      r10k (>= 3.10, < 6)
+      ruby_smb (~> 1.0)
+      terminal-table (~> 3.0)
+      winrm (~> 2.0)
+      winrm-fs (~> 1.3)
+    openfact (6.0.0)
+      base64 (>= 0.1, < 0.4)
+      benchmark (< 0.6)
+      hocon (~> 1.3)
+      logger (~> 1.5)
+      ostruct (< 0.7)
+      thor (~> 1.5)
+      tsort (< 0.3)
+    openvox (8.29.0)
+      base64 (>= 0.1, < 0.4)
+      benchmark (>= 0.2, < 0.6)
+      concurrent-ruby (~> 1.0)
+      deep_merge (~> 1.0)
+      fast_gettext (>= 2.1, < 5)
+      fiddle (~> 1.1)
+      getoptlong (~> 0.2.0)
+      locale (~> 2.1)
+      openfact (>= 5.0, < 7)
+      ostruct (>= 0.5.5, < 0.7)
+      puppet-resource_api (~> 2.0)
+      racc (~> 1.5)
+      scanf (~> 1.0)
+      semantic_puppet (~> 1.0)
+    openvox-strings (6.1.0)
+      irb (< 2)
+      openvox (>= 8.24, < 9)
+      rgen (>= 0.9, < 0.11)
+      yard (~> 0.9)
+    optimist (3.2.1)
+    ostruct (0.6.3)
+    pp (0.6.4)
+      prettyprint
+    prettyprint (0.2.0)
+    prime (0.1.4)
+      forwardable
+      singleton
+    prism (1.9.0)
+    public_suffix (7.0.5)
+    puppet-resource_api (2.0.1)
+      hocon (>= 1.0)
+    puppet_forge (6.2.0)
+      base64 (>= 0.2.0, < 0.4.0)
+      faraday (~> 2.0)
+      faraday-follow_redirects (>= 0.3, < 0.6)
+      minitar (~> 1.0, >= 1.0.2)
+      semantic_puppet (~> 1.0)
+    puppetfile-resolver (0.6.3)
+      molinillo (~> 0.6)
+      semantic_puppet (~> 1.0)
+    r10k (5.0.3)
+      colored2 (~> 4.0)
+      cri (>= 2.15.10)
+      gettext-setup (>= 0.24, < 2.0)
+      jwt (>= 2.2.3, < 3)
+      log4r (= 1.1.10)
+      minitar (>= 0.9, < 2)
+      multi_json (~> 1.10)
+      puppet_forge (>= 6.1.0, < 7)
+    racc (1.8.1)
+    rbs (4.1.3)
+      logger
+      prism (>= 1.6.0)
+      tsort
+    rdoc (8.0.0)
+      erb
+      prism (>= 1.6.0)
+      rbs (>= 4.0.0)
+      tsort
+    reline (0.7.0)
+      io-console (~> 0.5)
+    rexml (3.4.4)
+    rgen (0.10.2)
+    ruby_smb (1.1.0)
+      bindata
+      rubyntlm
+      windows_error
+    rubyntlm (0.6.6)
+      base64
+    rubyzip (3.6.0)
+    scanf (1.0.0)
+    semantic_puppet (1.1.1)
+    singleton (0.3.0)
+    stringio (3.2.0)
+    terminal-table (3.0.2)
+      unicode-display_width (>= 1.1.1, < 3)
+    text (1.3.1)
+    thor (1.5.0)
+    tsort (0.2.0)
+    unicode-display_width (2.6.0)
+    uri (1.1.1)
+    windows_error (0.1.6)
+    winrm (2.4.0)
+      base64 (~> 0.2)
+      builder (>= 2.1.2)
+      erubi (~> 1.8)
+      gssapi (~> 1.2)
+      gyoku (~> 1.0)
+      httpclient (~> 2.2, >= 2.2.0.2)
+      logger (~> 1.6)
+      nori (~> 2.0, >= 2.7.1)
+      rexml (~> 3.0)
+      rubyntlm (~> 0.6.0, >= 0.6.3)
+    yard (0.9.45)
+
+PLATFORMS
+  aarch64-linux
+  aarch64-linux-gnu
+  aarch64-linux-musl
+  arm-linux-gnu
+  arm-linux-musl
+  arm64-darwin
+  ruby
+  x86-linux-gnu
+  x86-linux-musl
+  x86_64-darwin
+  x86_64-linux
+  x86_64-linux-gnu
+  x86_64-linux-musl
+
+DEPENDENCIES
+  openbolt (= 5.1.0)
+  rubyzip (= 3.6.0)
+  winrm-fs (= 1.3.5.pabawi.1)!
+
+CHECKSUMS
+  CFPropertyList (4.0.0) sha256=385e7bbd7c27e176b23415275ca936ca0ece1727e5b890b08e36632076b00aff
+  addressable (2.9.0) sha256=7fdf6ac3660f7f4e867a0838be3f6cf722ace541dd97767fa42bc6cfa980c7af
+  aws-eventstream (1.4.0) sha256=116bf85c436200d1060811e6f5d2d40c88f65448f2125bc77ffce5121e6e183b
+  aws-partitions (1.1285.0) sha256=db3bdc741ecdd529d9a2e96c2a96ddf32e13e4337bcb10db060d87e93ece2485
+  aws-sdk-core (3.255.0) sha256=2bac7fbc8796e4e2eb8e6a6edebcb880d7023a922af97b15d2a8a26c9283343f
+  aws-sdk-ec2 (1.647.0) sha256=7777659867dab264ac0d00e1faa60595789225473fb5639f45cd20c9f99f7255
+  aws-sigv4 (1.12.1) sha256=6973ff95cb0fd0dc58ba26e90e9510a2219525d07620c8babeb70ef831826c00
+  base64 (0.3.0) sha256=27337aeabad6ffae05c265c450490628ef3ebd4b67be58257393227588f5a97b
+  benchmark (0.5.0) sha256=465df122341aedcb81a2a24b4d3bd19b6c67c1530713fd533f3ff034e419236c
+  bigdecimal (4.1.2) sha256=53d217666027eab4280346fba98e7d5b66baaae1b9c3c1c0ffe89d48188a3fbd
+  bindata (3.0.0) sha256=7edc84092f958326ea1a3207142c79ba9f6b53796a02098a5b1670be75bd8a79
+  builder (3.3.0) sha256=497918d2f9dca528fdca4b88d84e4ef4387256d984b8154e9d5d3fe5a9c8835f
+  colored2 (4.0.3) sha256=63e1038183976287efc43034f5cca17fb180b4deef207da8ba78d051cbce2b37
+  concurrent-ruby (1.3.8) sha256=b2f1be836e968ccc78ccfce277ea79c72a88633f22306782c16ff23fb415d1e1
+  cri (2.15.12) sha256=8abfe924ef53e772a8e4ee907e791d3bfcfca78bc62a5859e3b9899ba29956e5
+  deep_merge (1.2.2) sha256=83ced3a3d7f95f67de958d2ce41b1874e83c8d94fe2ddbff50c8b4b82323563a
+  erb (6.0.7) sha256=c5ca6dc25b0ef974a44dc8f59fe847577122483b1968a38dec305c60bf91ee92
+  erubi (1.13.1) sha256=a082103b0885dbc5ecf1172fede897f9ebdb745a4b97a5e8dc63953db1ee4ad9
+  faraday (2.14.3) sha256=1882247e6766615c8220b4392bf1d27f6ebb63d8e28267587cef1fb0bf37f278
+  faraday-follow_redirects (0.5.0) sha256=5cde93c894b30943a5d2b93c2fe9284216a6b756f7af406a1e55f211d97d10ad
+  faraday-net_http (3.4.4) sha256=0e78af151747ed1b00f33e25973b4bc220d7f16c00c39676817c8b12331eb588
+  fast_gettext (4.1.1) sha256=e8c532f6945b0dc31efb2e91366bd56630bc3ae6a05a4126937124e40366efd8
+  ffi (1.17.4) sha256=bcd1642e06f0d16fc9e09ac6d49c3a7298b9789bcb58127302f934e437d60acf
+  ffi (1.17.4-aarch64-linux-gnu) sha256=b208f06f91ffd8f5e1193da3cae3d2ccfc27fc36fba577baf698d26d91c080df
+  ffi (1.17.4-aarch64-linux-musl) sha256=9286b7a615f2676245283aef0a0a3b475ae3aae2bb5448baace630bb77b91f39
+  ffi (1.17.4-arm-linux-gnu) sha256=d6dbddf7cb77bf955411af5f187a65b8cd378cb003c15c05697f5feee1cb1564
+  ffi (1.17.4-arm-linux-musl) sha256=9d4838ded0465bef6e2426935f6bcc93134b6616785a84ffd2a3d82bc3cf6f95
+  ffi (1.17.4-arm64-darwin) sha256=19071aaf1419251b0a46852abf960e77330a3b334d13a4ab51d58b31a937001b
+  ffi (1.17.4-x86-linux-gnu) sha256=38e150df5f4ca555e25beca4090823ae09657bceded154e3c52f8631c1ed72cf
+  ffi (1.17.4-x86-linux-musl) sha256=fbeec0fc7c795bcf86f623bb18d31ea1820f7bd580e1703a3d3740d527437809
+  ffi (1.17.4-x86_64-darwin) sha256=aa70390523cf3235096cf64962b709b4cfbd5c082a2cb2ae714eb0fe2ccda496
+  ffi (1.17.4-x86_64-linux-gnu) sha256=9d3db14c2eae074b382fa9c083fe95aec6e0a1451da249eab096c34002bc752d
+  ffi (1.17.4-x86_64-linux-musl) sha256=3fdf9888483de005f8ef8d1cf2d3b20d86626af206cbf780f6a6a12439a9c49e
+  fiddle (1.1.8) sha256=7fa8ee3627271497f3add5503acdbc3f40b32f610fc1cf49634f083ef3f32eee
+  forwardable (1.4.0) sha256=f1cd40cc9812937980e1c76f1aa053660990a7c9b6a98fc37d945468afcce838
+  getoptlong (0.2.1) sha256=fd23f07397b994bf9310d4531cfdb4332629a9b8e8c9c457c32b7edf5bf21ba5
+  gettext (3.5.2) sha256=ada02c59aa7e9f56bd2522faedaed16421dd2f3ddb5fe28628c0be5abcbf3c74
+  gettext-setup (1.1.1) sha256=15ce653696283c9835b0ad9f02f236b9f240cb35facd3341cc62b85d42c6b667
+  gssapi (1.3.1) sha256=c51cf30842ee39bd93ce7fc33e20405ff8a04cda9dec6092071b61258284aee1
+  gyoku (1.4.0) sha256=389d887384c777f271cb9377bb642f20bbe0c633d1ef5af78569d4db53c1a2cd
+  hiera-eyaml (4.3.0) sha256=19eba2ea9d70b2d56de064df9e3242860d8070d47ff9c9a6348b7fe94708ab0a
+  highline (3.1.2) sha256=67cbd34d19f6ef11a7ee1d82ffab5d36dfd5b3be861f450fc1716c7125f4bb4a
+  hocon (1.4.0) sha256=e71023ed7c56ae780ec34c0ce7789a233bcead08c045d50bc7b3af40f5afcd80
+  httpclient (2.9.0) sha256=4b645958e494b2f86c2f8a2f304c959baa273a310e77a2931ddb986d83e498c8
+  io-console (0.9.2) sha256=efa74f891dd03c0939a931dfc6e74c2813d904763d456ea9762b0525e748db08
+  irb (1.18.0) sha256=de9454a0703a54704b9811a5ef31a60c86949fbf4013fcf244fabc7c775248e3
+  jmespath (1.6.2) sha256=238d774a58723d6c090494c8879b5e9918c19485f7e840f2c1c7532cf84ebcb1
+  json (2.21.2) sha256=1f1d3b7cf2b3ba1a69beca0bb6db13d5438b80bff3cd54cdaaa620b9b07c1c6a
+  jwt (2.10.3) sha256=e4d9352fbc7309b1a7448c7dd713dfe4d8c47077af80759cdbed8f878ea0b484
+  little-plugger (1.1.4) sha256=d5f347c00d9d648040ef7c17d6eb09d3d0719adf19ca30d1a3b6fb26d0a631bb
+  locale (2.1.5) sha256=1c6803e8aa6bdb2c29e91945d095050601bf6d58474993575adf6f3b89b32ef4
+  log4r (1.1.10) sha256=9b452928c964b7c54c09aeb25ff045b5a722b387b16c9ce37cb1baec00062966
+  logger (1.7.0) sha256=196edec7cc44b66cfb40f9755ce11b392f21f7967696af15d274dde7edff0203
+  logging (2.4.0) sha256=ba8893a3c211b836f4131bb93b3eb3137a0c3b1fcd0ec3d570e324d8bdc00ccb
+  minitar (1.1.0) sha256=38db0cfb6f3801017946cdcd8dc53f2cf3fd41ff752892312bf9a1639c9ea23e
+  molinillo (0.8.0) sha256=efbff2716324e2a30bccd3eba1ff3a735f4d5d53ffddbc6a2f32c0ca9433045d
+  multi_json (1.21.2) sha256=245531eaf54bdba57aba515ff08b4503505c5e09911daa89c5a561e2f85bea8e
+  mutex_m (0.3.0) sha256=cfcb04ac16b69c4813777022fdceda24e9f798e48092a2b817eb4c0a782b0751
+  net-http (0.9.1) sha256=25ba0b67c63e89df626ed8fac771d0ad24ad151a858af2cc8e6a716ca4336996
+  net-scp (4.1.0) sha256=a99b0b92a1e5d360b0de4ffbf2dc0c91531502d3d4f56c28b0139a7c093d1a5d
+  net-ssh (7.3.3) sha256=831def58b2c51dcef66ec00d29397d4f210de89c19fe78f95873ca30f386e86a
+  net-ssh-krb (0.5.1) sha256=0c1448f32d7b1dc4decc5e2bb329f38c502c9fed6fb16122b257e5dc8cb61588
+  nkf (0.3.0) sha256=357a8dbeba38b727b75930f665146546076a394a1c243faf634ff176e3588895
+  nori (2.9.1) sha256=72dd12420ccb3f62c32466c2e4d8ab1cc08ae525c2488f30524be6ee8cb6e606
+  openbolt (5.1.0) sha256=ae2a80af51f9098511d6e7a1385bacf3fc8b51859217292bf4f28e3e2b8d750a
+  openfact (6.0.0) sha256=9fed8d3e626791e194b9b75070e0b5dcef9144e468c3482f200146b4d5223057
+  openvox (8.29.0) sha256=36086c3cffeae347bd733c5cd630d49ae28b79a38671f866a515bd580e636785
+  openvox-strings (6.1.0) sha256=719660fea04261096879f944e34e3494b6de4c1cd12fc1b92e838ba062bbf9f5
+  optimist (3.2.1) sha256=8cf8a0fd69f3aa24ab48885d3a666717c27bc3d9edd6e976e18b9d771e72e34e
+  ostruct (0.6.3) sha256=95a2ed4a4bd1d190784e666b47b2d3f078e4a9efda2fccf18f84ddc6538ed912
+  pp (0.6.4) sha256=dfcb0fce700c41456265922884f9fe195d7fbb0674a3578e6c0f69588e82b570
+  prettyprint (0.2.0) sha256=2bc9e15581a94742064a3cc8b0fb9d45aae3d03a1baa6ef80922627a0766f193
+  prime (0.1.4) sha256=4d755ebf7c2994a6f3a3fee0d072063be3fff2d4042ebff6cd5eebd4747a225e
+  prism (1.9.0) sha256=7b530c6a9f92c24300014919c9dcbc055bf4cdf51ec30aed099b06cd6674ef85
+  public_suffix (7.0.5) sha256=1a8bb08f1bbea19228d3bed6e5ed908d1cb4f7c2726d18bd9cadf60bc676f623
+  puppet-resource_api (2.0.1) sha256=6c3c64450a5de34314867cfbb505a5837729a2639fa88885cde634cb76750a33
+  puppet_forge (6.2.0) sha256=9cde4841a7a6950afeb0c4fec02449931179863918c0a6e6909cb2a6c6998a0c
+  puppetfile-resolver (0.6.3) sha256=d54695251bb62ca033d10bba2d9d91243fff474265d4979f2783259a974634ce
+  r10k (5.0.3) sha256=a76daddd8cecdc1cf0816f3d19adb23782598d373344a9de23623f601d58a68b
+  racc (1.8.1) sha256=4a7f6929691dbec8b5209a0b373bc2614882b55fc5d2e447a21aaa691303d62f
+  rbs (4.1.3) sha256=0c4474a9751cdc14364bfad0b3e53678323bbdc2c31683b0445932867dbab8c4
+  rdoc (8.0.0) sha256=03bf8c08a9639658855a0cfd77c0abca8325c227693f7f33f82957811348c469
+  reline (0.7.0) sha256=5b012d8e55dbf9d450f12bde2cf7d15ff546ae80b3f8f3b30e570d431815583d
+  rexml (3.4.4) sha256=19e0a2c3425dfbf2d4fc1189747bdb2f849b6c5e74180401b15734bc97b5d142
+  rgen (0.10.2) sha256=d978f84887a0b4815ff3a0e0c4d43a15cdeeac9fd4da02db8ec3ecd0f222f371
+  ruby_smb (1.1.0) sha256=c4692ec8983f492161239d36a743b2a8cd309d4523c832a71de14ead6a8db788
+  rubyntlm (0.6.6) sha256=1dab5d8b5c4f6f4c01b0878ba094f0aee5d8c197d0f03eaf43d5a176d66ab447
+  rubyzip (3.6.0) sha256=268994d44d62282d1cfd99bf10eae48d7267199158ad7ea3e1fee2da9458b695
+  scanf (1.0.0) sha256=533db7f7e5acafea1a145d6c5329cef667a58fbcb7d64379a808ff1199ee1b00
+  semantic_puppet (1.1.1) sha256=15ff5b48d7f856549eb66b927a8894d3668b211970c9d7dc07dd4db57f5c7a96
+  singleton (0.3.0) sha256=83ea1bca5f4aa34d00305ab842a7862ea5a8a11c73d362cb52379d94e9615778
+  stringio (3.2.0) sha256=c37cb2e58b4ffbd33fe5cd948c05934af997b36e0b6ca6fdf43afa234cf222e1
+  terminal-table (3.0.2) sha256=f951b6af5f3e00203fb290a669e0a85c5dd5b051b3b023392ccfd67ba5abae91
+  text (1.3.1) sha256=2fbbbc82c1ce79c4195b13018a87cbb00d762bda39241bb3cdc32792759dd3f4
+  thor (1.5.0) sha256=e3a9e55fe857e44859ce104a84675ab6e8cd59c650a49106a05f55f136425e73
+  tsort (0.2.0) sha256=9650a793f6859a43b6641671278f79cfead60ac714148aabe4e3f0060480089f
+  unicode-display_width (2.6.0) sha256=12279874bba6d5e4d2728cef814b19197dbb10d7a7837a869bab65da943b7f5a
+  uri (1.1.1) sha256=379fa58d27ffb1387eaada68c749d1426738bd0f654d812fcc07e7568f5c57c6
+  windows_error (0.1.6) sha256=6fcb0addc8c779e4f5ce70f5f65babbf586ce5cfb6e7a63604e611a89d34911b
+  winrm (2.4.0) sha256=9e210758f5c4d76cbc28ff0b27c082483c91c17dcb6cd44ce3467c08160aa916
+  winrm-fs (1.3.5.pabawi.1)
+  yard (0.9.45) sha256=52e211493f7cb8a3ebf7e104a25a1e73937a3103092545d34cb88fafebb3dc51
+
+BUNDLED WITH
+   2.6.9

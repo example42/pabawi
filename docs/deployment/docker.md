@@ -161,3 +161,8 @@ curl http://localhost:3000/api/health
 | "Bolt project not found" | Check `BOLT_PROJECT_PATH` is `/opt/pabawi/bolt-project` (container path) |
 | SSL errors | Verify cert permissions (600) and that CA matches the server cert |
 | Container exits immediately | Check `docker logs pabawi` for config validation errors |
+
+## Build verification
+
+See [Build inputs and release verification](supply-chain.md) for Node versions,
+locked workspace installation, script policy, image smoke tests and scan gates.

@@ -10,24 +10,23 @@ jobs:
   lint-and-test:
     runs-on: ubuntu-latest
 
-    strategy:
-      matrix:
-        node-version: [20.x]
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Node.js ${{ matrix.node-version }}
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: ${{ matrix.node-version }}
+          node-version-file: '.nvmrc'
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --ignore-scripts
 
-      - name: Rebuild native modules
-        run: npm rebuild bcrypt sqlite3 ssh2 --ignore-scripts=false
+      - name: Run approved dependency scripts
+        run: npm run install:approved
+
+      - name: Verify install-script policy
+        run: node --test scripts/supply-chain/install-approved.test.mjs
 
       - name: Run ESLint
         run: npm run lint
@@ -49,21 +48,53 @@ jobs:
       - name: Build frontend
         run: npm run build:frontend
 
+  dependency-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+      - name: Audit the reviewed lockfile
+        run: npm audit --json --audit-level=high > npm-audit.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: npm-audit
+          path: npm-audit.json
+
   docker-build-test:
     runs-on: ubuntu-latest
-
+    strategy:
+      fail-fast: false
+      matrix:
+        variant: [bookworm, alpine, ubuntu]
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Build Docker image (test)
-        uses: docker/build-push-action@v5
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build and verify shipped image
+        run: |
+          file=Dockerfile
+          if [ "${{ matrix.variant }}" != bookworm ]; then file="Dockerfile.${{ matrix.variant }}"; fi
+          docker build --no-cache -f "$file" -t pabawi:test .
+          bash scripts/supply-chain/image-smoke.sh pabawi:test
+          mkdir -p artifacts
+          docker run --rm -i --entrypoint node pabawi:test < scripts/supply-chain/dependency-graph.cjs > artifacts/dependencies.json
+          docker build --no-cache --target backend-deps -f "$file" -t pabawi:deps-repeat .
+          docker run --rm -i --entrypoint node pabawi:deps-repeat < scripts/supply-chain/dependency-graph.cjs > artifacts/dependencies-repeat.json
+          cmp artifacts/dependencies.json artifacts/dependencies-repeat.json
+          if [ "${{ matrix.variant }}" = ubuntu ]; then
+            docker run --rm --entrypoint ruby pabawi:test /opt/bolt/test-winrm-rubyzip.rb
+            docker run --rm -i --entrypoint ruby pabawi:test < docker/bolt/dependency-graph.rb > artifacts/ruby-dependencies.json
+            docker build --no-cache --target bolt-builder -f "$file" -t pabawi:ruby-repeat .
+            docker run --rm -i --entrypoint ruby pabawi:ruby-repeat < docker/bolt/dependency-graph.rb > artifacts/ruby-dependencies-repeat.json
+            cmp artifacts/ruby-dependencies.json artifacts/ruby-dependencies-repeat.json
+          fi
+      - name: Scan shipped image and generate SBOM
+        run: bash scripts/supply-chain/scan-image.sh pabawi:test artifacts
+      - name: Retain image evidence
+        if: always()
+        uses: actions/upload-artifact@v4
         with:
-          context: .
-          push: false
-          tags: pabawi:test
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          name: image-evidence-${{ matrix.variant }}
+          path: artifacts/*.json

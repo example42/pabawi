@@ -1,74 +1,49 @@
-# Stage 1: Build frontend with Vite
-FROM --platform=$BUILDPLATFORM node:20-bookworm-slim AS frontend-builder
-ARG TARGETPLATFORM
-ARG BUILDPLATFORM
+# Locked workspace builds; native addons are compiled on the target platform.
+FROM --platform=$BUILDPLATFORM node:24.21.0-bookworm-slim@sha256:2fe369e969550cde8e867afc3fe370b260140cab4a23d467074295b42163d553 AS build
+WORKDIR /app
+RUN apt-get update && apt-get install -y --no-install-recommends python3 make g++ && rm -rf /var/lib/apt/lists/*
+COPY package.json package-lock.json .npmrc ./
+COPY backend/package.json ./backend/package.json
+COPY frontend/package.json ./frontend/package.json
+COPY scripts/supply-chain/install-approved.mjs ./scripts/supply-chain/install-approved.mjs
+ENV npm_config_build_from_source=true npm_config_nodedir=/usr/local
+RUN npm ci --ignore-scripts --no-audit --no-fund && npm run install:approved
+COPY backend/ ./backend/
+COPY frontend/ ./frontend/
+RUN npm run build:frontend && npm run build:backend
+RUN npm sbom --workspace=frontend --omit=dev --sbom-format=cyclonedx > frontend.cdx.json
 
-WORKDIR /app/frontend
-
-# Copy frontend package files
-COPY frontend/package*.json ./
-
-# Install frontend dependencies
-RUN npm install --no-audit
-
-# Copy frontend source
-COPY frontend/ ./
-
-# Build frontend
-RUN npm run build
-
-# Stage 2: Build backend TypeScript
-FROM --platform=$BUILDPLATFORM node:20-bookworm-slim AS backend-builder
-ARG TARGETPLATFORM
-ARG BUILDPLATFORM
-
-WORKDIR /app/backend
-
-# Copy backend package files
-COPY backend/package*.json ./
-
-# Install backend dependencies
-RUN npm install --no-audit
-
-# Copy backend source
-COPY backend/ ./
-
-# Build backend
-RUN npm run build
-
-# Stage 2.5: Install backend production dependencies
-# This runs on the target platform to ensure native modules (like sqlite3) are built correctly
-FROM node:20-bookworm-slim AS backend-deps
-WORKDIR /app/backend
-
-# Install build tools needed to compile sqlite3 from source
-# Pre-built binaries may target a newer glibc than bookworm provides (2.36)
-# hadolint ignore=DL3008
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends python3 make g++ && \
-    rm -rf /var/lib/apt/lists/*
-
-COPY backend/package*.json ./
-RUN npm install --omit=dev --no-audit --build-from-source
+FROM node:24.21.0-bookworm-slim@sha256:2fe369e969550cde8e867afc3fe370b260140cab4a23d467074295b42163d553 AS backend-deps
+WORKDIR /app
+RUN apt-get update && apt-get install -y --no-install-recommends python3 make g++ && rm -rf /var/lib/apt/lists/*
+COPY package.json package-lock.json .npmrc ./
+COPY backend/package.json ./backend/package.json
+COPY frontend/package.json ./frontend/package.json
+COPY scripts/supply-chain/install-approved.mjs ./scripts/supply-chain/install-approved.mjs
+ENV npm_config_build_from_source=true npm_config_nodedir=/usr/local
+RUN npm ci --workspace=backend --omit=dev --ignore-scripts --no-audit --no-fund && npm run install:approved
+# Keep both hoisted and workspace-local packages in their locked locations.
+RUN mkdir -p backend/node_modules
 
 # Stage 3: Install OpenBolt from OpenVox upstream packages
-FROM node:20-bookworm-slim AS bolt-builder
+FROM node:24.21.0-bookworm-slim@sha256:2fe369e969550cde8e867afc3fe370b260140cab4a23d467074295b42163d553 AS bolt-builder
 
 # hadolint ignore=DL3008
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     ca-certificates \
     curl \
-    && curl -sO https://apt.voxpupuli.org/openvox8-release-debian12.deb \
+    && curl -fsSLO https://apt.voxpupuli.org/openvox8-release-debian12.deb \
+    && echo "f10b71b2317c2a919ef1c00a2b5d2d00ac825632323f801601466a9200dc3122  openvox8-release-debian12.deb" | sha256sum -c - \
     && dpkg -i openvox8-release-debian12.deb \
     && rm openvox8-release-debian12.deb \
     && apt-get update \
-    && apt-get install -y --no-install-recommends openbolt \
+    && apt-get install -y --no-install-recommends openbolt=5.6.0-1+debian12 \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 # Stage 4: Production image
-FROM node:20-bookworm-slim
+FROM node:24.21.0-bookworm-slim@sha256:2fe369e969550cde8e867afc3fe370b260140cab4a23d467074295b42163d553
 ARG TARGETPLATFORM
 ARG BUILDPLATFORM
 
@@ -100,19 +75,23 @@ RUN groupadd -g 1001 pabawi && \
     useradd -u 1001 -g pabawi -m -s /bin/bash pabawi
 
 # Create application directory
-WORKDIR /app
+WORKDIR /app/backend
 
 # Copy built backend
-COPY --from=backend-builder --chown=pabawi:pabawi /app/backend/dist ./dist
+COPY --from=backend-deps /app/package.json /app/.npmrc /app/
+COPY --from=backend-deps /app/package-lock.json /app/root-lock.json
+COPY --from=build /app/frontend.cdx.json /app/sbom/frontend.cdx.json
+COPY --from=build --chown=pabawi:pabawi /app/backend/dist ./dist
+COPY --from=backend-deps --chown=pabawi:pabawi /app/node_modules /app/node_modules
 COPY --from=backend-deps --chown=pabawi:pabawi /app/backend/node_modules ./node_modules
-COPY --from=backend-builder --chown=pabawi:pabawi /app/backend/package*.json ./
+COPY --from=build --chown=pabawi:pabawi /app/backend/package.json ./
 
 # Copy only database migrations (not copied by TypeScript compiler)
 # This avoids copying TypeScript sources into the runtime image
-COPY --from=backend-builder --chown=pabawi:pabawi /app/backend/src/database/migrations ./dist/database/migrations
+COPY --from=build --chown=pabawi:pabawi /app/backend/src/database/migrations ./dist/database/migrations
 
 # Copy built frontend to public directory
-COPY --from=frontend-builder --chown=pabawi:pabawi /app/frontend/dist ./public
+COPY --from=build --chown=pabawi:pabawi /app/frontend/dist ./public
 
 # Create /opt/pabawi directory tree for all runtime data
 RUN mkdir -p /opt/pabawi/data \

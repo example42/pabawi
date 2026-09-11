@@ -3,9 +3,13 @@
 ## Helm chart
 
 The repository includes a Helm chart at `charts/pabawi`.
+Run examples from the repository root. See the
+[chart guide](../../charts/pabawi/README.md) for bootstrap ownership, migration
+prerequisites, maintenance windows and credential rotation.
 
 ```bash
 # SQLite, single replica
+helm dependency build ./charts/pabawi
 helm install pabawi ./charts/pabawi \
   --set secrets.jwtSecret="$(openssl rand -base64 48)"
 ```
@@ -20,8 +24,8 @@ kubectl create secret generic pabawi-db \
 helm install pabawi ./charts/pabawi \
   --set database.type=postgres \
   --set database.postgres.existingSecret=pabawi-db \
-  --set replicaCount=3 \
-  --set podDisruptionBudget.enabled=true \
+  --set replicaCount=1 \
+  --set strategy.type=Recreate \
   --set secrets.jwtSecret="$(openssl rand -base64 48)"
 ```
 
@@ -41,7 +45,7 @@ helm install pabawi ./charts/pabawi \
 ```
 
 Use bundled PostgreSQL for demos or isolated single-replica environments. For
-production and scaled Pabawi releases, use managed PostgreSQL or an
+production Pabawi releases, use managed PostgreSQL or an
 operator-managed PostgreSQL cluster.
 
 ## Database backend
@@ -56,8 +60,17 @@ Pabawi defaults to SQLite and also supports PostgreSQL.
   PostgreSQL instance installed separately in the cluster.
 
 PostgreSQL removes the SQLite file-locking constraint, but Pabawi's execution
-queue and concurrency limit are still process-local. Keep `replicas: 1` unless
-you have accounted for per-pod execution concurrency and routing behavior.
+queue, concurrency limit, SSE tickets, MCP transports and console sessions are
+still process-local. Keep `replicas: 1`; multi-replica execution and session
+failover are not verified. SQLite chart rollouts always use `Recreate`. Use it
+for the single-process PostgreSQL baseline too.
+
+Chart-managed configuration changes trigger a rollout. For manually applied
+manifests and external Secrets, updating a resource does not update environment
+variables in a running process. After applying the changed data, run
+`kubectl rollout restart deployment/pabawi`, wait for rollout completion and test
+both old-credential rejection and new-credential acceptance. See the chart guide
+for token/session effects and GitOps revision annotations.
 
 ## ConfigMap
 
@@ -168,6 +181,8 @@ metadata:
   name: pabawi
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: pabawi

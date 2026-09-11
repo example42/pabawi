@@ -206,6 +206,49 @@ passed. Existing frontend accessibility and bundle warnings remain. Tests used
 disposable databases and local fake SSH/HTTP servers; no production infrastructure
 or real deployment was exercised. A10 is the next action.
 
+
+- **A10 / S10: build controls implemented; release remains blocked.** Development,
+  CI and all image variants use Node 24.21.0 with digest-pinned container bases.
+  Root-locked workspace installs preserve security overrides and dependency
+  placement. A workspace-aware runner validates the existing script allowlist
+  before running approved native builds; unknown scripts fail before execution.
+  Regression tests cover nested/workspace scripts, explicit denial and failure.
+  Image checks cover actual native modules, Bolt task discovery, migrations,
+  frontend delivery and anonymous request denial. CI compares independent clean
+  dependency installations and retains artifact SBOMs and advisory reports.
+  Release jobs scan and smoke-test each architecture before pushing the same image.
+- **A10 scan disposition:** patched tar, brace-expansion and smol-toml overrides
+  remove the critical root npm-audit finding. Remaining image advisory matches
+  block publication: Bookworm has 16 critical/125 high occurrences, Alpine 14 high,
+  and Ubuntu eight high. No suppressions were added. Distribution repositories
+  and Ruby transitive dependencies remain mutable, so full-image reproducibility
+  is not established. See the [artifact scan review](a10-artifact-scan-2026-09-10.md)
+  and [build policy](../deployment/supply-chain.md) for evidence and remaining work.
+
+A10 validation: backend passed 3,579 tests (20 skipped, one todo), frontend passed
+1,000 tests, and four script-policy regressions passed on Node 24. All three
+arm64 images built and passed smoke checks; their installed npm graphs matched
+independent uncached installations, including the security overrides. Trivy
+scanned exported images and generated CycloneDX SBOMs. The remote release
+workflow and amd64 runtime were not exercised locally. No production provider,
+live database, image publication or deployment was involved.
+
+A10 final static checks: lint, backend TypeScript, shell syntax, shellcheck,
+workflow YAML parsing and `git diff --check` passed. The first lint attempt
+was killed with exit 137 under concurrent image/test load; the isolated rerun
+passed. Existing frontend build warnings remain. ClamAV completed the downloaded
+artifact scans with no infected files reported; advisory gates remain blocked.
+
+
+**A10 follow-up, 2026-09-11:** targeted npm updates now pass the high/critical audit
+threshold (eight moderate and two low findings remain). The Ubuntu image uses a
+frozen Ruby bundle and a tested local WinRM FS source migration to RubyZip 3.6.
+Its exported-image scan reports no critical/high findings, with 60 medium and
+ten low occurrences remaining. The backend/frontend suites and image smoke tests
+pass. A second uncached Ruby build produces the same dependency inventory.
+The default Bookworm release image remains blocked; other variants were not
+rescanned in this follow-up. See the [follow-up evidence](a10-follow-up-2026-09-11.md).
+
 - **A12 / I03: execution storage ownership implemented and verified.**
   Re-execution creation runs the original-record check, the child insert and the
   parent counter increment in one transaction, and advances the counter in SQL
@@ -233,6 +276,43 @@ both dialects. The full backend suite passed 3,583 tests with 24 skipped and one
 todo. All 21 database test files passed against a disposable PostgreSQL 15
 container. Backend lint, backend TypeScript and `git diff --check` passed. No
 production database, provider, deployment or live execution was exercised.
+
+**A11 / S11 and I09 hook prerequisites, 2026-09-11: implemented and verified.**
+Chart-managed configuration and Secret checksums trigger same-image rollouts.
+Generated JWTs resolve once per render and reuse the installed Secret on an
+unchanged upgrade. Reserved checksum annotations cannot be overridden. External
+Secrets have a documented explicit restart or GitOps revision procedure. SQLite
+always uses Recreate, and PostgreSQL Recreate removes inherited rolling-update
+fields. A separate, earlier ServiceAccount hook supplies the migration Job's
+fresh-install prerequisite; externally supplied accounts and credentials must
+already exist. Hook annotations cannot override ordering or retention controls.
+The chart now retains its locked PostgreSQL dependency during rendering and
+packaging instead of excluding its archive through `.helmignore`.
+
+A11 validation: six render regressions, chart lint, packaged-chart rendering,
+script syntax, workflow YAML and diff checks passed. A disposable arm64 kind
+cluster running Kubernetes 1.37.0 and PostgreSQL 15 passed the production chart's
+fresh migration hook, unchanged upgrade with generated-JWT/pod preservation,
+same-image JWT/MCP/policy rotation, and external-Secret activation by explicit
+restart on persistent SQLite. Old access JWTs and MCP credentials returned 401;
+old refresh JWTs returned the API's 400 `INVALID_REFRESH_TOKEN`. New login and
+MCP credentials worked, `/api/config` exposed the replacement command policy,
+old application pods were gone, and the SQLite account survived replacement.
+The test used the previously scanned A10 Ubuntu candidate
+`sha256:8c2b9dbd073626298153d598ef2959eb6800d8fcf853d7ec255b6fff8a085271`.
+
+The [chart guide](../../charts/pabawi/README.md) documents maintenance windows,
+session/token effects and the single-process baseline. The
+[cluster runner](../../scripts/deployment/cluster-smoke.mjs) preserves disposable
+resources for inspection; CI now runs the separate chart render regressions.
+ClamAV reported no infected files in the downloaded kind executable, node image
+archive or chart dependency. No production provider, real account, publication
+or deployment was exercised. Application source did not change, so full backend
+and frontend suites were not repeated. Command dispatch after policy rotation,
+amd64, live cloud credentials, bundled PostgreSQL startup, multi-replica recovery
+and remote CI execution were not validated. A10's default-image release block
+remains. A12 transaction ownership is already recorded above; A13 is the next
+execution-correctness action.
 
 ## Executive assessment
 
