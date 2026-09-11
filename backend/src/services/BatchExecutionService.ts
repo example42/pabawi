@@ -476,34 +476,45 @@ export class BatchExecutionService {
   async cancelBatch(batchId: string): Promise<{ cancelledCount: number }> {
     const logger = new LoggerService();
 
-    // Step 1: Verify batch exists
-    const batchRow = await this.db.queryOne<BatchExecutionRow>(
-      "SELECT * FROM batch_executions WHERE id = ?",
-      [batchId]
-    );
+    // The existence check and both status writes share one transaction, so no
+    // reader and no concurrent cancellation can observe the children marked
+    // cancelled while the parent still reports running, and a failure on
+    // either write leaves the batch entirely uncancelled instead of half so.
+    // This governs the stored records only: stopping queued and in-flight
+    // work is separate (see I04).
+    const cancelledCount = await this.db.withTransaction(async () => {
+      // Step 1: Verify batch exists
+      const batchRow = await this.db.queryOne<BatchExecutionRow>(
+        "SELECT * FROM batch_executions WHERE id = ?",
+        [batchId]
+      );
 
-    if (!batchRow) {
-      throw new Error(`Batch execution ${batchId} not found`);
-    }
+      if (!batchRow) {
+        throw new Error(`Batch execution ${batchId} not found`);
+      }
 
-    // Step 2: Cancel queued and running executions
-    const cancelSql = `
-      UPDATE executions
-      SET status = 'failed', error = 'Cancelled by user', completed_at = ?
-      WHERE batch_id = ? AND status = 'running'
-    `;
+      const cancelledAt = new Date().toISOString();
 
-    const cancelResult = await this.db.execute(cancelSql, [new Date().toISOString(), batchId]);
-    const cancelledCount = cancelResult.changes;
+      // Step 2: Cancel queued and running executions
+      const cancelSql = `
+        UPDATE executions
+        SET status = 'failed', error = 'Cancelled by user', completed_at = ?
+        WHERE batch_id = ? AND status = 'running'
+      `;
 
-    // Step 3: Update batch status to cancelled
-    const updateBatchSql = `
-      UPDATE batch_executions
-      SET status = 'cancelled', completed_at = ?
-      WHERE id = ?
-    `;
+      const cancelResult = await this.db.execute(cancelSql, [cancelledAt, batchId]);
 
-    await this.db.execute(updateBatchSql, [new Date().toISOString(), batchId]);
+      // Step 3: Update batch status to cancelled
+      const updateBatchSql = `
+        UPDATE batch_executions
+        SET status = 'cancelled', completed_at = ?
+        WHERE id = ?
+      `;
+
+      await this.db.execute(updateBatchSql, [cancelledAt, batchId]);
+
+      return cancelResult.changes;
+    });
 
     logger.info(`Cancelled batch ${batchId}: ${String(cancelledCount)} executions cancelled`);
 
