@@ -7,11 +7,13 @@ import { URL } from "url";
 import type { ConsoleConfig } from "../config/schema";
 import type { ConsoleSession } from "../integrations/console/types";
 
+import type { ConsoleConnectionBroker } from "./ConsoleConnectionBroker";
 import type { ConsoleSessionManager } from "./ConsoleSessionManager";
 import type { LoggerService } from "./LoggerService";
 
 /** WebSocket close codes for console proxy */
 const CLOSE_CODES = {
+  SESSION_REVOKED: 4403,
   SESSION_DURATION_EXCEEDED: 4408,
   UPSTREAM_FAILURE: 4502,
   CONNECTION_TIMEOUT: 4504,
@@ -40,16 +42,97 @@ interface ProxyConfig {
 export class ConsoleWebSocketProxy {
   private wss: WebSocketServer;
 
+  /**
+   * Termination writes started by a socket event.
+   *
+   * Socket handlers cannot be awaited by whoever closed the socket, so the
+   * writes they start are tracked here and {@link drain} waits for them. On
+   * shutdown the sockets close first and the database closes last; without
+   * this the two race and the write loses.
+   */
+  private pendingTerminations = new Set<Promise<void>>();
+
+  /**
+   * @param broker - Source of connection material and registry of live relays.
+   *   The proxy claims an upstream from it and registers the relay so a
+   *   termination elsewhere can close both ends.
+   */
   constructor(
     httpServer: HTTPServer,
     private sessionManager: ConsoleSessionManager,
     private config: ProxyConfig,
     private logger: LoggerService,
+    private broker: ConsoleConnectionBroker,
   ) {
     this.wss = new WebSocketServer({ noServer: true });
     httpServer.on("upgrade", (req: IncomingMessage, socket: Duplex, head: Buffer) => {
       this.handleUpgrade(req, socket, head);
     });
+  }
+
+  /**
+   * Record a session termination started by a socket event.
+   *
+   * Fire-and-forget for the caller, tracked for {@link drain}. Errors are
+   * logged rather than rethrown: the socket is already closing and there is
+   * no caller left to handle them.
+   */
+  private trackTermination(sessionId: string, reason: string): void {
+    const write = this.sessionManager
+      .terminateSession(sessionId, reason)
+      .catch((error: unknown) => {
+        this.logger.error("Failed to persist console session termination", {
+          component: COMPONENT,
+          metadata: {
+            sessionId, reason,
+            error: error instanceof Error ? error.message : String(error),
+          },
+        });
+      })
+      .finally(() => {
+        this.pendingTerminations.delete(write);
+      });
+    this.pendingTerminations.add(write);
+  }
+
+  /**
+   * Track a revoked relay until its client socket has finished closing.
+   *
+   * Revocation closes the socket; the handler that records the termination
+   * runs on the socket's own 'close' event, which has not happened yet. The
+   * barrier registers after that handler, so a {@link drain} started right
+   * after a revocation waits for the handler and then for the write it starts.
+   *
+   * Bounded: a peer that never completes the closing handshake must not hold
+   * shutdown open.
+   */
+  private trackClosure(clientWs: WebSocket): void {
+    if (clientWs.readyState === WebSocket.CLOSED) return;
+    let settle: (() => void) | undefined;
+    const barrier = new Promise<void>((resolve) => { settle = resolve; });
+    const tracked = barrier.finally(() => {
+      this.pendingTerminations.delete(tracked);
+    });
+    this.pendingTerminations.add(tracked);
+    const bound = setTimeout(() => { settle?.(); }, UPSTREAM_CLOSE_TIMEOUT_MS);
+    bound.unref();
+    clientWs.once("close", () => {
+      clearTimeout(bound);
+      settle?.();
+    });
+  }
+
+  /**
+   * Wait for every termination write started by a socket event to land.
+   *
+   * Called during shutdown after the connections are closed and before the
+   * database is, so a session closed by the shutdown itself is recorded as
+   * terminated rather than lost to a closed database.
+   */
+  async drain(): Promise<void> {
+    while (this.pendingTerminations.size > 0) {
+      await Promise.all([...this.pendingTerminations]);
+    }
   }
 
   private handleUpgrade(req: IncomingMessage, socket: Duplex, head: Buffer): void {
@@ -83,14 +166,14 @@ export class ConsoleWebSocketProxy {
     req: IncomingMessage, socket: Duplex, head: Buffer, token: string, pathname: string,
   ): Promise<void> {
     try {
-      const session = await this.sessionManager.validateTokenForUpgrade(token);
+      // One statement validates and consumes, so two concurrent upgrades for
+      // the same token cannot both pass and then both open an upstream.
+      const session = await this.sessionManager.claimTokenForUpgrade(token);
       if (!session) {
-        this.logger.warn("WebSocket upgrade rejected: invalid or expired token", { component: COMPONENT });
+        this.logger.warn("WebSocket upgrade rejected: token could not be claimed", { component: COMPONENT });
         socket.destroy();
         return;
       }
-
-      await this.sessionManager.consumeToken(token);
 
       this.wss.handleUpgrade(req, socket, head, (clientWs: WebSocket) => {
         this.wss.emit("connection", clientWs, req);
@@ -111,26 +194,65 @@ export class ConsoleWebSocketProxy {
     clientWs: WebSocket, session: ConsoleSession, pathname: string,
   ): Promise<void> {
     await this.sessionManager.assertSessionAuthorized(session.sessionId);
-    const upstreamUrl = await this.sessionManager.getUpstreamUrl(session.sessionId);
+
+    // Second half of the one-time claim: the material is taken from the broker
+    // and cannot be taken again. It never touches the database or the log.
+    const upstreamUrl = this.broker.claim(session.sessionId);
     if (!upstreamUrl) {
-      clientWs.close(CLOSE_CODES.UPSTREAM_FAILURE, "No upstream URL configured");
+      this.logger.warn("No claimable console connection for session", {
+        component: COMPONENT, metadata: { sessionId: session.sessionId },
+      });
+      clientWs.close(CLOSE_CODES.UPSTREAM_FAILURE, "No console connection available");
+      this.trackTermination(session.sessionId, "no_upstream_offer");
       return;
     }
 
+    // Registered before the upstream dial, not after: connecting can take up
+    // to the connect timeout, and a termination in that window would otherwise
+    // find no relay and leave the upstream to open unsupervised.
+    const connecting = { revokedFor: null as string | null };
+    this.broker.attach(session.sessionId, {
+      close: (reason: string): void => {
+        connecting.revokedFor = reason;
+        this.trackClosure(clientWs);
+        if (clientWs.readyState === WebSocket.OPEN) {
+          clientWs.close(CLOSE_CODES.SESSION_REVOKED, reason);
+        }
+      },
+    });
+
     const upstream = await this.connectUpstream(clientWs, session, upstreamUrl);
-    if (!upstream) return;
+    if (!upstream) {
+      this.broker.detach(session.sessionId);
+      return;
+    }
+
+    // `revoke` drops its entry after closing, so a revocation during the dial
+    // has to be re-checked here rather than re-registered over.
+    if (connecting.revokedFor !== null) {
+      this.closeUpstreamGracefully(upstream);
+      return;
+    }
+
+    // Replaces the placeholder now that both ends exist, so terminating the
+    // session elsewhere, whether by a user, an administrator, heartbeat expiry
+    // or shutdown, closes both ends.
+    this.broker.attach(session.sessionId, {
+      close: (reason: string): void => {
+        this.trackClosure(clientWs);
+        if (clientWs.readyState === WebSocket.OPEN) {
+          clientWs.close(CLOSE_CODES.SESSION_REVOKED, reason);
+        }
+        this.closeUpstreamGracefully(upstream);
+      },
+    });
 
     const authorization = new SessionAuthorization(
       () => this.sessionManager.assertSessionAuthorized(session.sessionId),
       () => {
-        clientWs.close(4403, "Session authorization revoked");
+        clientWs.close(CLOSE_CODES.SESSION_REVOKED, "Session authorization revoked");
         this.closeUpstreamGracefully(upstream);
-        void this.sessionManager.terminateSession(session.sessionId, "authorization_revoked").catch((error: unknown) => {
-          this.logger.error("Failed to persist revoked console session", {
-            component: COMPONENT,
-            metadata: { sessionId: session.sessionId, error: error instanceof Error ? error.message : String(error) },
-          });
-        });
+        this.trackTermination(session.sessionId, "authorization_revoked");
       },
     );
     clientWs.on("close", () => { authorization.close(); });
@@ -204,10 +326,11 @@ export class ConsoleWebSocketProxy {
   ): void {
     upstream.on("close", () => {
       clearTimeout(durationTimer);
+      this.broker.detach(session.sessionId);
       if (clientWs.readyState === WebSocket.OPEN) {
         clientWs.close(CLOSE_CODES.UPSTREAM_FAILURE, "Upstream connection closed");
       }
-      void this.sessionManager.terminateSession(session.sessionId, "upstream_closed");
+      this.trackTermination(session.sessionId, "upstream_closed");
     });
 
     upstream.on("error", (err: Error) => {
@@ -219,8 +342,9 @@ export class ConsoleWebSocketProxy {
 
     clientWs.on("close", () => {
       clearTimeout(durationTimer);
+      this.broker.detach(session.sessionId);
       this.closeUpstreamGracefully(upstream);
-      void this.sessionManager.terminateSession(session.sessionId, "client_disconnected");
+      this.trackTermination(session.sessionId, "client_disconnected");
     });
 
     clientWs.on("error", (err: Error) => {
@@ -284,7 +408,7 @@ export class ConsoleWebSocketProxy {
         if (clientWs.readyState === WebSocket.OPEN) {
           clientWs.close(CLOSE_CODES.CONNECTION_TIMEOUT, "Upstream connection timeout");
         }
-        void this.sessionManager.terminateSession(session.sessionId, "upstream_timeout");
+        this.trackTermination(session.sessionId, "upstream_timeout");
         resolve(null);
       }, UPSTREAM_CONNECT_TIMEOUT_MS);
 
@@ -304,7 +428,7 @@ export class ConsoleWebSocketProxy {
         if (clientWs.readyState === WebSocket.OPEN) {
           clientWs.close(CLOSE_CODES.CONNECTION_TIMEOUT, "Upstream connection failed");
         }
-        void this.sessionManager.terminateSession(session.sessionId, "upstream_error");
+        this.trackTermination(session.sessionId, "upstream_error");
         resolve(null);
       });
     });
@@ -321,7 +445,7 @@ export class ConsoleWebSocketProxy {
         clientWs.close(CLOSE_CODES.SESSION_DURATION_EXCEEDED, "Session duration exceeded");
       }
       this.closeUpstreamGracefully(upstream);
-      void this.sessionManager.terminateSession(session.sessionId, "max_duration_exceeded");
+      this.trackTermination(session.sessionId, "max_duration_exceeded");
     }, this.config.console.maxSessionDuration);
   }
 

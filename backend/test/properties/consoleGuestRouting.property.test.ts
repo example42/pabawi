@@ -83,7 +83,7 @@ describe("Feature: console-integration, Property 12: Guest type routing correctn
           const provider = new ProxmoxConsoleProvider(client, makeProxmoxConfig(), makeLogger());
 
           const nodeId = `proxmox:${node}:${String(vmid)}`;
-          await provider.createSession(nodeId, "user-1");
+          await provider.createSession({ nodeId, userId: "user-1", sessionId: "session-1", transport: "websocket-vnc" });
 
           expect(postSpy).toHaveBeenCalledOnce();
           const calledEndpoint = postSpy.mock.calls[0][0] as string;
@@ -106,7 +106,7 @@ describe("Feature: console-integration, Property 12: Guest type routing correctn
           const provider = new ProxmoxConsoleProvider(client, makeProxmoxConfig(), makeLogger());
 
           const nodeId = `proxmox:${node}:${String(vmid)}`;
-          await provider.createSession(nodeId, "user-1");
+          await provider.createSession({ nodeId, userId: "user-1", sessionId: "session-1", transport: "websocket-vnc" });
 
           expect(postSpy).toHaveBeenCalledOnce();
           const calledEndpoint = postSpy.mock.calls[0][0] as string;
@@ -130,7 +130,7 @@ describe("Feature: console-integration, Property 12: Guest type routing correctn
           const provider = new ProxmoxConsoleProvider(client, makeProxmoxConfig(), makeLogger());
 
           const nodeId = `proxmox:${node}:${String(vmid)}`;
-          await provider.createSession(nodeId, "user-1");
+          await provider.createSession({ nodeId, userId: "user-1", sessionId: "session-1", transport: "websocket-vnc" });
 
           expect(postSpy).toHaveBeenCalledOnce();
           const calledEndpoint = postSpy.mock.calls[0][0] as string;

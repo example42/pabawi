@@ -36,10 +36,10 @@ function createMockLogger(): LoggerService {
 
 function createMockSessionManager(): ConsoleSessionManager {
   return {
+    claimTokenForUpgrade: vi.fn(),
+    reserveSession: vi.fn(),
+    activateSession: vi.fn(),
     generateToken: vi.fn(),
-    createSession: vi.fn(),
-    validateToken: vi.fn(),
-    consumeToken: vi.fn(),
     heartbeat: vi.fn(),
     terminateSession: vi.fn(),
     getActiveSessionCount: vi.fn(),

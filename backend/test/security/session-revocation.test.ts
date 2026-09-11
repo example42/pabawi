@@ -15,6 +15,7 @@ import { createUsersRouter } from '../../src/routes/users';
 import { createAuthRouter } from '../../src/routes/auth';
 import { StreamingExecutionManager } from '../../src/services/StreamingExecutionManager';
 import { ConsoleSessionManager } from '../../src/services/ConsoleSessionManager';
+import { ConsoleConnectionBroker } from '../../src/services/ConsoleConnectionBroker';
 import { ConsoleWebSocketProxy } from '../../src/services/ConsoleWebSocketProxy';
 import { ConsoleConfigSchema } from '../../src/config/schema';
 import { LoggerService } from '../../src/services/LoggerService';
@@ -178,7 +179,8 @@ describe('A05: token purpose and durable revocation', () => {
   it('closes both ends of a live console after account revocation', async () => {
     await users.updateUser(user.id, { isAdmin: true });
     const config = ConsoleConfigSchema.parse({});
-    const manager = new ConsoleSessionManager(database.getAdapter(), config, new LoggerService(), new AuditLoggingService(database.getAdapter()));
+    const broker = new ConsoleConnectionBroker(new LoggerService());
+    const manager = new ConsoleSessionManager(database.getAdapter(), config, new LoggerService(), new AuditLoggingService(database.getAdapter()), broker);
     const termination = vi.spyOn(manager, "terminateSession");
     const upstream = new WebSocketServer({ host: '127.0.0.1', port: 0 });
     await once(upstream, 'listening');
@@ -186,10 +188,12 @@ describe('A05: token purpose and durable revocation', () => {
     if (typeof upstreamAddress === 'string') throw new Error('Unexpected socket address');
     const local = await createHttpHarness();
     const server = local.use(express());
-    new ConsoleWebSocketProxy(server, manager, { allowedOrigins: ['http://localhost'], console: config }, new LoggerService());
-    const token = manager.generateToken();
-    await manager.createSession({ sessionId: 'console-fixture', userId: user.id, nodeId: 'node', provider: 'proxmox', transport: 'websocket-vnc', state: 'active', token, wsUrl: '', startedAt: new Date().toISOString() });
-    await database.getAdapter().execute('UPDATE console_sessions SET upstream_url = ? WHERE id = ?', [`ws://127.0.0.1:${upstreamAddress.port}`, 'console-fixture']);
+    new ConsoleWebSocketProxy(server, manager, { allowedOrigins: ['http://localhost'], console: config }, new LoggerService(), broker);
+    const reservation = await manager.reserveSession({ userId: user.id, nodeId: 'node', provider: 'proxmox', transport: 'websocket-vnc' });
+    // Connection material reaches the proxy through the broker, never the database.
+    broker.offer(reservation.sessionId, `ws://127.0.0.1:${upstreamAddress.port}`);
+    await manager.activateSession(reservation.sessionId);
+    const token = reservation.token;
     const connected = once(upstream, 'connection');
     const client = new WebSocket(`ws://127.0.0.1:${local.port}/ws/console/vnc?token=${token}`, { origin: 'http://localhost' });
     try {
@@ -199,7 +203,10 @@ describe('A05: token purpose and durable revocation', () => {
       const peerClosed = once(peer, 'close');
       await users.deactivateUser(user.id);
       await Promise.all([clientClosed, peerClosed]);
-      await expect(manager.validateTokenForUpgrade(token)).resolves.toBeNull();
+      // The token was consumed by this upgrade, so a fresh one for the same
+      // revoked account is what proves no second console can be opened.
+      await expect(manager.reserveSession({ userId: user.id, nodeId: 'node', provider: 'proxmox', transport: 'websocket-vnc' }))
+        .rejects.toThrow('User not found or inactive');
     } finally {
       client.terminate();
       for (const peer of upstream.clients) peer.terminate();

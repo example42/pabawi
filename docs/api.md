@@ -576,6 +576,67 @@ Requires `CHECKMK_ENABLED=true`. All endpoints require JWT auth and the `monitor
 
 ---
 
+## Console (VNC / Terminal)
+
+Browser-based interactive console sessions. Requires the `console:access`
+permission; acting on another user's session additionally requires
+`console:admin`. Configured through the `CONSOLE_*` settings in
+[configuration](configuration.md#console-vnc--terminal).
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/console/availability/:nodeId` | Console options a node offers |
+| `POST` | `/api/console/sessions` | Open a console session |
+| `GET` | `/api/console/sessions/:sessionId` | Session status |
+| `POST` | `/api/console/sessions/:sessionId/heartbeat` | Keep a session alive |
+| `DELETE` | `/api/console/sessions/:sessionId` | Terminate a session |
+| `GET` | `/ws/console/vnc?token=...` | WebSocket relay (VNC transport) |
+| `GET` | `/ws/console/terminal?token=...` | WebSocket relay (terminal transport) |
+
+### Session lifecycle
+
+`POST /api/console/sessions` takes `{ "nodeId": "...", "provider": "..." }` and
+reserves capacity before the provider is asked for anything, so a provider
+resource is never created for a session the concurrent limit did not count. The
+reservation holds a slot while the provider works; a provider failure releases it
+immediately rather than waiting for the idle timeout. Exceeding
+`CONSOLE_MAX_CONCURRENT_SESSIONS` returns HTTP 429 `TOO_MANY_SESSIONS` without
+contacting the provider. Concurrent requests for the last slot admit exactly one.
+
+A successful response is HTTP 201 with the session, including a single-use
+`token` and the relative `wsUrl` to upgrade against. The token is valid for 60
+seconds and is consumed by the first upgrade that claims it: concurrent upgrades
+admit exactly one, and a replay is refused without opening a second upstream
+connection. A terminated or expired session never upgrades.
+
+Connection material for the upstream is held in memory by the connection broker
+and handed to the relay once. It is never written to the database and never
+logged, because a provider's console URL embeds a live credential. The
+`console_sessions.upstream_url` column is retired and always null.
+
+### Termination
+
+Terminating a session does three things, not only the last: it closes both ends
+of a live relay, releases the provider-side session, and records the terminal
+state. Owner termination, administrator termination, heartbeat expiry, account
+deactivation, restart cleanup and process shutdown all do all three. A
+termination that lands while the relay is still dialling its upstream closes that
+upstream as soon as it opens. The heartbeat route returns HTTP 409
+`SESSION_NOT_LIVE` for a session that is no longer live, and HTTP 403 for a
+session belonging to another user without `console:admin`.
+
+Console sessions are process-local: the relay, its connection material and its
+sockets live in the process that accepted the upgrade. The supported baseline
+remains a single backend process.
+
+> **Not yet validated against a real provider.** The session lifecycle, ticket
+> claim and termination behaviour are tested against a local fake upstream. The
+> Proxmox endpoint, port and authentication have not been exercised against a
+> live Proxmox VE instance, so the console should not be treated as production
+> ready until that check is done.
+
+---
+
 ## Journal
 
 Requires `AUTH_ENABLED=true` and the `journal:read` permission. Events are streamed via SSE.

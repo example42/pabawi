@@ -170,7 +170,7 @@ checks. Lint, complete build and `git diff --check` passed. Existing frontend
 accessibility and bundle warnings remain. Tests used local HTTP, a signed fake
 identity provider, disposable databases and a local PostgreSQL container.
 No real Entra tenant, production account, provider or cluster was exercised.
-Console ticket redemption remains part of A15. A09 is the next action.
+Console ticket redemption was subsequently completed by A15, recorded below. A09 is the next action.
 
 - **A09 / S05: implemented and verified.** SSH checks the raw server key against
   an operator-managed SHA-256 fingerprint map keyed by destination hostname and
@@ -260,9 +260,9 @@ rescanned in this follow-up. See the [follow-up evidence](a10-follow-up-2026-09-
   leaves the batch uncancelled. This governs stored records only. Batch
   admission ordering and cancellation of queued and in-flight work remain with
   A13. Console ticket redemption, where validation and the unconditional
-  consuming update are still separate statements so two concurrent upgrades can
-  claim one token, and the console session quota check, which is still a
-  check-then-act across a provider call, remain with A15. Cross-process
+  consuming update were still separate statements so two concurrent upgrades
+  could claim one token, and the console session quota check, which was still a
+  check-then-act across a provider call, were completed by A15. Cross-process
   migration coordination stays out of scope and belongs with A21.
 
 A12 validation: three of the four new dialect-parametrized storage-ownership
@@ -395,7 +395,72 @@ response depends on the expanded list, so the order cannot simply be swapped.
 Multi-process key ownership, direct-route admission, shared admission for the
 Puppet run route and the untracked dispatch of its workers remain outside this
 change and belong with I11. No live provider, production database, publication or deployment was
-exercised. A15 console provider and broker wiring is the next action.
+exercised.
+
+**A15 / I06, S08 console portion and S09, 2026-09-11: implemented and verified,
+except provider compatibility.** A connection broker now carries a provider's
+upstream material to the WebSocket relay and owns the live relays. The material
+stays in memory, is claimable exactly once, expires with the session token and is
+never persisted or logged, because a Proxmox console URL embeds a live ticket.
+The `console_sessions.upstream_url` column is retired and always null.
+
+Session capacity is reserved before the provider is asked for anything, so no
+provider resource exists for a session the cap did not count. The reservation
+holds the slot while the provider works, a provider failure releases it at once,
+and concurrent requests for the last slot admit exactly one. Providers no longer
+mint session identity, tokens or transports: those come from the reservation, so
+a provider cannot create a session the database does not know about.
+
+Ticket redemption is a single conditional update carrying the unconsumed flag,
+the live state and the age bound, so concurrent upgrades admit exactly one and a
+replay opens no second upstream. It is also the only upgrade path left: the two
+read-then-decide validators it replaced are deleted rather than deprecated, so
+nothing can be wired back through the split S08 named. `getActiveSessionCount`
+survives for reporting and is documented as narrower than the cap, which counts
+reservations too; admission is decided only inside the reservation.
+
+Terminating a session closes both ends of its relay, releases the provider-side
+session and records the state, rather than doing only the last: owner
+termination, administrator termination, heartbeat expiry, restart cleanup,
+account deactivation and process shutdown all do all three. Provider cleanup
+reaches the provider through a bridge supplied by the composition root, because
+the session manager owns the transitions and has no plugin registry; without it
+a provider kept every session for the process lifetime and kept reporting it as
+active. A relay is registered before the upstream dial rather than after, so a
+termination during the dial closes the upstream that subsequently opens instead
+of leaving it to the next authorization poll. Termination writes started by a
+socket event are tracked and drained during shutdown, so the sockets closing and
+the database closing no longer race. Reading a session's status and extending its
+heartbeat now require owning the session or holding `console:admin`, and a
+heartbeat cannot touch a session that is no longer live.
+
+A15 validation: 3,669 backend tests passed on SQLite (56 skipped, one todo) and
+3,723 against a disposable PostgreSQL 15 database; all 1,015 frontend tests
+passed. Twenty-five new lifecycle tests run through the real route, session
+manager, broker and proxy against a local WebSocket upstream, covering
+bidirectional frame relay, unreachable and absent upstreams, concurrent and
+replayed ticket claims, expired tickets, terminated sessions, every termination
+path including provider release and the drained shutdown write, revocation during
+an upstream dial, cross-user denial and capacity reservation. Fifteen broker
+tests cover single-use claims, expiry, purging and revocation, and the token
+property tests now target the claim, including that a refusal leaves a dead
+session's ticket unconsumed. Five probes confirmed the defects in the previous
+code: a created session had no upstream URL, two concurrent validations both
+succeeded for one ticket, concurrent creation reached the cap plus three, a
+heartbeat wrote to a terminated session, and no socket registry existed.
+
+Backend and frontend TypeScript, backend and frontend lint, build and
+`git diff --check` passed. The terminated-session upgrade refusal that S09
+reported was already closed by A05's session-version check; it now has an
+explicit regression test rather than only an incidental one.
+
+Proxmox compatibility is **not** established: the endpoint, port and
+authentication were exercised only against a fake upstream, so I06's requirement
+to validate against an actual test provider is outstanding and the console should
+not be treated as production ready. Console sessions remain process-local, which
+keeps the single-process baseline from I09/A21. No live provider, production
+database, publication or deployment was exercised. A16 SSE terminal status and
+ticket routing is the next action.
 
 ## Executive assessment
 
@@ -520,6 +585,9 @@ A trusted tenant and signed token establish who issued the claim; they do not es
 
 ### S08. P1: SSO authorization codes are not consumed atomically
 
+**SSO portion resolved by A08 on 2026-09-11; console ticket portion resolved by
+A15 on 2026-09-11.** The following describes the original finding.
+
 **Source-confirmed concurrency defect.** [EntraIdService.ts](../../backend/src/services/EntraIdService.ts), lines 464-527, reads a code, checks `exchanged`, then performs an unconditional `UPDATE ... WHERE code = ?`. Two concurrent requests can both observe zero and return the stored token pair. The comment promising atomic consumption does not match the implementation.
 
 [ConsoleSessionManager.ts](../../backend/src/services/ConsoleSessionManager.ts), lines 113-185, also separates token validation from an unconditional consumption update. [ConsoleWebSocketProxy.ts](../../backend/src/services/ConsoleWebSocketProxy.ts), lines 79-90, awaits those operations separately.
@@ -529,6 +597,9 @@ A trusted tenant and signed token establish who issued the claim; they do not es
 **Acceptance:** send concurrent redemption attempts for one code or console ticket. Exactly one succeeds; all others fail without issuing credentials or opening another upstream session.
 
 ### S09. P1: Console termination does not enforce connection termination
+
+**Resolved by A15 on 2026-09-11.** The following describes the original finding;
+implementation and validation are recorded above.
 
 **Reproduced for terminated-token acceptance; connection lifecycle source-confirmed.** [ConsoleSessionManager.ts](../../backend/src/services/ConsoleSessionManager.ts), lines 113-140, accepts an unconsumed recent token without checking session state. A fake row with `state: terminated` was accepted. `terminateSession()` at lines 203-225 and timeout cleanup at 279-298 update database state but do not notify the proxy or close sockets. The proxy has no session-to-socket revocation registry.
 
@@ -662,6 +733,10 @@ A response lost after server admission can cause another run. I04's slow admissi
 **Acceptance:** drop the response after a committed batch submission and prove only one batch exists. An initial 401 with a valid refresh token and `maxRetries: 0` performs exactly one authenticated replay. Test the actual modal and provisioning callers.
 
 ### I06. P1: Console connection information never reaches the proxy
+
+**Resolved by A15 on 2026-09-11 for the session lifecycle; Proxmox provider
+compatibility remains unvalidated.** The following describes the original
+finding; implementation and validation are recorded above.
 
 **Source-confirmed.** [ConsoleSessionManager.ts](../../backend/src/services/ConsoleSessionManager.ts), lines 64-79, inserts `upstream_url` as null. Its getter at line 315 reads only that column. [ConsoleWebSocketProxy.ts](../../backend/src/services/ConsoleWebSocketProxy.ts), lines 110-113, closes the connection if the URL is absent. [ProxmoxConsoleProvider.ts](../../backend/src/integrations/proxmox/ProxmoxConsoleProvider.ts), lines 198-225, retains the URL in a separate private map that is not connected to this getter.
 

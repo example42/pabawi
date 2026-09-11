@@ -46,27 +46,36 @@ function buildContainer(): DIContainer {
 function makeMockIntegrationManager(): IntegrationManager {
   return {
     getConsoleProvider: vi.fn().mockReturnValue({
-      createSession: vi.fn().mockImplementation(
-        (nodeId: string, userId: string): ConsoleSession => ({
-          sessionId: randomUUID(),
-          token: randomUUID(),
-          wsUrl: `/ws/console/vnc?token=${randomUUID()}`,
-          transport: "websocket-vnc",
-          state: "active",
-          startedAt: new Date().toISOString(),
-          nodeId,
-          userId,
-          provider: "proxmox",
-        }),
-      ),
+      getSupportedTransports: vi.fn().mockReturnValue(["websocket-vnc"]),
+      // Providers return connection material only; identity comes from the
+      // caller's reservation.
+      createSession: vi.fn().mockResolvedValue({
+        upstream: { url: "wss://provider.invalid/console" },
+      }),
+      terminateSession: vi.fn().mockResolvedValue(true),
     }),
   } as unknown as IntegrationManager;
 }
 
 function makeMockSessionManager(): ConsoleSessionManager {
   return {
-    getActiveSessionCount: vi.fn().mockResolvedValue(0),
-    createSession: vi.fn().mockResolvedValue(undefined),
+    reserveSession: vi.fn().mockImplementation(() => Promise.resolve({
+      sessionId: randomUUID(),
+      token: randomUUID(),
+      startedAt: new Date().toISOString(),
+    })),
+    activateSession: vi.fn().mockImplementation((sessionId: string): Promise<ConsoleSession> => Promise.resolve({
+      sessionId,
+      token: randomUUID(),
+      wsUrl: `/ws/console/vnc?token=${randomUUID()}`,
+      transport: "websocket-vnc",
+      state: "active",
+      startedAt: new Date().toISOString(),
+      nodeId: "node-1",
+      userId: "user-1",
+      provider: "proxmox",
+    })),
+    failReservation: vi.fn().mockResolvedValue(undefined),
   } as unknown as ConsoleSessionManager;
 }
 
