@@ -206,6 +206,34 @@ passed. Existing frontend accessibility and bundle warnings remain. Tests used
 disposable databases and local fake SSH/HTTP servers; no production infrastructure
 or real deployment was exercised. A10 is the next action.
 
+- **A12 / I03: execution storage ownership implemented and verified.**
+  Re-execution creation runs the original-record check, the child insert and the
+  parent counter increment in one transaction, and advances the counter in SQL
+  instead of reading it into the process and writing it back, so two concurrent
+  re-executions of the same original are both counted. A failed counter write
+  discards the child instead of leaving it unaccounted. Batch cancellation
+  applies the child and parent status writes in one transaction, so no reader
+  observes cancelled children under a running batch and a failed parent write
+  leaves the batch uncancelled. This governs stored records only. Batch
+  admission ordering and cancellation of queued and in-flight work remain with
+  A13. Console ticket redemption, where validation and the unconditional
+  consuming update are still separate statements so two concurrent upgrades can
+  claim one token, and the console session quota check, which is still a
+  check-then-act across a provider call, remain with A15. Cross-process
+  migration coordination stays out of scope and belongs with A21.
+
+A12 validation: three of the four new dialect-parametrized storage-ownership
+regressions fail against the previous code, and all four pass on both dialects.
+The fourth is a guard on a missing original and passes either way. The lost
+re-execution count
+reproduces deterministically on SQLite; the same interleaving did not occur
+against PostgreSQL in this environment, so that one case is a non-regression
+check there rather than a reproduction, while both rollback cases reproduce on
+both dialects. The full backend suite passed 3,583 tests with 24 skipped and one
+todo. All 21 database test files passed against a disposable PostgreSQL 15
+container. Backend lint, backend TypeScript and `git diff --check` passed. No
+production database, provider, deployment or live execution was exercised.
+
 ## Executive assessment
 
 The principal risk is inconsistent enforcement at trust boundaries. Authentication and RBAC infrastructure exist, but several infrastructure-changing routes enforce authentication without authorization. AWS, Azure, Proxmox and Puppetserver handlers can therefore exercise server-held credentials on behalf of users who lack the corresponding permissions. Hiera data and execution output have related read-access gaps. This is especially serious where self-registration is enabled.

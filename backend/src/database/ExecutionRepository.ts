@@ -372,30 +372,43 @@ export class ExecutionRepository {
   /**
    * Create a re-execution with reference to original execution
    * Increments the re-execution count on the original execution
+   *
+   * The existence check, the child insert and the parent counter increment
+   * share one transaction, so a concurrent request can neither observe the
+   * child without the counter nor have its own increment overwritten. The
+   * counter is advanced in SQL rather than read into the process and written
+   * back, which is what made two overlapping re-executions of the same parent
+   * collapse into a single increment.
    */
   public async createReExecution(
     originalExecutionId: string,
     execution: Omit<ExecutionRecord, "id" | "originalExecutionId">,
   ): Promise<string> {
-    // First, verify the original execution exists
-    const original = await this.findById(originalExecutionId);
-    if (!original) {
-      throw new Error(`Original execution not found: ${originalExecutionId}`);
-    }
+    return this.db.withTransaction(async () => {
+      const original = await this.db.queryOne<{ id: string }>(
+        "SELECT id FROM executions WHERE id = ?",
+        [originalExecutionId],
+      );
+      if (!original) {
+        throw new Error(`Original execution not found: ${originalExecutionId}`);
+      }
 
-    // Create the new execution with reference to original
-    const newExecutionId = await this.create({
-      ...execution,
-      originalExecutionId,
+      // Create the new execution with reference to original
+      const newExecutionId = await this.create({
+        ...execution,
+        originalExecutionId,
+      });
+
+      // Increment the re-execution count on the original
+      await this.db.execute(
+        `UPDATE executions
+          SET re_execution_count = COALESCE(re_execution_count, 0) + 1
+          WHERE id = ?`,
+        [originalExecutionId],
+      );
+
+      return newExecutionId;
     });
-
-    // Increment the re-execution count on the original
-    const newCount = (original.reExecutionCount ?? 0) + 1;
-    await this.update(originalExecutionId, {
-      reExecutionCount: newCount,
-    });
-
-    return newExecutionId;
   }
 
   /**
