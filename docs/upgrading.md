@@ -255,7 +255,9 @@ helm rollback pabawi
 
 - `DELETE /api/inventory/:id` now requires the lifecycle bearer token. If you
   have scripts calling this endpoint, add
-  `Authorization: Bearer <PABAWI_LIFECYCLE_TOKEN>`.
+  `Authorization: Bearer <PABAWI_LIFECYCLE_TOKEN>`. (Superseded in 1.5.0: the
+  token replaces the JWT rather than accompanying it. See
+  [Upgrading to 1.5.0](#upgrading-to-150).)
 
 - SSE `?token=` URL parameter removed. Clients must use the stream-ticket
   endpoint (`POST /api/executions/:id/stream-ticket`) instead.
@@ -298,8 +300,37 @@ automatically.
 | `/api/executions/*`, `/api/streaming/*` | `executions:read`; batch submission, re-execution and cancellation require `<execution-tool>:execute` |
 | `/api/nodes/:id/command` | `<selected-tool>:execute`, including automatic tool selection |
 | `/api/inventory`, `/api/inventory/:id`, `/api/nodes/:id/facts` | Only sources with `<source>:read` are queried and returned; explicit restricted facts/PQL requests return 403 |
-| `/api/inventory/:id/action`, `DELETE /api/inventory/:id` | Provider read plus action-specific provision/lifecycle/destroy permission, in addition to the existing lifecycle credential requirement |
+| `/api/inventory/:id/action`, `DELETE /api/inventory/:id` | Provider read plus the action-specific provision/lifecycle/destroy permission. RBAC is now the only gate; see the lifecycle credential note below |
 | `/api/integrations/provisioning` | `provisioning:read` (the permission row was missing before, so only `is_admin` users could reach it) |
+
+**The lifecycle credential is no longer a second header.**
+
+`PABAWI_LIFECYCLE_TOKEN` used to be required in `Authorization` *in addition to*
+the JWT the production mount already required in that same header, so neither
+credential could satisfy both checks and the generic lifecycle endpoints were
+unreachable in a normal deployment (assessment finding I08). The token is now an
+alternative credential: a request presents either a user JWT or the token, and
+RBAC decides what either may do.
+
+- If you use these endpoints from the UI or with a user JWT, nothing changes
+  except that they now work: the caller needs `<provider>:read` plus the
+  permission for the action's class.
+- If you use them from a script, keep sending
+  `Authorization: Bearer $PABAWI_LIFECYCLE_TOKEN` and drop any JWT you were also
+  trying to send. The token authenticates as the new built-in
+  `lifecycle-service` account, whose "Lifecycle Service" role holds `read`,
+  `lifecycle` and `destroy` on `proxmox`, `aws` and `azure`. Edit that role to
+  widen or narrow the scope; deactivate the account to revoke the token without
+  a restart.
+- The instruction in [Upgrading to 1.3.0](#upgrading-to-130) to add the
+  lifecycle bearer *on top of* existing authentication no longer applies.
+- The endpoints are documented at their real paths: the router is mounted at
+  `/api/inventory`, not `/api/nodes`, so the action endpoint is
+  `POST /api/inventory/:id/action`.
+- Azure nodes now resolve through these endpoints (they used to be rejected as
+  an unknown provider), and each provider accepts only the actions it
+  advertises. `DELETE` on an Azure node returns `DESTROY_NOT_SUPPORTED` (501),
+  because the Azure integration has no destroy capability.
 
 Execution history and output are shared across users who hold `executions:read`;
 they are not restricted to the execution owner. Grant this permission only to

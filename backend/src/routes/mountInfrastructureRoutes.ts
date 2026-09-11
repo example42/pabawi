@@ -53,18 +53,26 @@ interface InfrastructureRouteDependencies {
   container: DIContainer;
   config: Pick<AppConfig, "provisioning" | "packageTasks">;
   authMiddleware: RequestHandler;
+  /**
+   * Authentication for the /api/inventory mount. Defaults to `authMiddleware`;
+   * `server.ts` supplies the lifecycle variant, which additionally accepts the
+   * configured machine credential as the `lifecycle-service` account. It is
+   * mounted here and nowhere else, so that credential cannot authenticate any
+   * other route (finding I08).
+   */
+  inventoryAuthMiddleware?: RequestHandler;
   rbacMiddleware: PermissionMiddlewareFactory;
   rateLimitMiddleware: RequestHandler;
 }
 
 export function mountInfrastructureRoutes(app: Express, dependencies: InfrastructureRouteDependencies): void {
-  const { db, integrationManager, boltService, executionRepository, commandWhitelistService, streamingManager, executionQueue, batchExecutionService, requestIdempotency, puppetDBService, puppetserverService, puppetRunHistoryService, journalService, container, config, authMiddleware, rbacMiddleware, rateLimitMiddleware } = dependencies;
+  const { db, integrationManager, boltService, executionRepository, commandWhitelistService, streamingManager, executionQueue, batchExecutionService, requestIdempotency, puppetDBService, puppetserverService, puppetRunHistoryService, journalService, container, config, authMiddleware, inventoryAuthMiddleware, rbacMiddleware, rateLimitMiddleware } = dependencies;
   const authorizeSources = createSourceAuthorization(db, integrationManager);
 
   // API Routes - Inventory routes (protected with RBAC)
   app.use(
     "/api/inventory",
-    authMiddleware,
+    inventoryAuthMiddleware ?? authMiddleware,
     rateLimitMiddleware,
     createInventoryRouter(boltService, authorizeSources, rbacMiddleware, integrationManager, {
       allowDestructiveActions: config.provisioning.allowDestructiveActions,

@@ -193,26 +193,28 @@ describe("C8: AppConfigSchema enforces JWT_SECRET strength", () => {
   });
 });
 
-// --- A2: DELETE /api/inventory/:id requires lifecycle bearer token ---
+// --- A2: DELETE /api/inventory/:id is gated by provider authorization ---
 
-describe("A2: DELETE /api/inventory/:id requires the lifecycle bearer", () => {
-  const LIFECYCLE_TOKEN = "test-lifecycle-token-32chars-padded-x";
-
-  function buildApp(lifecycleToken: string, allowDestructive = true): Express {
+describe("A2: DELETE /api/inventory/:id is gated by provider authorization", () => {
+  /**
+   * The endpoint used to demand `Authorization: Bearer <PABAWI_LIFECYCLE_TOKEN>`
+   * on top of the JWT its production mount already required, so no caller could
+   * satisfy both and every request was refused (finding I08). The gate is now
+   * `<provider>:read` + `<provider>:destroy`, enforced before dispatch; the
+   * machine credential is an alternative way to authenticate, not a second
+   * header. `route-authorization.test.ts` covers both principals through the
+   * production mount; this pins the router's own behaviour.
+   */
+  function buildApp(allowDestructive = true): Express {
     const app = express();
     app.use(express.json());
 
     const boltService = new BoltService("./bolt-project", 5000);
     const integrationManager = new IntegrationManager();
 
-    // Container with config that returns our test lifecycle token
     const container = new DIContainer();
     container.register("logger", new LoggerService());
     container.register("expertMode", new ExpertModeService());
-    container.register("config", {
-      getJwtSecret: () => "test-jwt-secret-32-chars-padded-xx",
-      getLifecycleToken: () => lifecycleToken,
-    } as unknown as ReturnType<typeof container.resolve<"config">>);
 
     app.use(
       "/api/inventory",
@@ -228,33 +230,25 @@ describe("A2: DELETE /api/inventory/:id requires the lifecycle bearer", () => {
     return app;
   }
 
-  it("returns 401 when no Authorization header is present", async () => {
-    const app = buildApp(LIFECYCLE_TOKEN);
-    await request(harness.use(app)).delete("/api/inventory/aws:eu-west-1:i-test").expect(401);
-  });
-
-  it("returns 401 when the bearer token is wrong", async () => {
-    const app = buildApp(LIFECYCLE_TOKEN);
-    await request(harness.use(app))
-      .delete("/api/inventory/aws:eu-west-1:i-test")
-      .set("Authorization", "Bearer wrong-token-32chars-padded-xx-xx")
-      .expect(401);
-  });
-
-  it("returns 500 (misconfigured) when no lifecycle token is configured", async () => {
-    const app = buildApp("");
-    await request(harness.use(app))
-      .delete("/api/inventory/aws:eu-west-1:i-test")
-      .set("Authorization", `Bearer ${LIFECYCLE_TOKEN}`)
-      .expect(500);
-  });
-
   it("returns 403 when destructive actions are disabled by config", async () => {
-    const app = buildApp(LIFECYCLE_TOKEN, false);
-    await request(harness.use(app))
+    await request(harness.use(buildApp(false)))
       .delete("/api/inventory/aws:eu-west-1:i-test")
-      .set("Authorization", `Bearer ${LIFECYCLE_TOKEN}`)
       .expect(403);
+  });
+
+  it("carries no second credential gate: an authorized caller reaches provider resolution", async () => {
+    // 503 because the integration manager is not initialized. The point is that
+    // the request is neither 401 (missing lifecycle bearer) nor 500
+    // (LIFECYCLE_AUTH_MISCONFIGURED).
+    await request(harness.use(buildApp()))
+      .delete("/api/inventory/aws:eu-west-1:i-test")
+      .expect(503);
+  });
+
+  it("rejects a node ID that names no lifecycle provider", async () => {
+    await request(harness.use(buildApp()))
+      .delete("/api/inventory/bolt:some-node")
+      .expect(400);
   });
 });
 

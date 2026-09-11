@@ -14,45 +14,14 @@ import type { ExecutionToolPlugin } from "../integrations/types";
 import { requestDeduplication } from "../middleware/deduplication";
 import { NodeIdParamSchema } from "../validation/commonSchemas";
 import type { PermissionMiddlewareFactory } from "../middleware/routeAuthorization";
-import { tokensEqual } from "../utils/tokensEqual";
+import {
+  destroyActionFor,
+  isDestructiveAction,
+  permissionForAction,
+  resolveLifecycleProvider,
+  supportedActions,
+} from "./lifecycleActionPolicy";
 import { type DIContainer, createDefaultContainer } from "../container/DIContainer";
-
-/**
- * Create middleware enforcing authentication/authorization for lifecycle actions.
- *
- * This uses a simple bearer token check so that protection travels with the
- * endpoint instead of relying solely on how the router is mounted.
- *
- * The lifecycle token is obtained from ConfigService.
- */
-function createLifecycleAuth(lifecycleToken: string): (req: Request, res: Response, next: () => void) => void {
-  return (req: Request, res: Response, next: () => void): void => {
-    if (!lifecycleToken) {
-      res.status(500).json({
-        error: {
-          code: "LIFECYCLE_AUTH_MISCONFIGURED",
-          message: "Lifecycle authentication is not configured on the server",
-        },
-      });
-      return;
-    }
-
-    const authHeader = req.headers.authorization;
-    const expectedHeader = `Bearer ${lifecycleToken}`;
-
-    if (typeof authHeader !== "string" || !tokensEqual(authHeader, expectedHeader)) {
-      res.status(401).json({
-        error: {
-          code: "UNAUTHORIZED",
-          message: "Unauthorized to perform lifecycle actions",
-        },
-      });
-      return;
-    }
-
-    next();
-  };
-}
 
 const InventoryQuerySchema = z.object({
   sources: z.string().optional(),
@@ -75,19 +44,15 @@ export function createInventoryRouter(
   const router = Router();
   const logger = container.resolve("logger");
   const expertModeService = container.resolve("expertMode");
-  // ConfigService may be unregistered in unit tests that don't set JWT_SECRET.
-  // Fall back to an empty lifecycle token in that case — createLifecycleAuth
-  // then returns 500 (LIFECYCLE_AUTH_MISCONFIGURED) on any protected route,
-  // which is the safe behaviour for a misconfigured deployment too.
-  let lifecycleTokenValue = "";
-  try {
-    lifecycleTokenValue = container.resolve("config").getLifecycleToken();
-  } catch {
-    // No config — protected lifecycle routes will refuse all requests.
-  }
-  const requireLifecycleAuth = createLifecycleAuth(lifecycleTokenValue);
+  /**
+   * Authorize the caller for the provider addressed by the node ID, at the
+   * level the requested action needs. Runs before any provider dispatch, and
+   * classifies the action through the shared lifecycle policy so that the
+   * discovery endpoint and the execution endpoints cannot disagree about which
+   * actions are destructive.
+   */
   const requireProviderPermission: RequestHandler = (req, res, next) => {
-    const provider = resolveProvider(req.params.id);
+    const provider = resolveLifecycleProvider(req.params.id);
     if (!provider) {
       res.status(400).json({ error: { code: "UNSUPPORTED_PROVIDER", message: "Unknown lifecycle provider" } });
       return;
@@ -100,13 +65,12 @@ export function createInventoryRouter(
         res.status(400).json({ error: { code: "INVALID_REQUEST", message: "Action is required" } });
         return;
       }
-      if (["destroy", "destroy_vm", "destroy_lxc", "terminate", "terminate_instance"].includes(action)) permission = "destroy";
-      else if (["provision", "create_instance", "create_vm", "create_lxc"].includes(action)) permission = "provision";
-      else if (["start", "stop", "shutdown", "reboot", "suspend", "resume", "snapshot"].includes(action)) permission = "lifecycle";
-      else {
+      const required = permissionForAction(action);
+      if (!required) {
         res.status(400).json({ error: { code: "INVALID_REQUEST", message: "Unsupported lifecycle action" } });
         return;
       }
+      permission = required;
     }
     const checks = Router();
     checks.use(requirePermission(provider, "read"));
@@ -1254,20 +1218,6 @@ export function createInventoryRouter(
   }
 
   /**
-   * Resolve the provider name from a node ID prefix.
-   * Node IDs follow the pattern "{provider}:{...}" (e.g. "proxmox:node:vmid", "aws:region:instanceId").
-   * Returns null when the prefix doesn't map to a known integration.
-   */
-  function resolveProvider(nodeId: string): string | null {
-    const prefix = nodeId.split(":")[0];
-    const providerMap: Record<string, string> = {
-      proxmox: "proxmox",
-      aws: "aws",
-    };
-    return providerMap[prefix] ?? null;
-  }
-
-  /**
    * Look up the execution tool for a given node ID.
    * Returns the tool and provider name, or sends an error response and returns null.
    */
@@ -1282,7 +1232,7 @@ export function createInventoryRouter(
       return null;
     }
 
-    const provider = resolveProvider(nodeId);
+    const provider = resolveLifecycleProvider(nodeId);
     if (!provider) {
       res.status(400).json({
         error: {
@@ -1308,7 +1258,7 @@ export function createInventoryRouter(
   }
 
   /**
-   * GET /api/nodes/:id/lifecycle-actions
+   * GET /api/inventory/:id/lifecycle-actions
    * Discover available lifecycle actions for a node based on its provider.
    * Returns actions with metadata so the frontend can render them dynamically.
    */
@@ -1327,7 +1277,7 @@ export function createInventoryRouter(
 
       // Build lifecycle action definitions from the provider's capabilities
       const actions = capabilities.map((cap) => {
-        const isDestructive = ["destroy", "terminate", "destroy_vm", "destroy_lxc"].includes(cap.name);
+        const isDestructive = isDestructiveAction(cap.name);
         return {
           name: cap.name,
           displayName: cap.name.charAt(0).toUpperCase() + cap.name.slice(1).replace(/_/g, " "),
@@ -1344,7 +1294,7 @@ export function createInventoryRouter(
       if (typeof provisioningTool.listProvisioningCapabilities === "function") {
         const provCaps = provisioningTool.listProvisioningCapabilities();
         for (const cap of provCaps) {
-          if (cap.operation === "destroy" && !actions.some((a) => a.name === cap.name)) {
+          if (isDestructiveAction(cap.name) && !actions.some((a) => a.name === cap.name)) {
             actions.push({
               name: cap.name,
               displayName: cap.name.charAt(0).toUpperCase() + cap.name.slice(1).replace(/_/g, " "),
@@ -1373,19 +1323,19 @@ export function createInventoryRouter(
   );
 
   /**
-   * POST /api/nodes/:id/action
+   * POST /api/inventory/:id/action
    * Execute a lifecycle action on a node via its provider integration.
    * Provider-agnostic: routes to the correct integration based on node ID prefix.
    *
-   * Authentication/RBAC is enforced explicitly via requireLifecycleAuth in this
-   * router so protection travels with the endpoint. Additional RBAC middleware
-   * may still be applied at the route mounting level in server.ts.
-   * Required permission: lifecycle:* or lifecycle:{action}
+   * Authorization travels with the endpoint: `requireProviderPermission`
+   * resolves the provider from the node ID and requires
+   * `<provider>:read` plus the permission the action's class needs, before any
+   * provider is dispatched. The caller is either a user JWT or the
+   * `lifecycle-service` machine account (see lifecycleAuthMiddleware).
    */
   router.post(
     "/:id/action",
     requireProviderPermission,
-    requireLifecycleAuth,
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const startTime = Date.now();
 
@@ -1421,6 +1371,18 @@ export function createInventoryRouter(
         if (!resolved) return;
 
         const { tool, provider } = resolved;
+
+        // The provider's advertised capabilities are the contract the
+        // discovery endpoint publishes; execute nothing it does not name.
+        if (!supportedActions(tool).includes(body.action)) {
+          res.status(400).json({
+            error: {
+              code: "UNSUPPORTED_ACTION",
+              message: `Provider "${provider}" does not support action "${body.action}"`,
+            },
+          });
+          return;
+        }
 
         logger.debug("Executing action on node", {
           component: "InventoryRouter",
@@ -1503,19 +1465,17 @@ export function createInventoryRouter(
   );
 
   /**
-   * DELETE /api/nodes/:id
+   * DELETE /api/inventory/:id
    * Destroy a node (permanently delete VM, container, or cloud instance).
    * Provider-agnostic: routes to the correct integration based on node ID prefix.
    *
-   * Authentication is enforced explicitly via requireLifecycleAuth — protection
-   * travels with the endpoint instead of relying solely on mount-level RBAC.
-   * Additional RBAC middleware may still be applied at the mount point.
-   * Required permission: <provider>:destroy
+   * Authorization travels with the endpoint: `requireProviderPermission`
+   * requires `<provider>:read` and `<provider>:destroy` before the provider is
+   * reached.
    */
   router.delete(
     "/:id",
     requireProviderPermission,
-    requireLifecycleAuth,
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const startTime = Date.now();
 
@@ -1550,8 +1510,19 @@ export function createInventoryRouter(
           metadata: { nodeId, provider },
         });
 
-        // Determine the correct destroy action based on provider
-        let destroyAction: string;
+        // Take the destroy action from the provider's own capabilities: a
+        // provider that advertises none (Azure) cannot be asked to destroy.
+        const destroyAction = destroyActionFor(tool);
+        if (!destroyAction) {
+          res.status(501).json({
+            error: {
+              code: "DESTROY_NOT_SUPPORTED",
+              message: `Provider "${provider}" does not support destroying nodes`,
+            },
+          });
+          return;
+        }
+
         let destroyParams: Record<string, unknown> | undefined;
 
         if (provider === "proxmox") {
@@ -1570,14 +1541,9 @@ export function createInventoryRouter(
             });
             return;
           }
-          destroyAction = "destroy_vm";
+          // Proxmox addresses a guest by node and vmid rather than by the
+          // composite node ID.
           destroyParams = { node, vmid };
-        } else if (provider === "aws") {
-          destroyAction = "terminate";
-          destroyParams = undefined;
-        } else {
-          destroyAction = "destroy";
-          destroyParams = undefined;
         }
 
         const result = await tool.executeAction({
