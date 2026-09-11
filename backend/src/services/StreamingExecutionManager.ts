@@ -47,7 +47,41 @@ interface BufferedOutput {
   stdout: string[];
   stderr: string[];
   timer: NodeJS.Timeout | null;
+  /** Epoch millis of the last buffered chunk, for the abandoned-state sweep. */
+  lastActivityAt: number;
 }
+
+/**
+ * Payload of a `complete` event.
+ *
+ * `status` is required because the client shows the run's outcome from it. An
+ * event that omitted it used to be rendered as success, so a failed run looked
+ * like a successful one (finding I07).
+ */
+export interface ExecutionCompletion {
+  /**
+   * The run's terminal status.
+   *
+   * Deliberately a plain string rather than the terminal union: callers hand
+   * over the execution result they just stored, whose status type also admits
+   * in-flight values. The client fails closed on anything that is not an
+   * explicit success, so an implausible status is reported, not hidden.
+   */
+  status: string;
+  results?: unknown;
+  error?: string;
+  command?: string;
+}
+
+/**
+ * How long output state for an execution with no subscribers survives its last
+ * chunk.
+ *
+ * Every execution that reaches `complete` or `error` releases its state at
+ * once; this only bounds the state of one that never reaches either, such as a
+ * worker that died mid-run.
+ */
+const ABANDONED_STATE_TTL_MS = 5 * 60_000;
 
 /**
  * Execution output tracking
@@ -132,7 +166,48 @@ export class StreamingExecutionManager {
           }
         }
       }
+      this.sweepAbandonedState();
     }, this.heartbeatIntervalMs);
+  }
+
+  /**
+   * Drop output state for executions that will never report a terminal event.
+   *
+   * A completed or failed execution releases its state through
+   * `closeAllConnections`. This covers the remainder: a worker that died
+   * mid-run leaves a buffer and an output counter behind, and nothing else
+   * would ever remove them.
+   *
+   * @returns number of executions whose state was released
+   */
+  public sweepAbandonedState(): number {
+    const cutoff = Date.now() - ABANDONED_STATE_TTL_MS;
+    let released = 0;
+
+    for (const [executionId, buffer] of [...this.buffers]) {
+      if (this.subscribers.has(executionId)) continue;
+      if (buffer.lastActivityAt > cutoff) continue;
+      this.releaseExecutionState(executionId);
+      released += 1;
+    }
+
+    // Tracking without a buffer is possible: an execution can hit the output
+    // limit before anything is buffered.
+    for (const executionId of [...this.executionTracking.keys()]) {
+      if (this.subscribers.has(executionId) || this.buffers.has(executionId)) continue;
+      this.executionTracking.delete(executionId);
+      released += 1;
+    }
+
+    if (released > 0) {
+      this.logger.debug(`Released output state for ${String(released)} abandoned executions`, {
+        component: "StreamingExecutionManager",
+        operation: "sweepAbandonedState",
+        metadata: { released },
+      });
+    }
+
+    return released;
   }
 
   /**
@@ -232,14 +307,7 @@ export class StreamingExecutionManager {
 
     if (![...subscribers].some(subscriber => subscriber.response === response)) return;
 
-    // Decrement per-IP connection counter
-    const clientIp = response.req.ip ?? response.req.socket.remoteAddress ?? 'unknown';
-    const currentCount = this.connectionCountByIp.get(clientIp) ?? 0;
-    if (currentCount > 1) {
-      this.connectionCountByIp.set(clientIp, currentCount - 1);
-    } else {
-      this.connectionCountByIp.delete(clientIp);
-    }
+    this.releaseConnectionSlot(response);
 
     // Find and remove subscriber
     for (const subscriber of subscribers) {
@@ -364,6 +432,10 @@ export class StreamingExecutionManager {
       this.executionTracking.set(executionId, tracking);
     }
 
+    // Output counts as activity even when it is refused, so an execution past
+    // its output limit cannot be swept and then start counting from zero.
+    this.getBuffer(executionId).lastActivityAt = Date.now();
+
     if (tracking.outputLimitReached) {
       return false;
     }
@@ -393,6 +465,7 @@ export class StreamingExecutionManager {
         stdout: [],
         stderr: [],
         timer: null,
+        lastActivityAt: Date.now(),
       };
       this.buffers.set(executionId, buffer);
     }
@@ -444,18 +517,59 @@ export class StreamingExecutionManager {
    */
   private scheduleFlush(executionId: string): void {
     const buffer = this.getBuffer(executionId);
+    buffer.lastActivityAt = Date.now();
 
-    // Clear existing timer if any
+    // A pending flush is left alone rather than restarted. Restarting it on
+    // every chunk meant continuously arriving output waited for a quiet
+    // interval that never came, so latency was unbounded instead of bufferMs.
     if (buffer.timer) {
-      clearTimeout(buffer.timer);
+      return;
     }
 
-    // Schedule new flush
     buffer.timer = setTimeout(() => {
+      buffer.timer = null;
       this.flushBuffer(executionId, "stdout");
       this.flushBuffer(executionId, "stderr");
-      buffer.timer = null;
     }, this.config.bufferMs);
+  }
+
+  /** Cancel a pending flush, so a terminal path leaves nothing scheduled. */
+  private clearFlushTimer(executionId: string): void {
+    const buffer = this.buffers.get(executionId);
+    if (buffer?.timer) {
+      clearTimeout(buffer.timer);
+      buffer.timer = null;
+    }
+  }
+
+  /**
+   * Release the output state for an execution.
+   *
+   * Unconditional by design: it must not depend on a subscriber set still
+   * existing, because the client usually disconnects before the delayed
+   * teardown runs (finding I07).
+   */
+  private releaseExecutionState(executionId: string): void {
+    this.clearFlushTimer(executionId);
+    this.buffers.delete(executionId);
+    this.executionTracking.delete(executionId);
+  }
+
+  /**
+   * Release the per-IP connection slot a subscriber holds.
+   *
+   * Counted on subscribe, so it has to be released on every path that ends a
+   * response. Releasing it only through `unsubscribe` leaked a slot for each
+   * stream the server closed itself, and ten of those locked a client out.
+   */
+  private releaseConnectionSlot(response: Response): void {
+    const clientIp = response.req.ip ?? response.req.socket.remoteAddress ?? 'unknown';
+    const currentCount = this.connectionCountByIp.get(clientIp) ?? 0;
+    if (currentCount > 1) {
+      this.connectionCountByIp.set(clientIp, currentCount - 1);
+    } else {
+      this.connectionCountByIp.delete(clientIp);
+    }
   }
 
   /**
@@ -563,15 +677,20 @@ export class StreamingExecutionManager {
   }
 
   /**
-   * Emit completion event
+   * Emit completion event.
+   *
+   * The payload carries the run's own terminal status, which the client
+   * displays. Do not synthesise one here: "the stream ended" and "the run
+   * succeeded" are different facts.
    *
    * @param executionId - Unique execution identifier
-   * @param result - Execution result data
+   * @param result - Execution result data, including its terminal status
    */
-  public emitComplete(executionId: string, result: unknown): void {
+  public emitComplete(executionId: string, result: ExecutionCompletion): void {
     // Flush any remaining buffered output
     this.flushBuffer(executionId, "stdout");
     this.flushBuffer(executionId, "stderr");
+    this.clearFlushTimer(executionId);
 
     this.emit(executionId, {
       type: "complete",
@@ -594,6 +713,7 @@ export class StreamingExecutionManager {
     // Flush any remaining buffered output
     this.flushBuffer(executionId, "stdout");
     this.flushBuffer(executionId, "stderr");
+    this.clearFlushTimer(executionId);
 
     this.emit(executionId, {
       type: "error",
@@ -614,14 +734,17 @@ export class StreamingExecutionManager {
    * @param executionId - Unique execution identifier
    */
   private closeAllConnections(executionId: string): void {
-    const subscribers = this.subscribers.get(executionId);
-    if (!subscribers) {
-      return;
-    }
+    // No early return on a missing subscriber set: the client normally
+    // disconnects before this runs, and the output state still has to go.
+    const subscribers = this.subscribers.get(executionId) ?? new Set<Subscriber>();
+    // Deregistered before the responses end, so the 'close' handler cannot
+    // release the same connection slot a second time.
+    this.subscribers.delete(executionId);
 
     for (const subscriber of subscribers) {
       try {
         subscriber.authorization?.close();
+        this.releaseConnectionSlot(subscriber.response);
         subscriber.response.end();
       } catch (error) {
         this.logger.error(`Failed to close connection for execution ${executionId}`, {
@@ -632,15 +755,7 @@ export class StreamingExecutionManager {
       }
     }
 
-    this.subscribers.delete(executionId);
-
-    // Clean up buffers and tracking
-    const buffer = this.buffers.get(executionId);
-    if (buffer?.timer) {
-      clearTimeout(buffer.timer);
-    }
-    this.buffers.delete(executionId);
-    this.executionTracking.delete(executionId);
+    this.releaseExecutionState(executionId);
 
     this.logger.debug(`Closed all connections for execution ${executionId}`, {
       component: "StreamingExecutionManager",
@@ -666,6 +781,31 @@ export class StreamingExecutionManager {
    */
   public getActiveExecutionCount(): number {
     return this.subscribers.size;
+  }
+
+  /**
+   * Connections currently counted against the per-IP limit.
+   *
+   * Reported so a leaked slot is observable: it should return to zero once
+   * every stream has ended, however it ended.
+   */
+  public getTrackedConnectionCount(): number {
+    let total = 0;
+    for (const count of this.connectionCountByIp.values()) {
+      total += count;
+    }
+    return total;
+  }
+
+  /**
+   * Number of executions still holding output state (buffers or output
+   * counters), whether or not anyone is subscribed.
+   *
+   * Reported so the leak this replaced is observable rather than inferred: it
+   * should fall back to zero as executions finish.
+   */
+  public getRetainedStateCount(): number {
+    return new Set([...this.buffers.keys(), ...this.executionTracking.keys()]).size;
   }
 
   /**

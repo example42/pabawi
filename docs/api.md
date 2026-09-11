@@ -245,12 +245,41 @@ Query param: `days` (default 7, max 365).
 | `POST` | `/api/executions/batch/:batchId/cancel` | Cancel a batch execution |
 | `GET` | `/api/executions/queue/status` | Execution queue status |
 | `GET` | `/api/streaming/stats` | Streaming server stats |
+| `POST` | `/api/executions/:id/stream-ticket` | Single-use ticket for the SSE stream |
 
 **Authorization:** the command-executing / mutating routes
 (`/batch`, `/:id/re-execute`, `/:id/cancel`, `/batch/:batchId/cancel`) require
 the `bolt:execute` permission. Command-type requests are validated against the
 [command whitelist](configuration.md#command-whitelist) — shell metacharacters
 are always rejected. The read-only `GET` routes require authentication only.
+
+### Streaming execution output
+
+`GET /api/executions/:id/stream` is a Server-Sent Events endpoint. An
+`EventSource` cannot set headers, so authenticate it with a single-use ticket:
+`POST /api/executions/:id/stream-ticket` returns `{ "ticket": "..." }`, valid
+for 30 seconds, bound to that one execution and to the stream route, and spent
+by the first request that redeems it. The ticket is resolved into an
+`Authorization` header before any `/api/executions` chain authenticates.
+
+Event types are `start`, `command`, `stdout`, `stderr`, `status`, `complete` and
+`error`. Output is coalesced and flushed within `STREAMING_BUFFER_MS` of the
+first buffered chunk, so continuously producing runs stream while they run
+rather than at the end.
+
+A `complete` event carries the run's own terminal status
+(`success` / `failed` / `partial` / `cancelled` / `interrupted`) in its payload:
+a completed stream is not a successful run, and a client must display the
+reported status rather than assume success. Subscribing to an execution that has
+already reached any of those statuses replays its `complete` event at once. An
+`error` event means the stream itself failed, not that the run did.
+
+`GET /api/streaming/stats` reports `activeExecutions` (executions with at least
+one subscriber), `retainedState` (executions still holding output buffers or
+counters) and `trackedConnections` (connections counted against the per-client
+limit). All three fall back to zero as executions finish; either of the latter
+two climbing indicates streams whose state or connection slot is not being
+released.
 
 **`GET /api/executions` query params:**
 

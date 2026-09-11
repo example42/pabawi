@@ -47,6 +47,23 @@ export type ExecutionTool = "bolt" | "ansible" | "ssh";
 export type ExecutionStatus = "queued" | "running" | "success" | "failed" | "partial" | "cancelled" | "interrupted";
 
 /**
+ * Statuses an execution never leaves.
+ *
+ * Named once so a caller that has to react to "this run is over" cannot do it
+ * by listing the two statuses it happens to remember: a stream that replayed
+ * only success and failure left a cancelled or interrupted run waiting for an
+ * event that never came (finding I07).
+ */
+export const TERMINAL_EXECUTION_STATUSES: readonly ExecutionStatus[] = [
+  "success", "failed", "partial", "cancelled", "interrupted",
+];
+
+/** Whether an execution has reached a status it will not leave. */
+export function isTerminalExecutionStatus(status: string): boolean {
+  return (TERMINAL_EXECUTION_STATUSES as readonly string[]).includes(status);
+}
+
+/**
  * Node execution result
  */
 export interface NodeResult {

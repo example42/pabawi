@@ -60,7 +60,21 @@
     lg: 'px-3 py-1.5 text-base'
   };
 
-  const config = $derived(statusConfig[status]);
+  /**
+   * Shown for a status this badge does not know.
+   *
+   * A run that reports an unexpected status, or none at all, must still
+   * render: the badge used to read a missing entry and throw, taking the whole
+   * result panel with it.
+   */
+  const unknownStatus = { label: 'Unknown', classes: 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300' };
+
+  const config = $derived(
+    (statusConfig as Partial<Record<string, { label: string; classes: string }>>)[status]
+      ?? (typeof status === 'string' && status.length > 0
+        ? { ...unknownStatus, label: status }
+        : unknownStatus),
+  );
 </script>
 
 <span

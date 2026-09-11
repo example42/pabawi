@@ -9,6 +9,7 @@
   import { post, get } from '../lib/api';
   import { showError, showSuccess, showInfo } from '../lib/toast.svelte';
   import { expertMode } from '../lib/expertMode.svelte';
+  import { executionFailureReason, executionReportsSuccess } from '../lib/executionStatus';
   import { logger } from '../lib/logger.svelte';
   import { ansiToHtml } from '../lib/ansiToHtml';
   import { useExecutionStream, type ExecutionStream } from '../lib/executionStream.svelte';
@@ -233,7 +234,13 @@
       onComplete: (streamResult) => {
         result = streamResult as unknown as ExecutionResult;
         executing = false;
-        showSuccess('Puppet run completed');
+        // A finished stream is not a successful run: report what the run said.
+        if (executionReportsSuccess(streamResult)) {
+          showSuccess('Puppet run completed');
+        } else {
+          error = executionFailureReason(streamResult);
+          showError('Puppet run failed', error);
+        }
         if (onExecutionComplete) {
           onExecutionComplete();
         }
@@ -243,11 +250,13 @@
         try {
           const data = await get<{ execution: ExecutionResult }>(`/api/executions/${executionId}`);
           result = data.execution;
-          if (result.status === 'failed') {
-            error = result.error ?? streamError;
-            showError('Puppet run failed', error);
-          } else {
+          // Every non-success status counts, not only 'failed': a partial or
+          // cancelled run is not a completed one.
+          if (executionReportsSuccess(result)) {
             showSuccess('Puppet run completed');
+          } else {
+            error = result.error ?? executionFailureReason(result);
+            showError('Puppet run failed', error);
           }
         } catch (fetchErr) {
           error = streamError;

@@ -459,8 +459,69 @@ authentication were exercised only against a fake upstream, so I06's requirement
 to validate against an actual test provider is outstanding and the console should
 not be treated as production ready. Console sessions remain process-local, which
 keeps the single-process baseline from I09/A21. No live provider, production
-database, publication or deployment was exercised. A16 SSE terminal status and
-ticket routing is the next action.
+database, publication or deployment was exercised.
+
+**A16 / I07, 2026-09-11: implemented and verified.** A `complete` event now
+means the run finished, not that it succeeded. The SSE client takes the terminal
+status from the payload, which every emitter already carried, and the emitter's
+signature requires it, so a completion cannot arrive without one. A payload with
+no status is treated as a failure rather than a success, and the five callers
+that announced success for every completion (Puppet, task, package, playbook and
+node command, in both their streaming and polling paths) now report what the run
+reported. Partial, cancelled and interrupted runs are included: the previous
+code recognised only `failed`, and the stream route replayed only `success` and
+`failed`, so a client subscribing to an already-cancelled run waited for an
+event that never came. `TERMINAL_EXECUTION_STATUSES` names the set once for both
+sides. A status badge given an unrecognised status renders it instead of
+throwing.
+
+Output state is released unconditionally. The delayed teardown used to return
+early when the subscriber set was already gone, which is the normal case because
+the client disconnects first, leaving a buffer and an output counter per
+execution for the process lifetime. The same early return leaked the per-IP
+connection slot for every stream the server closed itself, and ten of those
+locked a client out of streaming entirely. A sweep on the heartbeat tick covers
+the remainder: an execution abandoned without any terminal event. Retained
+output state and tracked connections are both reported through
+`/api/streaming/stats` so the condition is observable rather than inferred.
+
+The viewer that displays streamed output needed the same widening: its
+running/complete split recognised only success and failure, which was
+exhaustive only because the client used to report success for everything. A
+cancelled or interrupted run was therefore neither running nor complete, showed
+a "Running" badge, reported no duration and left its elapsed timer running.
+
+Flush latency is bounded. The buffer timer was restarted on every chunk, so a
+continuously producing run streamed nothing until it went quiet; a pending flush
+is now left alone and the bound is the buffer interval measured from the first
+buffered chunk. Terminal paths clear the timer instead of leaving one scheduled
+against released state.
+
+The two remaining parts of I07's action were found already closed and were
+verified rather than reimplemented: `?ticket=` is resolved by a dedicated
+pre-auth mount ahead of both `/api/executions` chains, and redemption checks the
+ticket's stored execution against the requested path and method. Both are
+covered by existing tests in `route-authorization.test.ts` ("issues a ticket and
+redeems it on the stream endpoint without an Authorization header" and the S01
+group asserting a ticket cannot authenticate another execution or operation).
+
+A16 validation: 3,683 backend tests passed on SQLite (56 skipped, one todo) and
+3,737 against a disposable PostgreSQL 15 database; 1,042 frontend tests passed.
+Fourteen new streaming lifecycle tests cover state release on every path, the
+abandoned-state sweep, flush latency under continuous output, coalescing, the
+per-IP slot through a real socket, and terminal replay for all five terminal
+statuses; twenty-seven new frontend tests cover the status helpers, the client's
+terminal handling, the Puppet component's reporting and the output viewer's
+rendering of every terminal status. Five probes confirmed the defects in the
+previous code: a disconnect before completion left a buffer and a counter
+behind, a server-closed stream leaked its connection slot, 400 ms of continuous
+output produced no flush at all, a completion without a status was displayed as
+success, and a cancelled run rendered as running. Backend and frontend lint and TypeScript passed.
+
+Not in scope for A16: the polling fallbacks still poll rather than reconnect,
+and per-execution output state remains process-local. No live provider,
+production database, publication or deployment was exercised. A17 is the next
+action.
 
 ## Executive assessment
 
@@ -745,6 +806,11 @@ finding; implementation and validation are recorded above.
 **Acceptance:** create a session through the real route and manager, then upgrade to a local fake upstream and exchange frames. Exercise termination, upstream errors and restart cleanup. A production Proxmox compatibility test remains necessary.
 
 ### I07. P2: SSE reports failures as success and leaks tracking state
+
+**Resolved by A16 on 2026-09-11.** The following describes the original finding;
+implementation and validation are recorded above. The ticket routing and
+ticket-to-execution binding it describes were already fixed before A16 and were
+verified against the assembled mount chain rather than reimplemented.
 
 **Source-confirmed.** [executionStream.svelte.ts](../../frontend/src/lib/executionStream.svelte.ts), lines 289-293, assigns success for every `complete` event. [streaming.ts](../../backend/src/routes/streaming.ts), lines 236-250, emits complete for both successful and failed stored executions, including their actual status. Failed runs can consequently appear successful.
 

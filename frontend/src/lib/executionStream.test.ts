@@ -346,6 +346,49 @@ describe("executionStream handleEvent processes all event types", () => {
     expect(stream.executionStatus).toBe("success");
   });
 
+  for (const status of ["failed", "partial", "cancelled", "interrupted"]) {
+    it(`takes a ${status} status from the completion rather than assuming success`, async () => {
+      const { useExecutionStream } = await import("./executionStream.svelte");
+      const onComplete = vi.fn();
+      const stream = useExecutionStream("test-exec-id", { onComplete });
+      stream.connect();
+      await waitForEventSource();
+
+      const completeEvent: StreamingEvent = {
+        type: "complete",
+        executionId: "test-exec-id",
+        timestamp: new Date().toISOString(),
+        data: { status, results: [], error: `run ended as ${status}` },
+      };
+
+      lastMockEventSource!.dispatch("complete", JSON.stringify(completeEvent));
+      // Assigning success to every completion is what made a failed run look
+      // like a successful one (finding I07).
+      expect(stream.executionStatus).toBe(status);
+      expect(stream.error).toBe(`run ended as ${status}`);
+      expect(onComplete).toHaveBeenCalledWith(completeEvent.data);
+    });
+  }
+
+  it("does not report success for a completion that carries no status", async () => {
+    const { useExecutionStream } = await import("./executionStream.svelte");
+    const stream = useExecutionStream("test-exec-id");
+    stream.connect();
+    await waitForEventSource();
+
+    const completeEvent: StreamingEvent = {
+      type: "complete",
+      executionId: "test-exec-id",
+      timestamp: new Date().toISOString(),
+      data: { results: [] } as unknown as StreamingEvent["data"],
+    };
+
+    lastMockEventSource!.dispatch("complete", JSON.stringify(completeEvent));
+    expect(stream.executionStatus).not.toBe("success");
+    expect(stream.executionStatus).toBe("failed");
+    expect(stream.error).toBe("Execution completed without a reported status");
+  });
+
   it("handles error event and calls onError callback", async () => {
     const { useExecutionStream } = await import("./executionStream.svelte");
     const onError = vi.fn();

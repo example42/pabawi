@@ -8,6 +8,7 @@
   import IntegrationBadge from './IntegrationBadge.svelte';
   import ExecutePlaybookForm from './ExecutePlaybookForm.svelte';
   import { expertMode } from '../lib/expertMode.svelte';
+  import { executionFailureReason, executionReportsSuccess } from '../lib/executionStatus';
   import { useExecutionStream, type ExecutionStream } from '../lib/executionStream.svelte';
 
   interface Props {
@@ -99,9 +100,16 @@
 
       if (expertMode.enabled) {
         executionStream = useExecutionStream(executionId, {
-          onComplete: () => {
+          onComplete: (streamResult) => {
             pollExecutionResult(executionId);
-            showSuccess('Playbook execution completed');
+            // A finished stream is not a successful run: report what the run
+            // itself said.
+            if (executionReportsSuccess(streamResult)) {
+              showSuccess('Playbook execution completed');
+            } else {
+              error = executionFailureReason(streamResult);
+              showError('Playbook execution failed', error);
+            }
             if (onExecutionComplete) {
               onExecutionComplete();
             }
@@ -114,7 +122,12 @@
         executionStream.connect();
       } else {
         await pollExecutionResult(executionId);
-        showSuccess('Playbook execution completed');
+        if (executionReportsSuccess(result)) {
+          showSuccess('Playbook execution completed');
+        } else {
+          error ??= executionFailureReason(result);
+          showError('Playbook execution failed', error);
+        }
         if (onExecutionComplete) {
           onExecutionComplete();
         }
