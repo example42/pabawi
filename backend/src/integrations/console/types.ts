@@ -28,6 +28,44 @@ export interface ConsoleSessionStatus {
   error?: string;
 }
 
+/**
+ * Connection material a provider produced for one session.
+ *
+ * Kept separate from {@link ConsoleSession} because this is a credential, not
+ * session metadata: a Proxmox upstream URL embeds a live VNC ticket. It is
+ * handed to the connection broker in memory and never persisted or logged.
+ */
+export interface ConsoleUpstream {
+  /** Absolute WebSocket URL the broker dials, including any ticket. */
+  url: string;
+}
+
+/**
+ * What a provider returns when it has prepared a session upstream.
+ *
+ * Only the upstream: the session's identity, token and lifecycle belong to the
+ * caller that reserved it, so a provider cannot mint a credential for a session
+ * the database does not know about.
+ */
+export interface ConsoleSessionAdmission {
+  upstream: ConsoleUpstream;
+}
+
+/** What a provider needs in order to prepare an upstream. */
+export interface ConsoleSessionRequest {
+  /** Provider-specific node identifier. */
+  nodeId: string;
+
+  /** Account the session belongs to. */
+  userId: string;
+
+  /** Identity assigned by the caller's capacity reservation. */
+  sessionId: string;
+
+  /** Transport the caller reserved and expects to be prepared. */
+  transport: ConsoleTransport;
+}
+
 /** Full session object returned by createSession */
 export interface ConsoleSession {
   sessionId: string;
@@ -56,11 +94,20 @@ export interface ConsolePlugin extends IntegrationPlugin {
   getConsoleCapabilities(nodeId: string): Promise<ConsoleCapability[]>;
 
   /**
-   * Create a new console session.
+   * Prepare the upstream for a session that has already been reserved.
+   *
+   * Reserving session capacity has to happen before any provider resource is
+   * created, so the identity, token and transport all come from the caller. A
+   * provider that minted its own would be creating a session nobody reserved
+   * and a credential nothing can validate.
+   *
+   * The returned upstream is connection material for the broker, not session
+   * state; it must not be persisted.
+   *
    * Rejects with a typed error if the node has no console capability
    * for this provider.
    */
-  createSession(nodeId: string, userId: string): Promise<ConsoleSession>;
+  createSession(request: ConsoleSessionRequest): Promise<ConsoleSessionAdmission>;
 
   /**
    * Terminate an active session.

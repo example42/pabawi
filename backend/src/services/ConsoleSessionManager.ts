@@ -1,12 +1,54 @@
 import { PermissionService } from "./PermissionService";
-import { randomBytes } from "crypto";
+import { randomBytes, randomUUID } from "crypto";
 
 import type { ConsoleConfig } from "../config/schema";
 import type { DatabaseAdapter } from "../database/DatabaseAdapter";
-import type { ConsoleSession } from "../integrations/console/types";
+import type { ConsoleSession, ConsoleTransport } from "../integrations/console/types";
 
 import type { AuditLoggingService } from "./AuditLoggingService";
+import type { ConsoleConnectionBroker } from "./ConsoleConnectionBroker";
+import { CONSOLE_UPGRADE_WINDOW_MS } from "./ConsoleConnectionBroker";
 import type { LoggerService } from "./LoggerService";
+
+/**
+ * Releases a provider-side session.
+ *
+ * The manager owns lifecycle transitions but has no plugin registry, so the
+ * caller supplies the bridge. Without it a terminated session keeps its
+ * provider-side entry, which is a leak and a stale `getSessionStatus`.
+ *
+ * Must not throw: a provider that cannot be reached should not stop a
+ * termination that is already recorded.
+ *
+ * @returns whether the provider had a session to release
+ */
+export type ConsoleProviderCleanup = (
+  provider: string,
+  sessionId: string,
+) => Promise<boolean>;
+
+/** A reserved session: capacity is held and the browser has its credential. */
+export interface ConsoleReservation {
+  sessionId: string;
+  token: string;
+  startedAt: string;
+}
+
+/** Thrown when a user already holds as many sessions as the cap allows. */
+export class ConsoleCapacityError extends Error {
+  constructor(public readonly limit: number) {
+    super(`Concurrent session limit (${String(limit)}) reached`);
+    this.name = "ConsoleCapacityError";
+  }
+}
+
+/** Thrown when the reserving account cannot hold a console session. */
+export class ConsoleAccountError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ConsoleAccountError";
+  }
+}
 
 /**
  * Row shape returned by console_sessions SELECT queries.
@@ -21,6 +63,12 @@ interface ConsoleSessionRow {
   token: string | null;
   tokenCreatedAt: string | null;
   tokenConsumed: number;
+  /**
+   * Retired by the connection broker: always null. The column survives in the
+   * schema because rebuilding a SQLite table to drop it buys nothing, but
+   * nothing writes or reads it. Connection material is a credential and must
+   * not be persisted.
+   */
   upstreamUrl: string | null;
   startedAt: string;
   lastHeartbeatAt: string | null;
@@ -48,11 +96,22 @@ const SESSION_SELECT = `
 export class ConsoleSessionManager {
   private permissionService: PermissionService;
 
+  /**
+   * @param broker - Owns connection material and live relays. Without it a
+   *   state transition is only a database write: the sockets stay open. The
+   *   parameter is optional so narrow tests can construct a manager without a
+   *   broker, never so production can.
+   * @param providerCleanup - Reaches the provider that prepared the upstream.
+   *   Optional for the same reason as `broker`: tests that only assert
+   *   persisted state can omit it, production wires it.
+   */
   constructor(
     private db: DatabaseAdapter,
     private config: ConsoleConfig,
     private logger: LoggerService,
     private auditLogger: AuditLoggingService,
+    private broker?: ConsoleConnectionBroker,
+    private providerCleanup?: ConsoleProviderCleanup,
   ) {
     this.permissionService = new PermissionService(db);
   }
@@ -74,149 +133,217 @@ export class ConsoleSessionManager {
     return randomBytes(32).toString("hex");
   }
 
-  /** Store a new console session and record an audit log entry. */
-  async createSession(session: ConsoleSession): Promise<void> {
+  /**
+   * Reserve capacity for a session before any provider resource exists.
+   *
+   * The reservation is the session: it holds a `creating` row that counts
+   * against the concurrent cap, so a provider call that follows cannot create
+   * an upstream nobody accounted for. Reading the cap and inserting the row
+   * happen in one transaction, with the account row locked, so two concurrent
+   * requests cannot both find room for the last slot.
+   *
+   * The caller must either activate the reservation or fail it; an abandoned
+   * `creating` row holds a slot until heartbeat cleanup expires it.
+   *
+   * Requirement 8.6
+   *
+   * @throws ConsoleCapacityError when the user already holds the cap
+   * @throws ConsoleAccountError when the account cannot hold a session
+   */
+  async reserveSession(request: {
+    userId: string;
+    nodeId: string;
+    provider: string;
+    transport: ConsoleTransport;
+  }): Promise<ConsoleReservation> {
+    const sessionId = randomUUID();
+    const token = this.generateToken();
     const now = new Date().toISOString();
 
-    const inserted = await this.db.execute(
-      `INSERT INTO console_sessions (
-        id, user_id, node_id, provider, transport, state,
-        token, token_created_at, token_consumed, upstream_url,
-        started_at, last_heartbeat_at, session_version
-      ) SELECT ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, session_version FROM users WHERE id = ? AND is_active = 1`,
-      [
-        session.sessionId,
-        session.userId,
-        session.nodeId,
-        session.provider,
-        session.transport,
-        session.state,
-        session.token,
-        now,
-        null,
-        session.startedAt,
-        now,
-        session.userId,
-      ],
-    );
+    await this.db.withTransaction(async () => {
+      // Lock the account so the count below cannot go stale under a concurrent
+      // reservation. SQLite serialises writers outright; PostgreSQL needs the
+      // explicit row lock.
+      const account = await this.db.queryOne<{ sessionVersion: string }>(
+        `SELECT session_version AS "sessionVersion" FROM users
+          WHERE id = ? AND is_active = 1${this.db.getDialect() === "postgres" ? " FOR UPDATE" : ""}`,
+        [request.userId],
+      );
+      if (!account) throw new ConsoleAccountError("User not found or inactive");
 
-    if (inserted.changes !== 1) throw new Error("User not found or inactive");
+      const held = await this.db.queryOne<{ count: number }>(
+        `SELECT COUNT(*) AS "count" FROM console_sessions
+          WHERE user_id = ? AND state IN ('creating', 'active')`,
+        [request.userId],
+      );
+      if ((held?.count ?? 0) >= this.config.maxConcurrentSessions) {
+        throw new ConsoleCapacityError(this.config.maxConcurrentSessions);
+      }
+
+      // `upstream_url` is deliberately left null: connection material is a
+      // credential and lives only in ConsoleConnectionBroker.
+      await this.db.execute(
+        `INSERT INTO console_sessions (
+          id, user_id, node_id, provider, transport, state,
+          token, token_created_at, token_consumed,
+          started_at, last_heartbeat_at, session_version
+        ) VALUES (?, ?, ?, ?, ?, 'creating', ?, ?, 0, ?, ?, ?)`,
+        [
+          sessionId, request.userId, request.nodeId, request.provider, request.transport,
+          token, now, now, now, account.sessionVersion,
+        ],
+      );
+    });
 
     await this.auditLogger.logAdminAction(
       "console_session_create",
-      session.userId,
+      request.userId,
       {
-        nodeId: session.nodeId,
-        provider: session.provider,
-        sessionId: session.sessionId,
+        nodeId: request.nodeId,
+        provider: request.provider,
+        sessionId,
         timestamp: now,
       },
     );
 
-    this.logger.info("Console session created", {
+    this.logger.info("Console session reserved", {
       component: COMPONENT,
-      metadata: { sessionId: session.sessionId, userId: session.userId },
+      metadata: { sessionId, userId: request.userId },
     });
+
+    return { sessionId, token, startedAt: now };
   }
 
   /**
-   * Validate a session token for WebSocket upgrade (no userId required).
-   * Token must: exist, be created < 60s ago, and not be consumed.
-   * Used by ConsoleWebSocketProxy where userId is not available at handshake time.
-   * Requirements 4.2, 5.2, 8.2
+   * Mark a reservation active once its upstream is ready.
+   *
+   * Returns the persisted session so the response describes stored state
+   * rather than what the caller hoped it wrote. A null result means the
+   * reservation is gone: terminated, expired or already activated, in which
+   * case the caller must release the upstream it just prepared.
    */
-  async validateTokenForUpgrade(token: string): Promise<ConsoleSession | null> {
-    const row = await this.db.queryOne<ConsoleSessionRow>(
-      `${SESSION_SELECT} WHERE token = ?`,
-      [token],
+  async activateSession(sessionId: string): Promise<ConsoleSession | null> {
+    const result = await this.db.execute(
+      `UPDATE console_sessions SET state = 'active' WHERE id = ? AND state = 'creating'`,
+      [sessionId],
     );
-
-    if (!row) {
-      return null;
-    }
-
-    // Token must not be consumed
-    if (row.tokenConsumed !== 0) {
-      return null;
-    }
-
-    // Token must be created < 60s ago
-    if (!row.tokenCreatedAt) {
-      return null;
-    }
-    const tokenAge = Date.now() - new Date(row.tokenCreatedAt).getTime();
-    if (tokenAge >= 60_000) {
-      return null;
-    }
-
-    await this.assertSessionAuthorized(row.id);
-    return this.rowToSession(row);
+    if (result.changes !== 1) return null;
+    return this.getSession(sessionId);
   }
 
   /**
-   * Validate a session token.
-   * Token must: exist, be created < 60s ago, not be consumed, and match userId.
-   * Requirements 8.2, 4.2
+   * Release a reservation whose upstream could not be prepared.
+   *
+   * Frees the slot immediately instead of waiting for heartbeat cleanup, and
+   * drops any material the provider managed to offer.
    */
-  async validateToken(
-    token: string,
-    userId: string,
-  ): Promise<ConsoleSession | null> {
-    const row = await this.db.queryOne<ConsoleSessionRow>(
-      `${SESSION_SELECT} WHERE token = ?`,
-      [token],
-    );
-
-    if (!row) {
-      return null;
-    }
-
-    // Token must not be consumed
-    if (row.tokenConsumed !== 0) {
-      return null;
-    }
-
-    // Token must be created < 60s ago
-    if (!row.tokenCreatedAt) {
-      return null;
-    }
-    const tokenAge =
-      Date.now() - new Date(row.tokenCreatedAt).getTime();
-    if (tokenAge >= 60_000) {
-      return null;
-    }
-
-    // Owner must match
-    if (row.userId !== userId) {
-      return null;
-    }
-
-    await this.assertSessionAuthorized(row.id);
-    return this.rowToSession(row);
-  }
-
-  /** Mark a token as consumed (after successful WebSocket upgrade). */
-  async consumeToken(token: string): Promise<void> {
-    await this.db.execute(
-      `UPDATE console_sessions SET token_consumed = 1 WHERE token = ?`,
-      [token],
-    );
-  }
-
-  /**
-   * Record a heartbeat for an active session.
-   * Requirement 2.3
-   */
-  async heartbeat(sessionId: string): Promise<void> {
+  async failReservation(sessionId: string, reason: string): Promise<void> {
     const now = new Date().toISOString();
     await this.db.execute(
-      `UPDATE console_sessions SET last_heartbeat_at = ? WHERE id = ?`,
+      `UPDATE console_sessions
+        SET state = 'failed', terminated_at = ?, error_message = ?
+        WHERE id = ? AND state = 'creating'`,
+      [now, reason, sessionId],
+    );
+    this.broker?.revoke(sessionId, reason);
+  }
+
+  /**
+   * Claim a session token for a WebSocket upgrade.
+   *
+   * The conditional update is the claim: existence, the unconsumed flag, the
+   * live state and the age bound are all in the one statement that consumes
+   * the token, so two concurrent upgrades cannot both pass validation and
+   * then both consume. Exactly one caller sees a changed row.
+   *
+   * Authorization is revalidated after the claim, so a revoked account burns
+   * the token rather than getting a second attempt.
+   *
+   * Requirements 4.2, 5.2, 8.2
+   *
+   * @returns the claimed session, or null when the token cannot be claimed
+   * @throws when the session's authorization has been revoked
+   */
+  async claimTokenForUpgrade(token: string): Promise<ConsoleSession | null> {
+    const cutoff = new Date(Date.now() - CONSOLE_UPGRADE_WINDOW_MS).toISOString();
+    const claimed = await this.db.execute(
+      `UPDATE console_sessions SET token_consumed = 1
+        WHERE token = ? AND token_consumed = 0
+          AND state IN ('creating', 'active')
+          AND token_created_at IS NOT NULL AND token_created_at > ?`,
+      [token, cutoff],
+    );
+
+    if (claimed.changes !== 1) {
+      return null;
+    }
+
+    // Safe to read after the claim: no other caller can hold this token.
+    const row = await this.db.queryOne<ConsoleSessionRow>(
+      `${SESSION_SELECT} WHERE token = ?`,
+      [token],
+    );
+    if (!row) {
+      return null;
+    }
+
+    await this.assertSessionAuthorized(row.id);
+    return this.rowToSession(row);
+  }
+
+  /**
+   * Record a heartbeat for a live session.
+   *
+   * Scoped to live states so a heartbeat cannot resurrect a terminated
+   * session's timestamps or keep a dead row looking recent.
+   *
+   * Requirement 2.3
+   *
+   * @returns true if the session was live and its heartbeat advanced
+   */
+  async heartbeat(sessionId: string): Promise<boolean> {
+    const now = new Date().toISOString();
+    const result = await this.db.execute(
+      `UPDATE console_sessions SET last_heartbeat_at = ?
+        WHERE id = ? AND state IN ('creating', 'active')`,
       [now, sessionId],
     );
+    return result.changes === 1;
+  }
+
+  /**
+   * Release the provider-side session for a terminated row.
+   *
+   * Best effort by contract: the database state and the sockets are already
+   * settled by the time this runs, so a provider error is logged and dropped
+   * rather than surfaced to a caller that can do nothing with it.
+   */
+  private async releaseProviderSession(
+    provider: string,
+    sessionId: string,
+    reason: string,
+  ): Promise<void> {
+    if (!this.providerCleanup) return;
+    try {
+      await this.providerCleanup(provider, sessionId);
+    } catch (error) {
+      this.logger.warn("Provider cleanup failed for terminated console session", {
+        component: COMPONENT,
+        metadata: {
+          provider, sessionId, reason,
+          error: error instanceof Error ? error.message : String(error),
+        },
+      });
+    }
   }
 
   /**
    * Terminate a session and record an audit log entry.
+   *
+   * Every termination path ends here or in {@link terminateAllForProvider}, so
+   * both do the same three things: record the state, close the sockets, and
+   * release the provider-side session.
+   *
    * Requirements 2.5, 8.4
    */
   async terminateSession(sessionId: string, reason: string): Promise<void> {
@@ -238,6 +365,12 @@ export class ConsoleSessionManager {
       [now, reason, sessionId],
     );
 
+    // Close the sockets after the state write lands, so a relay that survives
+    // the close cannot revalidate its way back to authorized.
+    const closed = this.broker?.revoke(sessionId, reason) ?? false;
+
+    await this.releaseProviderSession(session.provider, sessionId, reason);
+
     await this.auditLogger.logAdminAction(
       "console_session_terminate",
       session.userId,
@@ -252,12 +385,19 @@ export class ConsoleSessionManager {
 
     this.logger.info("Console session terminated", {
       component: COMPONENT,
-      metadata: { sessionId, reason },
+      metadata: { sessionId, reason, connectionClosed: closed },
     });
   }
 
   /**
-   * Count active sessions for a user.
+   * Count sessions in the `active` state for a user.
+   *
+   * Reporting only, deliberately narrower than the concurrent cap: the cap
+   * counts `creating` as well, because a reservation holds a slot while the
+   * provider works. Do not use this to decide admission; that decision lives
+   * inside {@link reserveSession}, where the count and the insert share one
+   * transaction.
+   *
    * Requirement 8.6
    */
   async getActiveSessionCount(userId: string): Promise<number> {
@@ -276,16 +416,32 @@ export class ConsoleSessionManager {
    */
   async terminateAllForProvider(provider: string): Promise<void> {
     const now = new Date().toISOString();
-    const result = await this.db.execute(
-      `UPDATE console_sessions
-        SET state = 'terminated', terminated_at = ?
-        WHERE provider = ? AND state IN ('creating', 'active')`,
-      [now, provider],
-    );
+    // The ids have to be read in the same transaction as the update, or the
+    // sockets of a session terminated here cannot be found afterwards.
+    const { sessionIds, changes } = await this.db.withTransaction(async () => {
+      const rows = await this.db.query<{ id: string }>(
+        `SELECT id FROM console_sessions WHERE provider = ? AND state IN ('creating', 'active')`,
+        [provider],
+      );
+      const result = await this.db.execute(
+        `UPDATE console_sessions
+          SET state = 'terminated', terminated_at = ?
+          WHERE provider = ? AND state IN ('creating', 'active')`,
+        [now, provider],
+      );
+      return { sessionIds: rows.map(row => row.id), changes: result.changes };
+    });
+
+    for (const sessionId of sessionIds) {
+      this.broker?.revoke(sessionId, "provider_terminated");
+    }
+    for (const sessionId of sessionIds) {
+      await this.releaseProviderSession(provider, sessionId, "provider_terminated");
+    }
 
     this.logger.info("Bulk terminated sessions for provider", {
       component: COMPONENT,
-      metadata: { provider, count: result.changes },
+      metadata: { provider, count: changes },
     });
   }
 
@@ -300,17 +456,35 @@ export class ConsoleSessionManager {
     ).toISOString();
     const now = new Date().toISOString();
 
-    const result = await this.db.execute(
-      `UPDATE console_sessions
-        SET state = 'terminated', terminated_at = ?, error_message = 'session_timeout'
-        WHERE state = 'active' AND last_heartbeat_at < ?`,
-      [now, cutoff],
-    );
+    // A reservation whose caller vanished holds a slot, so it expires on the
+    // same schedule as an active session that stopped reporting.
+    const { expired, changes } = await this.db.withTransaction(async () => {
+      const rows = await this.db.query<{ id: string; provider: string }>(
+        `SELECT id, provider FROM console_sessions
+          WHERE state IN ('creating', 'active') AND last_heartbeat_at < ?`,
+        [cutoff],
+      );
+      const result = await this.db.execute(
+        `UPDATE console_sessions
+          SET state = 'terminated', terminated_at = ?, error_message = 'session_timeout'
+          WHERE state IN ('creating', 'active') AND last_heartbeat_at < ?`,
+        [now, cutoff],
+      );
+      return { expired: rows, changes: result.changes };
+    });
 
-    if (result.changes > 0) {
+    for (const session of expired) {
+      this.broker?.revoke(session.id, "session_timeout");
+    }
+    for (const session of expired) {
+      await this.releaseProviderSession(session.provider, session.id, "session_timeout");
+    }
+    const purgedOffers = this.broker?.purgeExpiredOffers() ?? 0;
+
+    if (changes > 0 || purgedOffers > 0) {
       this.logger.info("Cleaned up expired console sessions", {
         component: COMPONENT,
-        metadata: { count: result.changes },
+        metadata: { count: changes, purgedOffers },
       });
     }
   }
@@ -329,17 +503,6 @@ export class ConsoleSessionManager {
     }
 
     return this.rowToSession(row);
-  }
-
-  /**
-   * Get the upstream WebSocket URL for a session.
-   */
-  async getUpstreamUrl(sessionId: string): Promise<string | null> {
-    const row = await this.db.queryOne<{ upstreamUrl: string | null }>(
-      `SELECT upstream_url AS "upstreamUrl" FROM console_sessions WHERE id = ?`,
-      [sessionId],
-    );
-    return row?.upstreamUrl ?? null;
   }
 
   /**

@@ -124,7 +124,7 @@ describe("Feature: console-integration, Property 13: Non-running guest rejection
           const nodeId = `proxmox:${node}:${String(vmid)}`;
 
           await expect(
-            provider.createSession(nodeId, userId),
+            provider.createSession({ nodeId, userId, sessionId: "session-1", transport: "websocket-vnc" }),
           ).rejects.toThrow("Guest must be running for console access");
         },
       ),
@@ -147,10 +147,12 @@ describe("Feature: console-integration, Property 13: Non-running guest rejection
           const nodeId = `proxmox:${node}:${String(vmid)}`;
 
           // Should not throw — session creation proceeds past the running check
-          const session = await provider.createSession(nodeId, userId);
-          expect(session).toBeDefined();
-          expect(session.sessionId).toBeDefined();
-          expect(session.transport).toBe("websocket-vnc");
+          const admission = await provider.createSession({ nodeId, userId, sessionId: "session-1", transport: "websocket-vnc" });
+          expect(admission).toBeDefined();
+          // The provider returns connection material and nothing else: identity
+          // and credentials belong to the caller's reservation.
+          expect(admission.upstream.url).toContain("vncwebsocket");
+          expect(Object.keys(admission)).toEqual(["upstream"]);
         },
       ),
       { numRuns: 100 },
@@ -172,7 +174,7 @@ describe("Feature: console-integration, Property 13: Non-running guest rejection
           const nodeId = `proxmox:${node}:${String(vmid)}`;
 
           try {
-            await provider.createSession(nodeId, "user-1");
+            await provider.createSession({ nodeId, userId: "user-1", sessionId: "session-1", transport: "websocket-vnc" });
             // If we get here, the test fails — non-running should always throw
             expect.fail("Expected createSession to throw for non-running guest");
           } catch (error) {
@@ -204,12 +206,12 @@ describe("Feature: console-integration, Property 13: Non-running guest rejection
 
           if (state === "running") {
             // Should succeed
-            const session = await provider.createSession(nodeId, userId);
-            expect(session).toBeDefined();
+            const admission = await provider.createSession({ nodeId, userId, sessionId: "session-1", transport: "websocket-vnc" });
+            expect(admission.upstream.url).toContain("vncwebsocket");
           } else {
             // Should fail with the expected message
             await expect(
-              provider.createSession(nodeId, userId),
+              provider.createSession({ nodeId, userId, sessionId: "session-1", transport: "websocket-vnc" }),
             ).rejects.toThrow("Guest must be running for console access");
           }
         },

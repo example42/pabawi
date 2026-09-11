@@ -39,7 +39,14 @@ Open SSE subscriptions and console relays revalidate before delivering protected
 data and schedule idle checks every second. Invalid credentials, removed required
 permissions or failed revalidation close the connection. Console sessions retain
 the issuing account version, so reset or deactivation also invalidates outstanding
-console tickets. MCP sessions revalidate their opening credentials before tool
+console tickets, and terminating a session closes both ends of its relay rather
+than only recording the state.
+
+`console:access` permits using the console, not acting on someone else's
+session. Reading a session's status, extending its heartbeat and terminating it
+all require owning the session or holding `console:admin`.
+
+MCP sessions revalidate their opening credentials before tool
 calls and during idle checks. JWT sessions must be recreated after the opening
 access token expires or is revoked. Static MCP authentication requires an active
 service account. MCP sessions bind the opening authentication method and caller identity;

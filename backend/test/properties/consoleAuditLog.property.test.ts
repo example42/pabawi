@@ -20,7 +20,6 @@ import type { DatabaseAdapter } from "../../src/database/DatabaseAdapter";
 import type { AuditLoggingService } from "../../src/services/AuditLoggingService";
 import type { LoggerService } from "../../src/services/LoggerService";
 import type { ConsoleConfig } from "../../src/config/schema";
-import type { ConsoleSession } from "../../src/integrations/console/types";
 import { initializeTestSchema } from "../helpers/schema";
 
 // ============================================================
@@ -61,9 +60,13 @@ const terminateReasonArb = fc.constantFrom(
   "max_duration_exceeded",
 );
 
-/** Arbitrary for session data used in createSession */
+/**
+ * Arbitrary for session data used when reserving a session.
+ *
+ * No `sessionId`: the reservation mints it, so a session the audit log names is
+ * necessarily one the capacity check counted.
+ */
 const sessionDataArb = fc.record({
-  sessionId: idArb,
   userId: idArb,
   nodeId: idArb,
   provider: providerArb,
@@ -105,25 +108,7 @@ function createMockLogger(): LoggerService {
   } as unknown as LoggerService;
 }
 
-function buildConsoleSession(data: {
-  sessionId: string;
-  userId: string;
-  nodeId: string;
-  provider: string;
-  transport: "websocket-vnc" | "websocket-terminal";
-}): ConsoleSession {
-  return {
-    sessionId: data.sessionId,
-    userId: data.userId,
-    nodeId: data.nodeId,
-    provider: data.provider,
-    transport: data.transport,
-    state: "active",
-    token: `token-${data.sessionId}`,
-    wsUrl: `/ws/console/terminal?token=token-${data.sessionId}`,
-    startedAt: new Date().toISOString(),
-  };
-}
+
 
 // ============================================================
 // Tests
@@ -163,9 +148,8 @@ describe("Feature: console-integration, Property 9: Audit log completeness for s
         // a regenerated sessionId cannot collide on the UNIQUE id constraint.
         await db.execute("DELETE FROM console_sessions");
 
-        const session = buildConsoleSession(data);
-        await ensureConsoleUser(db, session.userId);
-        await sessionManager.createSession(session);
+        await ensureConsoleUser(db, data.userId);
+        const reservation = await sessionManager.reserveSession(data);
 
         expect(auditLogger.calls.length).toBe(1);
         const call = auditLogger.calls[0];
@@ -180,7 +164,7 @@ describe("Feature: console-integration, Property 9: Audit log completeness for s
         expect(call.details).toBeDefined();
         expect(call.details!.nodeId).toBe(data.nodeId);
         expect(call.details!.provider).toBe(data.provider);
-        expect(call.details!.sessionId).toBe(data.sessionId);
+        expect(call.details!.sessionId).toBe(reservation.sessionId);
         expect(call.details!.timestamp).toMatch(ISO_8601_PATTERN);
       }),
       { numRuns: 100 },
@@ -198,15 +182,15 @@ describe("Feature: console-integration, Property 9: Audit log completeness for s
           // the UNIQUE id constraint across fast-check iterations.
           await db.execute("DELETE FROM console_sessions");
 
-          // First create the session so terminateSession can find it
-          const session = buildConsoleSession(data);
-          await ensureConsoleUser(db, session.userId);
-          await sessionManager.createSession(session);
+          // First reserve the session so terminateSession can find it
+          await ensureConsoleUser(db, data.userId);
+          const reservation = await sessionManager.reserveSession(data);
+          await sessionManager.activateSession(reservation.sessionId);
 
-          // Clear audit calls from createSession
+          // Clear audit calls from the reservation
           auditLogger.calls.length = 0;
 
-          await sessionManager.terminateSession(data.sessionId, reason);
+          await sessionManager.terminateSession(reservation.sessionId, reason);
 
           expect(auditLogger.calls.length).toBe(1);
           const call = auditLogger.calls[0];
@@ -221,7 +205,7 @@ describe("Feature: console-integration, Property 9: Audit log completeness for s
           expect(call.details).toBeDefined();
           expect(call.details!.nodeId).toBe(data.nodeId);
           expect(call.details!.provider).toBe(data.provider);
-          expect(call.details!.sessionId).toBe(data.sessionId);
+          expect(call.details!.sessionId).toBe(reservation.sessionId);
           expect(call.details!.reason).toBe(reason);
           expect(call.details!.timestamp).toMatch(ISO_8601_PATTERN);
         },

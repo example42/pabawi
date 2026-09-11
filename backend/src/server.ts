@@ -52,6 +52,7 @@ import type { ProxmoxClient } from "./integrations/proxmox/ProxmoxClient";
 import type { ProxmoxConfig } from "./integrations/proxmox/types";
 import { ProxmoxConsoleProvider } from "./integrations/proxmox/ProxmoxConsoleProvider";
 import { ConsoleSessionManager } from "./services/ConsoleSessionManager";
+import { ConsoleConnectionBroker } from "./services/ConsoleConnectionBroker";
 import { ConsoleWebSocketProxy } from "./services/ConsoleWebSocketProxy";
 import { createConsoleRouter } from "./routes/console";
 import type { CheckmkPlugin } from "./integrations/checkmk/CheckmkPlugin";
@@ -834,17 +835,32 @@ async function startServer(): Promise<Express> {
     // === Console Integration Wiring (session manager + routes) ===
     const consoleConfig = configService.getConsoleConfig();
     const auditLoggingService = new AuditLoggingService(databaseService.getAdapter());
+    // Holds console connection material and live relays. Sessions are
+    // therefore process-local, matching the documented single-process baseline.
+    const consoleConnectionBroker = new ConsoleConnectionBroker(logger);
     const consoleSessionManager = new ConsoleSessionManager(
       databaseService.getAdapter(),
       consoleConfig,
       logger,
       auditLoggingService,
+      consoleConnectionBroker,
+      // Every termination path goes through the manager, which has no plugin
+      // registry of its own; without this bridge a provider keeps its session
+      // entry for the process lifetime and reports it as still active.
+      async (providerName: string, sessionId: string): Promise<boolean> => {
+        const provider = integrationManager.getConsoleProvider(providerName);
+        if (!provider) return false;
+        return provider.terminateSession(sessionId);
+      },
     );
 
     // Mount console routes before SPA fallback so /api/console is handled correctly
     app.use(
       "/api/console",
-      createConsoleRouter(container, integrationManager, consoleSessionManager, databaseService.getAdapter()),
+      createConsoleRouter(
+        container, integrationManager, consoleSessionManager,
+        databaseService.getAdapter(), consoleConnectionBroker,
+      ),
     );
     logger.info("Console routes mounted at /api/console", {
       component: "Server",
@@ -877,11 +893,12 @@ async function startServer(): Promise<Express> {
     });
 
     // Attach WebSocket proxy to the HTTP server (noServer: true, shared port)
-    new ConsoleWebSocketProxy(
+    const consoleWebSocketProxy = new ConsoleWebSocketProxy(
       server,
       consoleSessionManager,
       { allowedOrigins: config.corsAllowedOrigins, console: consoleConfig },
       logger,
+      consoleConnectionBroker,
     );
     logger.info("ConsoleWebSocketProxy attached to HTTP server", {
       component: "Server",
@@ -925,9 +942,27 @@ async function startServer(): Promise<Express> {
         clearInterval(entraIdCleanupInterval);
       }
       clearInterval(consoleCleanupInterval);
+      // No console session outlives the process that owns its sockets, so both
+      // ends close before the HTTP server stops accepting.
+      const closedConsoles = consoleConnectionBroker.revokeAll("server_shutdown");
+      if (closedConsoles > 0) {
+        logger.info("Closed live console connections for shutdown", {
+          component: "Server",
+          operation: "shutdown",
+          metadata: { count: closedConsoles },
+        });
+      }
       const mcpClosed = closeMcp?.() ?? Promise.resolve();
       server.close(() => {
-        void mcpClosed.then(() => batchExecutionService.reconcileInterrupted()).then(() => databaseService.close()).then(() => {
+        void mcpClosed
+          // The sockets closed above; their termination writes are still in
+          // flight and the database closes at the end of this chain.
+          .then(() => consoleWebSocketProxy.drain())
+          .then(() => Promise.all(
+            integrationManager.getAllConsoleProviders()
+              .map(provider => consoleSessionManager.terminateAllForProvider(provider.name)),
+          ))
+          .then(() => batchExecutionService.reconcileInterrupted()).then(() => databaseService.close()).then(() => {
           logger.info("Server closed", {
             component: "Server",
             operation: "shutdown",

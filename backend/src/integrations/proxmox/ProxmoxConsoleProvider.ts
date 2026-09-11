@@ -7,13 +7,13 @@
  * Requirements: 9.1, 9.2, 9.3, 9.4, 9.5, 9.6, 9.7, 9.8, 1.6, 1.7
  */
 
-import { randomBytes } from "crypto";
-import { randomUUID } from "crypto";
 
 import type {
   ConsoleCapability,
   ConsolePlugin,
-  ConsoleSession,
+  ConsoleSessionAdmission,
+  ConsoleSessionRequest,
+  ConsoleSessionState,
   ConsoleSessionStatus,
   ConsoleTransport,
 } from "../console/types";
@@ -31,10 +31,23 @@ interface VncProxyResponse {
   upid?: string;
 }
 
-/** Internal session store entry */
+/**
+ * Internal session store entry.
+ *
+ * Tracks state for `getSessionStatus`/`terminateSession` only. The upstream URL
+ * is handed to the connection broker and deliberately not retained here: it
+ * embeds a live VNC ticket, and a second holder of that credential is a second
+ * place it can leak from.
+ */
 interface SessionEntry {
-  session: ConsoleSession;
-  upstreamUrl: string;
+  session: {
+    sessionId: string;
+    nodeId: string;
+    userId: string;
+    transport: ConsoleTransport;
+    state: ConsoleSessionState;
+    startedAt: string;
+  };
 }
 
 const COMPONENT = "ProxmoxConsoleProvider";
@@ -147,8 +160,10 @@ export class ProxmoxConsoleProvider implements ConsolePlugin {
    * 2. Determine guest type (qemu/lxc)
    * 3. Verify running state (Req 9.6)
    * 4. Call vncproxy endpoint (Req 9.2, 9.4)
-   * 5. Build upstream WS URL (Req 9.3)
-   * 6. Generate session token and return ConsoleSession
+   * 5. Build upstream WS URL (Req 9.3) and hand it back for the broker
+   *
+   * The session identity comes from the caller's capacity reservation, so this
+   * method never creates a Proxmox ticket for a session nobody accounted for.
    *
    * Error handling:
    * - Auth errors → session failure with auth message (Req 9.5)
@@ -156,7 +171,11 @@ export class ProxmoxConsoleProvider implements ConsolePlugin {
    * - Timeout/not found → session failure with category message (Req 9.7)
    * - Node without console capability → typed error (Req 1.6)
    */
-  async createSession(nodeId: string, userId: string): Promise<ConsoleSession> {
+  async createSession(request: ConsoleSessionRequest): Promise<ConsoleSessionAdmission> {
+    const { nodeId, userId, sessionId, transport } = request;
+    if (transport !== "websocket-vnc") {
+      throw new Error(`Unsupported console transport for Proxmox: ${transport}`);
+    }
     const { node, vmid } = this.parseNodeId(nodeId);
 
     // Determine guest type
@@ -202,25 +221,14 @@ export class ProxmoxConsoleProvider implements ConsolePlugin {
     const upstreamUrl =
       `wss://${host}:${port}/api2/json/nodes/${node}/${guestType}/${String(vmid)}/vncwebsocket?port=${port}&vncticket=${ticket}`;
 
-    // Generate session token and ID
-    const sessionId = randomUUID();
-    const token = randomBytes(32).toString("hex");
-    const now = new Date().toISOString();
-
-    const session: ConsoleSession = {
-      sessionId,
-      token,
-      wsUrl: `/ws/console/vnc?token=${token}`,
-      transport: "websocket-vnc",
-      state: "active",
-      startedAt: now,
-      nodeId,
-      userId,
-      provider: "proxmox",
-    };
-
-    // Store session locally for status/termination tracking
-    this.sessions.set(sessionId, { session, upstreamUrl });
+    // Track state for status and termination only; the authoritative record is
+    // the caller's reserved row.
+    this.sessions.set(sessionId, {
+      session: {
+        sessionId, nodeId, userId, transport,
+        state: "active", startedAt: new Date().toISOString(),
+      },
+    });
 
     this.logger.info("Proxmox console session created", {
       component: COMPONENT,
@@ -228,7 +236,7 @@ export class ProxmoxConsoleProvider implements ConsolePlugin {
       metadata: { sessionId, nodeId, userId, guestType },
     });
 
-    return session;
+    return { upstream: { url: upstreamUrl } };
   }
 
   /**

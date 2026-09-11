@@ -35,7 +35,6 @@ import { initializeTestSchema } from "../helpers/schema";
 
 import type { IntegrationManager } from "../../src/integrations/IntegrationManager";
 import type { AuditLoggingService } from "../../src/services/AuditLoggingService";
-import type { ConsoleSession } from "../../src/integrations/console/types";
 import type { ConsoleConfig } from "../../src/config/schema";
 
 const JWT_SECRET = "test-secret-for-rbac-termination-prop-test"; // pragma: allowlist secret
@@ -213,20 +212,14 @@ describe("Feature: console-integration, Property 6: RBAC enforcement for cross-u
    * Helper: create a console session owned by a specific user.
    */
   async function createOwnedSession(ownerId: string): Promise<string> {
-    const sessionId = randomUUID();
-    const session: ConsoleSession = {
-      sessionId,
+    const reservation = await sessionManager.reserveSession({
       userId: ownerId,
       nodeId: `node-${randomUUID().substring(0, 8)}`,
       provider: "proxmox",
       transport: "websocket-vnc",
-      state: "active",
-      token: randomUUID(),
-      wsUrl: `/ws/console/vnc?token=placeholder`,
-      startedAt: new Date().toISOString(),
-    };
-    await sessionManager.createSession(session);
-    return sessionId;
+    });
+    await sessionManager.activateSession(reservation.sessionId);
+    return reservation.sessionId;
   }
 
   it("rejects with 403 when user lacks console:access (RBAC middleware blocks)", () => {

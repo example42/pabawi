@@ -1,20 +1,26 @@
 import { initializeTestSchema } from "../helpers/schema";
 import { ensureConsoleUser } from "../helpers/consoleUser";
 /**
- * Property-Based Tests for Console Session Token Validation
+ * Property-Based Tests for Console Session Token Claiming
  *
  * Feature: console-integration, Property 2: Session token validation correctness
  *
  * **Validates: Requirements 4.2, 4.3, 5.2, 5.3, 8.1, 8.2**
  *
  * Property 2: Session token validation correctness
- * ∀ token, userId, timestamp, consumed state:
- *   validateToken(token, userId) returns a ConsoleSession iff:
- *     - token exists in DB
+ * ∀ token, state, age, consumed flag:
+ *   claimTokenForUpgrade(token) returns a ConsoleSession iff:
+ *     - token exists in the database
  *     - token was created < 60s ago
  *     - token has not been consumed (tokenConsumed === 0)
- *     - connecting userId matches session owner
+ *     - the session is still live ('creating' or 'active')
  *   All other combinations → null (rejected)
+ *
+ * A15 (S08) replaced the read-then-decide validators with this single
+ * conditional update, so validation and consumption cannot come apart. There
+ * is no connecting-userId argument any more: the upgrade handshake carries no
+ * identity, and ownership is the row the token resolves to. The token itself
+ * is 32 random bytes, single use, and bound to one session.
  */
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
@@ -32,7 +38,6 @@ const CONSOLE_CONFIG: ConsoleConfig = {
   maxConcurrentSessions: 3,
   heartbeatIntervalMs: 30000,
 };
-
 
 function createMockLogger(): LoggerService {
   return {
@@ -70,6 +75,15 @@ const transportArb = fc.constantFrom(
   "websocket-terminal" as const,
 );
 
+/** Live states hold a slot and accept an upgrade; the others must not. */
+const LIVE_STATES = ["creating", "active"] as const;
+const stateArb = fc.constantFrom(
+  "creating" as const,
+  "active" as const,
+  "terminated" as const,
+  "failed" as const,
+);
+
 /**
  * Represents a session row to insert, with controllable validity factors.
  */
@@ -84,6 +98,8 @@ interface TestSessionParams {
   tokenAgeMs: number;
   /** Whether token has been consumed */
   consumed: boolean;
+  /** Session state at claim time */
+  state: "creating" | "active" | "terminated" | "failed";
 }
 
 const testSessionArb: fc.Arbitrary<TestSessionParams> = fc.record({
@@ -96,7 +112,12 @@ const testSessionArb: fc.Arbitrary<TestSessionParams> = fc.record({
   // Ages from 0ms to 120s to cover both valid (<60s) and expired (>=60s)
   tokenAgeMs: fc.integer({ min: 0, max: 120000 }),
   consumed: fc.boolean(),
+  state: stateArb,
 });
+
+function isLive(state: TestSessionParams["state"]): boolean {
+  return (LIVE_STATES as readonly string[]).includes(state);
+}
 
 async function insertSession(
   db: SQLiteAdapter,
@@ -113,13 +134,14 @@ async function insertSession(
       id, user_id, node_id, provider, transport, state,
       token, token_created_at, token_consumed, upstream_url,
       started_at, last_heartbeat_at, session_version
-    ) VALUES (?, ?, ?, ?, ?, 'active', ?, ?, ?, NULL, ?, ?, 0)`,
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, 0)`,
     [
       params.sessionId,
       params.ownerUserId,
       params.nodeId,
       params.provider,
       params.transport,
+      params.state,
       params.token,
       tokenCreatedAt,
       params.consumed ? 1 : 0,
@@ -149,7 +171,7 @@ describe("Feature: console-integration, Property 2: Session token validation cor
     await db.close();
   });
 
-  it("valid token accepted: exists, <60s old, not consumed, userId matches owner", async () => {
+  it("valid token accepted: exists, <60s old, not consumed, session live", async () => {
     await fc.assert(
       fc.asyncProperty(testSessionArb, async (params) => {
         // Force all validity conditions
@@ -157,16 +179,14 @@ describe("Feature: console-integration, Property 2: Session token validation cor
           ...params,
           tokenAgeMs: Math.min(params.tokenAgeMs, 59000), // <60s
           consumed: false,
+          state: "active",
         };
 
         // Clean slate for each run
         await db.execute("DELETE FROM console_sessions");
         await insertSession(db, validParams);
 
-        const result = await sessionManager.validateToken(
-          validParams.token,
-          validParams.ownerUserId,
-        );
+        const result = await sessionManager.claimTokenForUpgrade(validParams.token);
 
         expect(result).not.toBeNull();
         expect(result!.sessionId).toBe(validParams.sessionId);
@@ -177,13 +197,37 @@ describe("Feature: console-integration, Property 2: Session token validation cor
     );
   });
 
+  it("the claim consumes the token, so a replayed upgrade is refused", async () => {
+    await fc.assert(
+      fc.asyncProperty(testSessionArb, async (params) => {
+        const validParams: TestSessionParams = {
+          ...params,
+          tokenAgeMs: Math.min(params.tokenAgeMs, 59000),
+          consumed: false,
+          state: "active",
+        };
+
+        await db.execute("DELETE FROM console_sessions");
+        await insertSession(db, validParams);
+
+        await expect(
+          sessionManager.claimTokenForUpgrade(validParams.token),
+        ).resolves.not.toBeNull();
+        await expect(
+          sessionManager.claimTokenForUpgrade(validParams.token),
+        ).resolves.toBeNull();
+      }),
+      { numRuns: 100 },
+    );
+  });
+
   it("token rejected when it does not exist in DB", async () => {
     await fc.assert(
-      fc.asyncProperty(tokenArb, userIdArb, async (token, userId) => {
+      fc.asyncProperty(tokenArb, async (token) => {
         // Empty DB — no tokens exist
         await db.execute("DELETE FROM console_sessions");
 
-        const result = await sessionManager.validateToken(token, userId);
+        const result = await sessionManager.claimTokenForUpgrade(token);
         expect(result).toBeNull();
       }),
       { numRuns: 100 },
@@ -197,15 +241,13 @@ describe("Feature: console-integration, Property 2: Session token validation cor
           ...params,
           tokenAgeMs: Math.min(params.tokenAgeMs, 59000), // valid age
           consumed: true, // consumed → should be rejected
+          state: "active",
         };
 
         await db.execute("DELETE FROM console_sessions");
         await insertSession(db, consumedParams);
 
-        const result = await sessionManager.validateToken(
-          consumedParams.token,
-          consumedParams.ownerUserId,
-        );
+        const result = await sessionManager.claimTokenForUpgrade(consumedParams.token);
         expect(result).toBeNull();
       }),
       { numRuns: 100 },
@@ -219,87 +261,69 @@ describe("Feature: console-integration, Property 2: Session token validation cor
           ...params,
           tokenAgeMs: Math.max(params.tokenAgeMs, 60000), // >=60s
           consumed: false,
+          state: "active",
         };
 
         await db.execute("DELETE FROM console_sessions");
         await insertSession(db, expiredParams);
 
-        const result = await sessionManager.validateToken(
-          expiredParams.token,
-          expiredParams.ownerUserId,
-        );
+        const result = await sessionManager.claimTokenForUpgrade(expiredParams.token);
         expect(result).toBeNull();
       }),
       { numRuns: 100 },
     );
   });
 
-  it("token rejected when connecting userId does not match session owner", async () => {
+  it("token rejected once the session is no longer live", async () => {
     await fc.assert(
       fc.asyncProperty(
         testSessionArb,
-        userIdArb,
-        async (params, differentUserId) => {
-          // Ensure the connecting user is different from the owner
-          fc.pre(differentUserId !== params.ownerUserId);
-
-          const validParams: TestSessionParams = {
+        fc.constantFrom("terminated" as const, "failed" as const),
+        async (params, deadState) => {
+          const deadParams: TestSessionParams = {
             ...params,
             tokenAgeMs: Math.min(params.tokenAgeMs, 59000), // valid age
             consumed: false,
+            state: deadState,
           };
 
           await db.execute("DELETE FROM console_sessions");
-          await insertSession(db, validParams);
+          await insertSession(db, deadParams);
 
-          const result = await sessionManager.validateToken(
-            validParams.token,
-            differentUserId,
-          );
+          const result = await sessionManager.claimTokenForUpgrade(deadParams.token);
           expect(result).toBeNull();
+
+          // The refusal leaves the token unconsumed rather than mutating a
+          // dead row: the state is what refused it.
+          const row = await db.queryOne<{ consumed: number }>(
+            `SELECT token_consumed AS "consumed" FROM console_sessions WHERE id = ?`,
+            [deadParams.sessionId],
+          );
+          expect(row?.consumed).toBe(0);
         },
       ),
       { numRuns: 100 },
     );
   });
 
-  it("token validation is a conjunction: ALL conditions must hold for acceptance", async () => {
+  it("token claiming is a conjunction: ALL conditions must hold for acceptance", async () => {
     await fc.assert(
-      fc.asyncProperty(
-        testSessionArb,
-        userIdArb,
-        fc.boolean(),
-        async (params, connectingUserId, useCorrectUser) => {
-          const connectAs = useCorrectUser
-            ? params.ownerUserId
-            : connectingUserId;
+      fc.asyncProperty(testSessionArb, async (params) => {
+        await db.execute("DELETE FROM console_sessions");
+        await insertSession(db, params);
 
-          // Skip when "different" user accidentally equals owner
-          if (!useCorrectUser) {
-            fc.pre(connectAs !== params.ownerUserId);
-          }
+        const result = await sessionManager.claimTokenForUpgrade(params.token);
 
-          await db.execute("DELETE FROM console_sessions");
-          await insertSession(db, params);
+        const claimable =
+          params.tokenAgeMs < 60000 && !params.consumed && isLive(params.state);
 
-          const result = await sessionManager.validateToken(
-            params.token,
-            connectAs,
-          );
-
-          const isValid =
-            params.tokenAgeMs < 60000 &&
-            !params.consumed &&
-            connectAs === params.ownerUserId;
-
-          if (isValid) {
-            expect(result).not.toBeNull();
-            expect(result!.sessionId).toBe(params.sessionId);
-          } else {
-            expect(result).toBeNull();
-          }
-        },
-      ),
+        if (claimable) {
+          expect(result).not.toBeNull();
+          expect(result!.sessionId).toBe(params.sessionId);
+        } else {
+          expect(result).toBeNull();
+        }
+      }),
       { numRuns: 100 },
     );
   });

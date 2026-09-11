@@ -8,20 +8,24 @@ import { ensureConsoleUser } from "../helpers/consoleUser";
  * **Validates: Requirements 8.6**
  *
  * Property 7: Concurrent session limit enforcement
- * ∀ activeCount ∈ [0..10], maxConcurrentSessions ∈ [1..10]:
- *   getActiveSessionCount returns the correct number of active sessions,
- *   and when activeCount >= maxConcurrentSessions, new creation is rejected (429 semantics).
+ * ∀ held ∈ [0..10], maxConcurrentSessions ∈ [1..10]:
+ *   reserveSession admits a session iff the user holds fewer than the cap, and
+ *   the reservation itself is what holds the slot, so no provider resource can
+ *   be created for a session the cap did not count (A15 / S09).
+ *
+ * The cap is enforced inside `reserveSession` rather than read by the caller,
+ * so these properties exercise the reservation, not a count the route could
+ * act on after it went stale.
  */
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import * as fc from "fast-check";
 
 import { SQLiteAdapter } from "../../src/database/SQLiteAdapter";
-import { ConsoleSessionManager } from "../../src/services/ConsoleSessionManager";
+import { ConsoleSessionManager, ConsoleCapacityError } from "../../src/services/ConsoleSessionManager";
 import type { ConsoleConfig } from "../../src/config/schema";
 import type { AuditLoggingService } from "../../src/services/AuditLoggingService";
 import type { LoggerService } from "../../src/services/LoggerService";
-import type { ConsoleSession } from "../../src/integrations/console/types";
 
 function makeLogger(): LoggerService {
   return {
@@ -47,21 +51,6 @@ function makeConfig(maxConcurrentSessions: number): ConsoleConfig {
   };
 }
 
-function makeSession(userId: string, index: number): ConsoleSession {
-  return {
-    sessionId: `session-${userId}-${String(index)}-${String(Date.now())}`,
-    userId,
-    nodeId: `node-${String(index)}`,
-    provider: "proxmox",
-    transport: "websocket-vnc",
-    state: "active",
-    token: `token-${String(index)}-${String(Math.random())}`,
-    wsUrl: `/ws/console/vnc?token=token-${String(index)}`,
-    startedAt: new Date().toISOString(),
-  };
-}
-
-
 describe("Feature: console-integration, Property 7: Concurrent session limit enforcement", () => {
   let db: SQLiteAdapter;
 
@@ -75,76 +64,128 @@ describe("Feature: console-integration, Property 7: Concurrent session limit enf
     await db.close();
   });
 
+  function makeManager(maxConcurrent: number): ConsoleSessionManager {
+    return new ConsoleSessionManager(db, makeConfig(maxConcurrent), makeLogger(), makeAuditLogger());
+  }
+
+  /** Reserve and activate one session, the shape the create route produces. */
+  async function openSession(
+    manager: ConsoleSessionManager,
+    userId: string,
+    index: number,
+  ): Promise<string> {
+    await ensureConsoleUser(db, userId);
+    const reservation = await manager.reserveSession({
+      userId, nodeId: `node-${String(index)}`, provider: "proxmox", transport: "websocket-vnc",
+    });
+    await manager.activateSession(reservation.sessionId);
+    return reservation.sessionId;
+  }
+
   it("getActiveSessionCount returns the exact number of active sessions for a user", () => {
     return fc.assert(
       fc.asyncProperty(
         fc.string({ minLength: 1, maxLength: 20 }).filter((s) => s.trim().length > 0),
         fc.integer({ min: 0, max: 10 }),
         async (userId, activeCount) => {
-          // Clear table
           await db.execute("DELETE FROM console_sessions");
 
-          const config = makeConfig(3);
-          const manager = new ConsoleSessionManager(
-            db,
-            config,
-            makeLogger(),
-            makeAuditLogger(),
-          );
-
-          // Insert N active sessions for this user
+          // The cap has to admit the fixture; the cap itself is the next property.
+          const manager = makeManager(activeCount + 1);
           for (let i = 0; i < activeCount; i++) {
-            const session = makeSession(userId, i);
-            await ensureConsoleUser(db, session.userId);
-            await manager.createSession(session);
+            await openSession(manager, userId, i);
           }
 
-          const count = await manager.getActiveSessionCount(userId);
-          expect(count).toBe(activeCount);
+          expect(await manager.getActiveSessionCount(userId)).toBe(activeCount);
         },
       ),
       { numRuns: 100 },
     );
   });
 
-  it("when active count >= maxConcurrentSessions, new session creation should be rejected", () => {
+  it("reserveSession refuses once the user holds the cap", () => {
     return fc.assert(
       fc.asyncProperty(
         fc.string({ minLength: 1, maxLength: 20 }).filter((s) => s.trim().length > 0),
-        fc.integer({ min: 1, max: 10 }),
-        fc.integer({ min: 0, max: 10 }),
-        async (userId, maxConcurrent, activeCount) => {
-          // Clear table
+        fc.integer({ min: 1, max: 6 }),
+        async (userId, maxConcurrent) => {
           await db.execute("DELETE FROM console_sessions");
 
-          const config = makeConfig(maxConcurrent);
-          const manager = new ConsoleSessionManager(
-            db,
-            config,
-            makeLogger(),
-            makeAuditLogger(),
-          );
-
-          // Insert active sessions for this user
-          for (let i = 0; i < activeCount; i++) {
-            const session = makeSession(userId, i);
-            await ensureConsoleUser(db, session.userId);
-            await manager.createSession(session);
+          const manager = makeManager(maxConcurrent);
+          for (let i = 0; i < maxConcurrent; i++) {
+            await openSession(manager, userId, i);
           }
 
-          const count = await manager.getActiveSessionCount(userId);
-          const shouldReject = count >= maxConcurrent;
+          await expect(manager.reserveSession({
+            userId, nodeId: "node-over", provider: "proxmox", transport: "websocket-vnc",
+          })).rejects.toThrow(ConsoleCapacityError);
 
-          // The route layer uses this logic: if count >= max → reject with 429
-          // We verify the count-based decision matches expectations
-          if (shouldReject) {
-            expect(count).toBeGreaterThanOrEqual(maxConcurrent);
-          } else {
-            expect(count).toBeLessThan(maxConcurrent);
-          }
+          // The refusal admits nothing: no extra row, so no provider resource
+          // could have been created for it either.
+          expect(await manager.getActiveSessionCount(userId)).toBe(maxConcurrent);
         },
       ),
-      { numRuns: 100 },
+      { numRuns: 50 },
+    );
+  });
+
+  it("an unactivated reservation still holds a slot", () => {
+    return fc.assert(
+      fc.asyncProperty(
+        fc.string({ minLength: 1, maxLength: 20 }).filter((s) => s.trim().length > 0),
+        async (userId) => {
+          await db.execute("DELETE FROM console_sessions");
+          await ensureConsoleUser(db, userId);
+
+          const manager = makeManager(1);
+          await manager.reserveSession({
+            userId, nodeId: "node-1", provider: "proxmox", transport: "websocket-vnc",
+          });
+
+          // Still 'creating': the slot is held while the provider works, which
+          // is what stops a second request from racing into the same slot.
+          expect(await manager.getActiveSessionCount(userId)).toBe(0);
+          await expect(manager.reserveSession({
+            userId, nodeId: "node-2", provider: "proxmox", transport: "websocket-vnc",
+          })).rejects.toThrow(ConsoleCapacityError);
+        },
+      ),
+      { numRuns: 25 },
+    );
+  });
+
+  it("concurrent reservations for the last slot admit exactly one", () => {
+    return fc.assert(
+      fc.asyncProperty(
+        fc.string({ minLength: 1, maxLength: 20 }).filter((s) => s.trim().length > 0),
+        fc.integer({ min: 1, max: 4 }),
+        async (userId, maxConcurrent) => {
+          await db.execute("DELETE FROM console_sessions");
+          await ensureConsoleUser(db, userId);
+
+          const manager = makeManager(maxConcurrent);
+          const attempts = maxConcurrent + 3;
+          const outcomes = await Promise.allSettled(
+            Array.from({ length: attempts }, (_, index) => manager.reserveSession({
+              userId, nodeId: `node-${String(index)}`, provider: "proxmox", transport: "websocket-vnc",
+            })),
+          );
+
+          const admitted = outcomes.filter((outcome) => outcome.status === "fulfilled");
+          expect(admitted).toHaveLength(maxConcurrent);
+          for (const outcome of outcomes.filter((o) => o.status === "rejected")) {
+            expect((outcome as PromiseRejectedResult).reason).toBeInstanceOf(ConsoleCapacityError);
+          }
+
+          const held = await db.queryOne<{ count: number }>(
+            `SELECT COUNT(*) AS "count" FROM console_sessions
+              WHERE user_id = ? AND state IN ('creating', 'active')`,
+            [userId],
+          );
+          expect(held?.count).toBe(maxConcurrent);
+        },
+      ),
+      { numRuns: 20 },
     );
   });
 
@@ -154,44 +195,27 @@ describe("Feature: console-integration, Property 7: Concurrent session limit enf
         fc.string({ minLength: 1, maxLength: 20 }).filter((s) => s.trim().length > 0),
         fc.integer({ min: 1, max: 5 }),
         fc.integer({ min: 1, max: 5 }),
-        fc.integer({ min: 1, max: 10 }),
-        async (userId, activeCount, terminatedCount, maxConcurrent) => {
-          // Clear table
+        async (userId, activeCount, terminatedCount) => {
           await db.execute("DELETE FROM console_sessions");
 
-          const config = makeConfig(maxConcurrent);
-          const manager = new ConsoleSessionManager(
-            db,
-            config,
-            makeLogger(),
-            makeAuditLogger(),
-          );
-
-          // Insert active sessions
+          const manager = makeManager(activeCount + terminatedCount);
           for (let i = 0; i < activeCount; i++) {
-            const session = makeSession(userId, i);
-            await ensureConsoleUser(db, session.userId);
-            await manager.createSession(session);
+            await openSession(manager, userId, i);
           }
-
-          // Insert terminated sessions (create then terminate)
           for (let i = 0; i < terminatedCount; i++) {
-            const session = makeSession(userId, activeCount + i);
-            await ensureConsoleUser(db, session.userId);
-            await manager.createSession(session);
-            await manager.terminateSession(session.sessionId, "test-termination");
+            const sessionId = await openSession(manager, userId, activeCount + i);
+            await manager.terminateSession(sessionId, "test-termination");
           }
 
-          // Only active sessions should count
-          const count = await manager.getActiveSessionCount(userId);
-          expect(count).toBe(activeCount);
+          expect(await manager.getActiveSessionCount(userId)).toBe(activeCount);
 
-          // Enforcement check: only active count matters for limit
-          const wouldReject = count >= maxConcurrent;
-          expect(wouldReject).toBe(activeCount >= maxConcurrent);
+          // Terminated sessions released their slots, so the cap admits again.
+          await expect(manager.reserveSession({
+            userId, nodeId: "node-next", provider: "proxmox", transport: "websocket-vnc",
+          })).resolves.toBeDefined();
         },
       ),
-      { numRuns: 100 },
+      { numRuns: 50 },
     );
   });
 
@@ -202,46 +226,20 @@ describe("Feature: console-integration, Property 7: Concurrent session limit enf
         fc.string({ minLength: 1, maxLength: 10 }).filter((s) => s.trim().length > 0),
         fc.integer({ min: 0, max: 5 }),
         fc.integer({ min: 0, max: 5 }),
-        fc.integer({ min: 1, max: 10 }),
-        async (userA, userB, countA, countB, maxConcurrent) => {
-          // Ensure users are different
+        async (userA, userB, countA, countB) => {
           const actualUserB = userA === userB ? `${userB}_other` : userB;
-
-          // Clear table
           await db.execute("DELETE FROM console_sessions");
 
-          const config = makeConfig(maxConcurrent);
-          const manager = new ConsoleSessionManager(
-            db,
-            config,
-            makeLogger(),
-            makeAuditLogger(),
-          );
-
-          // Insert sessions for user A
+          const manager = makeManager(Math.max(countA, countB) + 1);
           for (let i = 0; i < countA; i++) {
-            const session = makeSession(userA, i);
-            await ensureConsoleUser(db, session.userId);
-            await manager.createSession(session);
+            await openSession(manager, userA, i);
           }
-
-          // Insert sessions for user B
           for (let i = 0; i < countB; i++) {
-            const session = makeSession(actualUserB, i + 100);
-            await ensureConsoleUser(db, session.userId);
-            await manager.createSession(session);
+            await openSession(manager, actualUserB, i + 100);
           }
 
-          // Each user's count is independent
-          const activeA = await manager.getActiveSessionCount(userA);
-          const activeB = await manager.getActiveSessionCount(actualUserB);
-
-          expect(activeA).toBe(countA);
-          expect(activeB).toBe(countB);
-
-          // Limit enforcement is per-user
-          expect(activeA >= maxConcurrent).toBe(countA >= maxConcurrent);
-          expect(activeB >= maxConcurrent).toBe(countB >= maxConcurrent);
+          expect(await manager.getActiveSessionCount(userA)).toBe(countA);
+          expect(await manager.getActiveSessionCount(actualUserB)).toBe(countB);
         },
       ),
       { numRuns: 100 },
