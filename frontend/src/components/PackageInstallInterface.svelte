@@ -8,6 +8,7 @@
   import RealtimeOutputViewer from './RealtimeOutputViewer.svelte';
   import IntegrationBadge from './IntegrationBadge.svelte';
   import { expertMode } from '../lib/expertMode.svelte';
+  import { executionFailureReason, executionReportsSuccess } from '../lib/executionStatus';
   import { useExecutionStream, type ExecutionStream } from '../lib/executionStream.svelte';
 
   interface Props {
@@ -189,25 +190,39 @@
       // If expert mode is enabled, create a stream for real-time output
       if (expertMode.enabled) {
         executionStream = useExecutionStream(executionId, {
-          onComplete: (result) => {
+          onComplete: (streamResult) => {
             // Fetch final execution result
             pollExecutionResult(executionId);
-            showSuccess('Package installation completed');
+            // A finished stream is not a successful run: report what the run
+            // itself said.
+            if (executionReportsSuccess(streamResult)) {
+              showSuccess('Package installation completed');
+            } else {
+              error = executionFailureReason(streamResult);
+              showError('Package installation failed', error);
+            }
             // Call completion callback
             if (onExecutionComplete) {
               onExecutionComplete();
             }
           },
-          onError: (error) => {
-            error = error;
-            showError('Package installation failed', error);
+          onError: (streamError) => {
+            // The parameter used to shadow this state, so the message never
+            // reached the UI.
+            error = streamError;
+            showError('Package installation failed', streamError);
           },
         });
         executionStream.connect();
       } else {
         // Poll for execution result (non-streaming)
         await pollExecutionResult(executionId);
-        showSuccess('Package installation completed');
+        if (executionReportsSuccess(result)) {
+          showSuccess('Package installation completed');
+        } else {
+          error ??= executionFailureReason(result);
+          showError('Package installation failed', error);
+        }
         // Call completion callback
         if (onExecutionComplete) {
           onExecutionComplete();

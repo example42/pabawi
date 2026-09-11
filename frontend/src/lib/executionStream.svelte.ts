@@ -7,6 +7,7 @@
 
 import { expertMode } from "./expertMode.svelte";
 import { authManager } from "./auth.svelte";
+import { executionErrorOf, executionStatusOf } from "./executionStatus";
 
 /**
  * Event types for streaming execution output
@@ -286,17 +287,34 @@ export function useExecutionStream(
         break;
       }
 
-      case "complete":
-        state.result = event.data
+      case "complete": {
+        const completion = event.data
           ? (event.data as Record<string, unknown>)
           : null;
-        state.executionStatus = "success";
+        state.result = completion;
+
+        // The run's own status, never a synthesised success. Assigning success
+        // to every completion displayed failed, partial and cancelled runs as
+        // successful ones, which is the defect behind I07.
+        const reported = executionStatusOf(completion);
+        if (reported !== null) {
+          state.executionStatus = reported;
+          if (reported !== "success") {
+            state.error = executionErrorOf(completion) ?? state.error;
+          }
+        } else {
+          // Nothing reported the outcome, so nothing may claim it succeeded.
+          state.executionStatus = "failed";
+          state.error ??= "Execution completed without a reported status";
+        }
+
         setStatus("disconnected");
-        if (event.data) {
-          options.onComplete?.(event.data as Record<string, unknown>);
+        if (completion) {
+          options.onComplete?.(completion);
         }
         disconnect(); // Clean disconnect on completion
         break;
+      }
 
       case "error": {
         const errorData = event.data as ErrorEventData | undefined;

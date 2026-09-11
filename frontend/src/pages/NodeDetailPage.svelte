@@ -34,6 +34,7 @@
   import { get, post } from '../lib/api';
   import { showError, showSuccess, showInfo } from '../lib/toast.svelte';
   import { expertMode } from '../lib/expertMode.svelte';
+  import { executionFailureReason, executionReportsSuccess } from '../lib/executionStatus';
   import { useExecutionStream, type ExecutionStream } from '../lib/executionStream.svelte';
   import type { DebugInfo, LabeledDebugInfo } from '../lib/api';
 
@@ -441,10 +442,17 @@
       // If expert mode is enabled, create a stream for real-time output
       if (expertMode.enabled) {
         commandStream = useExecutionStream(executionId, {
-          onComplete: (result) => {
+          onComplete: (streamResult) => {
             // Fetch final execution result
             pollExecutionResult(executionId);
-            showSuccess('Command executed successfully');
+            // A finished stream is not a successful run: report what the run
+            // itself said.
+            if (executionReportsSuccess(streamResult)) {
+              showSuccess('Command executed successfully');
+            } else {
+              commandError = executionFailureReason(streamResult);
+              showError('Command execution failed', commandError);
+            }
           },
           onError: (error) => {
             commandError = error;
@@ -455,7 +463,12 @@
       } else {
         // Poll for execution result (non-streaming)
         await pollExecutionResult(executionId);
-        showSuccess('Command executed successfully');
+        if (executionReportsSuccess(commandResult)) {
+          showSuccess('Command executed successfully');
+        } else {
+          commandError ??= executionFailureReason(commandResult);
+          showError('Command execution failed', commandError);
+        }
       }
     } catch (err) {
       commandError = err instanceof Error ? err.message : 'An unknown error occurred';

@@ -1,8 +1,9 @@
 <script lang="ts">
-  import { onMount, onDestroy } from 'svelte';
+  import { onMount, onDestroy, type ComponentProps } from 'svelte';
   import { expertMode } from '../lib/expertMode.svelte';
   import { ansiToHtml } from '../lib/ansiToHtml';
   import type { ExecutionStream } from '../lib/executionStream.svelte';
+  import { isTerminalExecutionStatus } from '../lib/executionStatus';
   import StatusBadge from './StatusBadge.svelte';
 
   interface Props {
@@ -50,14 +51,19 @@
   const hasStderr = $derived(effectiveStderr.length > 0);
   const hasOutput = $derived(hasStdout || hasStderr);
   const isRunning = $derived(effectiveStatus === 'running' || stream.isConnecting || isPolling);
-  const isComplete = $derived(effectiveStatus === 'success' || effectiveStatus === 'failed');
+  // Every status a run never leaves, not just success and failure: a cancelled
+  // or interrupted run used to be neither running nor complete, so it kept its
+  // elapsed timer ticking and showed no duration (A16 / I07).
+  const isComplete = $derived(isTerminalExecutionStatus(effectiveStatus));
 
-  // Status badge mapping
-  const statusBadgeMap: Record<string, 'success' | 'failed' | 'running'> = {
-    running: 'running',
-    success: 'success',
-    failed: 'failed',
-  };
+  /**
+   * StatusBadge labels every execution status and renders an unrecognised one
+   * as itself, so the run's own status goes straight through. Mapping it onto
+   * running/success/failed displayed a cancelled run as "Running".
+   */
+  const badgeStatus = $derived(
+    (effectiveStatus ?? 'running') as ComponentProps<typeof StatusBadge>['status'],
+  );
 
   // Format elapsed time
   function formatElapsedTime(ms: number): string {
@@ -254,7 +260,7 @@
   <div class="flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-800">
     <div class="flex items-center gap-3">
       {#if effectiveStatus}
-        <StatusBadge status={statusBadgeMap[effectiveStatus] || 'running'} />
+        <StatusBadge status={badgeStatus} />
       {:else if stream.isConnecting || isPolling}
         <StatusBadge status="running" />
       {/if}

@@ -152,7 +152,7 @@ they would be interpreted by the remote shell on the target node.
 
 | Variable | Default | Description |
 |---|---|---|
-| `STREAMING_BUFFER_MS` | `100` | Output batch interval in ms. Lower = more real-time, higher = less traffic |
+| `STREAMING_BUFFER_MS` | `100` | Output batch interval in ms, measured from the first buffered chunk, so it is also the worst-case delay. Lower = more real-time, higher = less traffic |
 | `STREAMING_MAX_OUTPUT_SIZE` | `10485760` | Max output per execution in bytes (10 MB) |
 | `STREAMING_MAX_LINE_LENGTH` | `10000` | Max characters per output line before truncation |
 

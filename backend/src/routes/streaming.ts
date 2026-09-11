@@ -2,7 +2,7 @@ import { Router, type Request, type Response, type NextFunction } from "express"
 import { z } from "zod";
 import crypto from "crypto";
 import type { StreamingExecutionManager } from "../services/StreamingExecutionManager";
-import type { ExecutionRepository } from "../database/ExecutionRepository";
+import { isTerminalExecutionStatus, type ExecutionRepository } from "../database/ExecutionRepository";
 import { asyncHandler } from "./asyncHandler";
 import { type DIContainer, createDefaultContainer } from "../container/DIContainer";
 import type { PermissionMiddlewareFactory } from "../middleware/routeAuthorization";
@@ -246,8 +246,10 @@ export function createStreamingRouter(
           return;
         }
 
-        // If execution is already completed, send completion event immediately
-        if (execution.status === "success" || execution.status === "failed") {
+        // If the execution is already over, replay its terminal event at once.
+        // Every terminal status counts: a cancelled or interrupted run used to
+        // leave the client waiting for an event that never came.
+        if (isTerminalExecutionStatus(execution.status)) {
           if (debugInfo) {
             expertModeService.addInfo(debugInfo, {
               message: "Execution already completed, sending completion event",
@@ -358,16 +360,24 @@ export function createStreamingRouter(
       }
 
       const activeExecutions = streamingManager.getActiveExecutionCount();
+      // Reported alongside the subscriber count so retained state is
+      // observable rather than inferred: both should fall back to zero as
+      // executions finish. A tracked connection that outlives its stream
+      // consumes a per-IP slot, which is what locked clients out before A16.
+      const retainedState = streamingManager.getRetainedStateCount();
+      const trackedConnections = streamingManager.getTrackedConnectionCount();
       const duration = Date.now() - startTime;
 
       logger.info("Streaming statistics fetched successfully", {
         component: "StreamingRouter",
         operation: "getStreamingStats",
-        metadata: { activeExecutions, duration },
+        metadata: { activeExecutions, retainedState, trackedConnections, duration },
       });
 
       const responseData = {
         activeExecutions,
+        retainedState,
+        trackedConnections,
       };
 
       // Attach debug info if expert mode is enabled

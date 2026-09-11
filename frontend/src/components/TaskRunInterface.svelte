@@ -9,6 +9,7 @@
   import { get, post } from '../lib/api';
   import { showError, showSuccess, showInfo } from '../lib/toast.svelte';
   import { expertMode } from '../lib/expertMode.svelte';
+  import { executionFailureReason, executionReportsSuccess } from '../lib/executionStatus';
   import { useExecutionStream, type ExecutionStream } from '../lib/executionStream.svelte';
 
   interface Task {
@@ -217,10 +218,17 @@
       // If expert mode is enabled, create a stream for real-time output
       if (expertMode.enabled) {
         executionStream = useExecutionStream(executionId, {
-          onComplete: (result) => {
+          onComplete: (streamResult) => {
             // Fetch final execution result
             pollExecutionResult(executionId);
-            showSuccess('Task executed successfully');
+            // A finished stream is not a successful run: report what the run
+            // itself said.
+            if (executionReportsSuccess(streamResult)) {
+              showSuccess('Task executed successfully');
+            } else {
+              executionError = executionFailureReason(streamResult);
+              showError('Task execution failed', executionError);
+            }
           },
           onError: (error) => {
             executionError = error;
@@ -231,7 +239,12 @@
       } else {
         // Poll for execution result (non-streaming)
         await pollExecutionResult(executionId);
-        showSuccess('Task executed successfully');
+        if (executionReportsSuccess(executionResult)) {
+          showSuccess('Task executed successfully');
+        } else {
+          executionError ??= executionFailureReason(executionResult);
+          showError('Task execution failed', executionError);
+        }
       }
     } catch (err) {
       executionError = err instanceof Error ? err.message : 'An unknown error occurred';
