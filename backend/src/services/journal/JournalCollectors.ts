@@ -133,8 +133,8 @@ export function executionToJournalEntry(
       durationMs: duration,
       executionTool: execution.executionTool,
     },
-    userId: undefined,
-    timestamp: execution.completedAt ?? execution.startedAt,
+    userId: execution.userId,
+    timestamp: execution.completedAt ?? execution.startedAt ?? execution.createdAt,
     isLive: true,
   };
 }
@@ -162,18 +162,18 @@ export async function collectExecutionEntries(
   const likeParams: unknown[] = ids.map((id) => `%"${id}"%`);
 
   if (filters?.startDate) {
-    conditions.push("started_at >= ?");
+    conditions.push("created_at >= ?");
     likeParams.push(filters.startDate);
   }
   if (filters?.endDate) {
-    conditions.push("started_at <= ?");
+    conditions.push("created_at <= ?");
     likeParams.push(filters.endDate);
   }
 
   const sql = `
     SELECT * FROM executions
     WHERE ${conditions.join(" AND ")}
-    ORDER BY started_at DESC
+    ORDER BY created_at DESC
     LIMIT ?
   `;
   likeParams.push(limit);
@@ -184,7 +184,9 @@ export async function collectExecutionEntries(
     action: string;
     parameters: string | null;
     status: string;
-    started_at: string;
+    started_at: string | null;
+    created_at: string;
+    user_id: string | null;
     completed_at: string | null;
     results: string;
     error: string | null;
@@ -209,7 +211,9 @@ export async function collectExecutionEntries(
       action: row.action,
       parameters: row.parameters ? (JSON.parse(row.parameters) as Record<string, unknown>) : undefined,
       status: row.status as ExecutionRecord["status"],
-      startedAt: row.started_at,
+      startedAt: row.started_at ?? undefined,
+      createdAt: row.created_at,
+      userId: row.user_id ?? undefined,
       completedAt: row.completed_at ?? undefined,
       results: JSON.parse(row.results) as ExecutionRecord["results"],
       error: row.error ?? undefined,
@@ -653,11 +657,11 @@ export async function collectGlobalExecutionEntries(
   const params: unknown[] = [];
 
   if (filters?.startDate) {
-    conditions.push("started_at >= ?");
+    conditions.push("created_at >= ?");
     params.push(filters.startDate);
   }
   if (filters?.endDate) {
-    conditions.push("started_at <= ?");
+    conditions.push("created_at <= ?");
     params.push(filters.endDate);
   }
 
@@ -668,7 +672,7 @@ export async function collectGlobalExecutionEntries(
   const sql = `
     SELECT * FROM executions
     ${whereClause}
-    ORDER BY started_at DESC
+    ORDER BY created_at DESC
     LIMIT ?
   `;
   params.push(limit);
@@ -680,7 +684,9 @@ export async function collectGlobalExecutionEntries(
     action: string;
     parameters: string | null;
     status: string;
-    started_at: string;
+    started_at: string | null;
+    created_at: string;
+    user_id: string | null;
     completed_at: string | null;
     results: string;
     error: string | null;
@@ -711,7 +717,9 @@ export async function collectGlobalExecutionEntries(
         ? (JSON.parse(row.parameters) as Record<string, unknown>)
         : undefined,
       status: row.status as ExecutionRecord["status"],
-      startedAt: row.started_at,
+      startedAt: row.started_at ?? undefined,
+      createdAt: row.created_at,
+      userId: row.user_id ?? undefined,
       completedAt: row.completed_at ?? undefined,
       results: JSON.parse(row.results) as ExecutionRecord["results"],
       error: row.error ?? undefined,

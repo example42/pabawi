@@ -311,8 +311,39 @@ or deployment was exercised. Application source did not change, so full backend
 and frontend suites were not repeated. Command dispatch after policy rotation,
 amd64, live cloud credentials, bundled PostgreSQL startup, multi-replica recovery
 and remote CI execution were not validated. A10's default-image release block
-remains. A12 transaction ownership is already recorded above; A13 is the next
-execution-correctness action.
+remains. A12 transaction ownership is already recorded above.
+
+**A13 / I04, 2026-09-11: implemented and verified.** Batch admission reserves
+capacity and commits the parent and every child atomically before asynchronous
+dispatch. HTTP admission returns stable IDs while provider work remains blocked.
+Children retain the submitting user and execution tool; queued children have no
+start timestamp. History includes queued, cancelled and interrupted work.
+
+Queued cancellation prevents provider dispatch, including races with slot release.
+Dispatched work retains its actual outcome and a durable cancellation-request
+timestamp. Both batch and individual cancellation responses distinguish removed
+queued work from running work. The UI uses authenticated cancellation requests,
+continues polling until terminal status, and displays cancelled and unknown
+outcomes accurately. Current plugins have no abort contract for dispatched work.
+
+Single-process shutdown waits for admissions already persisting before reconciling.
+Startup and shutdown cancel undispatched batch work and mark uncertain dispatched
+work interrupted, without automatic replay. Migration 029 preserves populated
+history while adding the lifecycle states, timestamps, attribution and counters.
+The [API guide](../api.md) documents admission, cancellation and recovery semantics.
+
+A13 validation: 3,600 backend tests passed (39 skipped, one todo), and all 1,003
+frontend tests passed. All 30 focused lifecycle and populated migration tests
+passed across SQLite and a disposable PostgreSQL database, including database
+reopening, rollback, concurrent admission, cancellation races, shutdown during
+admission and provider failure outcomes. HTTP regression coverage verifies prompt
+admission and truthful cancellation with blocked providers. Component tests cover
+continued polling, cancellation errors and stale responses after switching batches.
+Build, lint and diff checks passed. Existing frontend accessibility and bundle-size
+build warnings remain. No live provider, production database, publication or
+deployment was exercised. Multi-process ownership and direct-route concurrency
+remain outside this batch contract; A14 retry/idempotency is the next execution
+correctness action.
 
 ## Executive assessment
 
@@ -552,6 +583,10 @@ An unrelated request can execute while a transaction is awaiting and become part
 **Acceptance:** interleave a failing transaction with an unrelated successful write; the successful write survives. Concurrent transactions use distinct ownership and release all clients. Exercise concurrent first SSO login and migration exclusion.
 
 ### I04. P1: Batch admission and cancellation are not a durable lifecycle
+
+**Resolved by A13 on 2026-09-11 for the single-process batch contract.** The
+following describes the original finding; implementation and validation are
+recorded above.
 
 **Source-confirmed.** [BatchExecutionService.ts](../../backend/src/services/BatchExecutionService.ts), lines 236-277, creates child executions, waits for queue slots and starts actions before inserting the parent batch. A batch exceeding available slots blocks submission until earlier work progresses; a later failure can return an error after infrastructure operations have already started. Children are marked running before actual admission, compromising queued/running reporting.
 

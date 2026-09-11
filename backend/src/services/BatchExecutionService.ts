@@ -1,5 +1,6 @@
+import { randomUUID } from "node:crypto";
 import type { DatabaseAdapter } from "../database/DatabaseAdapter";
-import type { ExecutionQueue } from "./ExecutionQueue";
+import type { ExecutionQueue, QueuedExecution } from "./ExecutionQueue";
 import type { ExecutionRepository, NodeResult } from "../database/ExecutionRepository";
 import type { IntegrationManager } from "../integrations/IntegrationManager";
 import { LoggerService } from "./LoggerService";
@@ -25,6 +26,7 @@ interface BatchExecutionRow {
   stats_running: number;
   stats_success: number;
   stats_failed: number;
+  cancellation_requested_at: string | null;
 }
 
 /**
@@ -38,6 +40,8 @@ interface ExecutionRow {
   status: string;
   started_at: string | null;
   completed_at: string | null;
+  cancellation_requested_at: string | null;
+  error: string | null;
   results: string | null;
   stdout: string | null;
   stderr: string | null;
@@ -116,7 +120,8 @@ export interface BatchExecution {
   targetGroups: string[];
 
   /** Overall batch status */
-  status: "running" | "success" | "failed" | "partial" | "cancelled";
+  status: "queued" | "running" | "success" | "failed" | "partial" | "cancelled" | "interrupted";
+  cancellationRequestedAt?: Date;
 
   /** Timestamp when batch was created */
   createdAt: Date;
@@ -140,6 +145,8 @@ export interface BatchExecution {
     running: number;
     success: number;
     failed: number;
+    cancelled: number;
+    interrupted: number;
   };
 }
 
@@ -156,6 +163,8 @@ export interface BatchStatusResponse {
     nodeId: string;
     nodeName: string;
     status: string;
+    cancellationRequestedAt?: Date;
+    error?: string;
     startedAt?: Date;
     completedAt?: Date;
     duration?: number;
@@ -182,7 +191,39 @@ export interface BatchStatusResponse {
  *
  * **Validates: Requirements 5.1, 7.1**
  */
+export class BatchLifecycleError extends Error {
+  constructor(message: string) { super(message); this.name = "BatchLifecycleError"; }
+}
+
+export interface BatchCancellation {
+  cancelledCount: number;
+  runningCount: number;
+}
+
+export function summarizeBatch(rows: { status: string }[], cancellationRequestedAt?: string | null): {
+  stats: BatchExecution["stats"]; status: BatchExecution["status"]; progress: number;
+} {
+  const count = (status: string): number => rows.filter(row => row.status === status).length;
+  const stats = { total: rows.length, queued: count("queued"), running: count("running"),
+    success: count("success"), failed: count("failed") + count("partial"),
+    cancelled: count("cancelled"), interrupted: count("interrupted") };
+  let status: BatchExecution["status"];
+  if (stats.running) status = "running";
+  else if (stats.queued) status = "queued";
+  else if (stats.interrupted) status = "interrupted";
+  else if (cancellationRequestedAt || stats.cancelled) status = "cancelled";
+  else if (stats.success === stats.total) status = "success";
+  else if (count("failed") === stats.total) status = "failed";
+  else status = "partial";
+  return { stats, status, progress: stats.total ? Math.round(100 * (stats.total - stats.queued - stats.running) / stats.total) : 0 };
+}
+
 export class BatchExecutionService {
+  private readonly logger = new LoggerService();
+  private readonly pending = new Set<Promise<void>>();
+  private readonly admissions = new Set<Promise<void>>();
+  private stopping = false;
+
   constructor(
     private db: DatabaseAdapter,
     private executionQueue: ExecutionQueue,
@@ -202,121 +243,61 @@ export class BatchExecutionService {
    * @param userId - User initiating the batch
    * @returns Batch execution response with IDs and target count
    */
-  async createBatch(
-    request: BatchExecutionRequest,
-    userId: string,
-  ): Promise<BatchExecutionResponse> {
-    const logger = new LoggerService();
-    const { randomUUID } = await import("crypto");
-
-    // Step 1: Expand groups and deduplicate nodes
+  async createBatch(request: BatchExecutionRequest, userId: string): Promise<BatchExecutionResponse> {
     const groupNodeIds = await this.expandGroups(request.targetGroupIds ?? []);
-    const allNodeIds = this.deduplicateNodes([
-      ...(request.targetNodeIds ?? []),
-      ...groupNodeIds,
-    ]);
-
-    logger.info(
-      `Creating batch execution for ${String(allNodeIds.length)} targets (${String(request.targetNodeIds?.length ?? 0)} direct nodes + ${String(groupNodeIds.length)} from groups)`,
-    );
-
-    // Step 2: Validate all nodes exist
+    const allNodeIds = this.deduplicateNodes([...(request.targetNodeIds ?? []), ...groupNodeIds]);
+    if (allNodeIds.length === 0) throw new BatchLifecycleError("Invalid node IDs: batch has no targets");
     await this.validateNodes(allNodeIds);
+    if (this.isStopping()) throw new BatchLifecycleError("Batch admission is stopped");
 
-    // Step 3: Generate batch ID
     const batchId = randomUUID();
-    const executionIds: string[] = [];
     const createdAt = new Date().toISOString();
-
-    // Step 4: Create individual execution records for each target node
-    for (let i = 0; i < allNodeIds.length; i++) {
-      const nodeId = allNodeIds[i];
-
-      // Create execution record with batch tracking
-      const executionId = await this.executionRepository.create({
-        type: request.type,
-        targetNodes: [nodeId],
-        action: request.action,
-        parameters: request.parameters,
-        status: "running",
-        startedAt: createdAt,
-        results: [],
-        executionTool: request.tool ?? "bolt",
-        batchId,
-        batchPosition: i,
-      });
-
-      executionIds.push(executionId);
-
-      // Step 5: Enqueue execution through ExecutionQueue
-      try {
-        await this.executionQueue.acquire({
-          id: executionId,
-          type: request.type,
-          nodeId,
-          action: request.action,
-          enqueuedAt: new Date(),
-        });
-
-        // Step 6: Execute action asynchronously after acquiring queue slot
-        void this.executeAction(executionId, nodeId, request);
-      } catch (error) {
-        // Handle queue capacity errors
-        if (error instanceof Error && error.name === "ExecutionQueueFullError") {
-          logger.error(
-            `Execution queue is full while creating batch ${batchId}`,
-            { component: "BatchExecutionService" },
-            new Error(error.message),
-          );
-          throw new Error(
-            `Failed to enqueue execution for node ${nodeId}: ${error.message}`,
-          );
-        }
-        throw error;
+    const entries: QueuedExecution[] = allNodeIds.map(nodeId => ({
+      id: randomUUID(), nodeId, type: request.type, action: request.action, enqueuedAt: new Date(createdAt),
+    }));
+    const executionIds = entries.map(entry => entry.id);
+    this.executionQueue.reserve(entries);
+    const admission = this.db.withTransaction(async () => {
+      if (this.isStopping()) throw new BatchLifecycleError("Batch admission is stopped");
+      await this.db.execute(`INSERT INTO batch_executions (
+        id, type, action, parameters, target_nodes, target_groups, status, created_at,
+        user_id, execution_ids, stats_total, stats_queued, stats_running, stats_success, stats_failed
+      ) VALUES (?, ?, ?, ?, ?, ?, 'queued', ?, ?, ?, ?, ?, 0, 0, 0)`, [
+        batchId, request.type, request.action, request.parameters ? JSON.stringify(request.parameters) : null,
+        JSON.stringify(allNodeIds), JSON.stringify(request.targetGroupIds ?? []), createdAt, userId,
+        JSON.stringify(executionIds), entries.length, entries.length,
+      ]);
+      for (const [position, entry] of entries.entries()) {
+        await this.executionRepository.create({
+          type: request.type, targetNodes: [entry.nodeId], action: request.action, parameters: request.parameters,
+          status: "queued", createdAt, results: [], executionTool: request.tool ?? "bolt",
+          batchId, batchPosition: position, userId,
+        }, entry.id);
       }
+    });
+    this.admissions.add(admission);
+    try {
+      await admission;
+    } catch (error) {
+      this.executionQueue.releaseReservations(executionIds);
+      throw error;
+    } finally {
+      this.admissions.delete(admission);
     }
 
-    // Step 7: Create batch execution record in database
-    const sql = `
-      INSERT INTO batch_executions (
-        id, type, action, parameters, target_nodes, target_groups,
-        status, created_at, started_at, user_id, execution_ids,
-        stats_total, stats_queued, stats_running, stats_success, stats_failed
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `;
-
-    const params = [
-      batchId,
-      request.type,
-      request.action,
-      request.parameters ? JSON.stringify(request.parameters) : null,
-      JSON.stringify(allNodeIds),
-      JSON.stringify(request.targetGroupIds ?? []),
-      "running",
-      createdAt,
-      createdAt,
-      userId,
-      JSON.stringify(executionIds),
-      allNodeIds.length,
-      allNodeIds.length,
-      0,
-      0,
-      0,
-    ];
-
-    await this.db.execute(sql, params);
-
-    logger.info(
-      `Created batch execution ${batchId} with ${String(executionIds.length)} executions`,
-    );
-
-    // Step 8: Return batch execution response
-    return {
-      batchId,
-      executionIds,
-      targetCount: allNodeIds.length,
-      expandedNodeIds: allNodeIds,
-    };
+    // Schedule outside the transaction and HTTP admission path. All records now exist.
+    setImmediate(() => {
+      for (const entry of entries) {
+        const work = this.executeAction(batchId, entry, request);
+        this.pending.add(work);
+        void work.catch((error: unknown) => {
+          this.logger.error("Batch worker failed; persisted state requires reconciliation", {
+            component: "BatchExecutionService", operation: "executeAction", metadata: { batchId, executionId: entry.id },
+          }, error instanceof Error ? error : undefined);
+        }).finally(() => this.pending.delete(work));
+      }
+    });
+    return { batchId, executionIds, targetCount: allNodeIds.length, expandedNodeIds: allNodeIds };
   }
 
   /**
@@ -338,27 +319,14 @@ export class BatchExecutionService {
   ): Promise<BatchStatusResponse> {
     const logger = new LoggerService();
 
-    // Step 1: Fetch batch execution record
-    const batchRow = await this.db.queryOne<BatchExecutionRow>(
-      "SELECT * FROM batch_executions WHERE id = ?",
-      [batchId]
-    );
-
-    if (!batchRow) {
-      throw new Error(`Batch execution ${batchId} not found`);
-    }
-
-    // Step 2: Fetch all executions for this batch
-    let executionsSql = "SELECT * FROM executions WHERE batch_id = ? ORDER BY batch_position ASC";
-    const executionsParams: (string | number)[] = [batchId];
-
-    // Apply status filter if provided
-    if (statusFilter) {
-      executionsSql = "SELECT * FROM executions WHERE batch_id = ? AND status = ? ORDER BY batch_position ASC";
-      executionsParams.push(statusFilter);
-    }
-
-    const executionRows = await this.db.query<ExecutionRow>(executionsSql, executionsParams);
+    const { batchRow, allRows } = await this.db.withTransaction(async () => {
+      const batchRow = await this.lockBatch(batchId);
+      const allRows = await this.db.query<ExecutionRow>(
+        "SELECT * FROM executions WHERE batch_id = ? ORDER BY batch_position ASC", [batchId],
+      );
+      return { batchRow, allRows };
+    });
+    const executionRows = statusFilter ? allRows.filter(row => row.status === statusFilter) : allRows;
 
     // Step 3: Get node names from inventory
     const inventory = await this.integrationManager.getAggregatedInventory();
@@ -400,6 +368,8 @@ export class BatchExecutionService {
         nodeId,
         nodeName,
         status: row.status,
+        cancellationRequestedAt: row.cancellation_requested_at ? new Date(row.cancellation_requested_at) : undefined,
+        error: row.error ?? undefined,
         startedAt: row.started_at ? new Date(row.started_at) : undefined,
         completedAt: row.completed_at ? new Date(row.completed_at) : undefined,
         duration,
@@ -407,35 +377,7 @@ export class BatchExecutionService {
       };
     });
 
-    // Step 5: Aggregate statistics from all executions (not filtered)
-    const allExecutionRows = await this.db.query<ExecutionStatusRow>(
-      "SELECT status, started_at FROM executions WHERE batch_id = ?",
-      [batchId]
-    );
-
-    const stats = {
-      total: allExecutionRows.length,
-      queued: allExecutionRows.filter(r => r.status === "running" && !r.started_at).length,
-      running: allExecutionRows.filter(r => r.status === "running").length,
-      success: allExecutionRows.filter(r => r.status === "success").length,
-      failed: allExecutionRows.filter(r => r.status === "failed").length,
-    };
-
-    // Step 6: Calculate progress percentage
-    const completedCount = stats.success + stats.failed;
-    const progress = stats.total > 0 ? Math.round((completedCount / stats.total) * 100) : 0;
-
-    // Step 7: Determine batch status
-    let batchStatus: "running" | "success" | "failed" | "partial" | "cancelled" = "running";
-    if (completedCount === stats.total) {
-      if (stats.success === stats.total) {
-        batchStatus = "success";
-      } else if (stats.failed === stats.total) {
-        batchStatus = "failed";
-      } else {
-        batchStatus = "partial";
-      }
-    }
+    const { stats, status: batchStatus, progress } = summarizeBatch(allRows, batchRow.cancellation_requested_at);
 
     // Step 8: Build batch execution object
     const batch: BatchExecution = {
@@ -446,6 +388,7 @@ export class BatchExecutionService {
       targetNodes: JSON.parse(batchRow.target_nodes) as string[],
       targetGroups: JSON.parse(batchRow.target_groups) as string[],
       status: batchStatus,
+      cancellationRequestedAt: batchRow.cancellation_requested_at ? new Date(batchRow.cancellation_requested_at) : undefined,
       createdAt: new Date(batchRow.created_at),
       startedAt: batchRow.started_at ? new Date(batchRow.started_at) : undefined,
       completedAt: batchRow.completed_at ? new Date(batchRow.completed_at) : undefined,
@@ -468,59 +411,97 @@ export class BatchExecutionService {
   /**
    * Cancel a batch execution
    *
-   * Cancels all queued and running executions in the batch.
+   * Cancels queued executions and records requests for dispatched work.
    *
    * @param batchId - Batch execution ID
    * @returns Count of cancelled executions
    */
-  async cancelBatch(batchId: string): Promise<{ cancelledCount: number }> {
-    const logger = new LoggerService();
-
-    // The existence check and both status writes share one transaction, so no
-    // reader and no concurrent cancellation can observe the children marked
-    // cancelled while the parent still reports running, and a failure on
-    // either write leaves the batch entirely uncancelled instead of half so.
-    // This governs the stored records only: stopping queued and in-flight
-    // work is separate (see I04).
-    const cancelledCount = await this.db.withTransaction(async () => {
-      // Step 1: Verify batch exists
-      const batchRow = await this.db.queryOne<BatchExecutionRow>(
-        "SELECT * FROM batch_executions WHERE id = ?",
-        [batchId]
-      );
-
-      if (!batchRow) {
-        throw new Error(`Batch execution ${batchId} not found`);
-      }
-
-      const cancelledAt = new Date().toISOString();
-
-      // Step 2: Cancel queued and running executions
-      const cancelSql = `
-        UPDATE executions
-        SET status = 'failed', error = 'Cancelled by user', completed_at = ?
-        WHERE batch_id = ? AND status = 'running'
-      `;
-
-      const cancelResult = await this.db.execute(cancelSql, [cancelledAt, batchId]);
-
-      // Step 3: Update batch status to cancelled
-      const updateBatchSql = `
-        UPDATE batch_executions
-        SET status = 'cancelled', completed_at = ?
-        WHERE id = ?
-      `;
-
-      await this.db.execute(updateBatchSql, [cancelledAt, batchId]);
-
-      return cancelResult.changes;
-    });
-
-    logger.info(`Cancelled batch ${batchId}: ${String(cancelledCount)} executions cancelled`);
-
-    return { cancelledCount };
+  async cancelBatch(batchId: string): Promise<BatchCancellation> {
+    return this.cancelTargets(batchId);
   }
 
+  async cancelExecution(executionId: string, batchId: string): Promise<BatchCancellation> {
+    return this.cancelTargets(batchId, executionId);
+  }
+
+  private async cancelTargets(batchId: string, executionId?: string): Promise<BatchCancellation> {
+    const result = await this.db.withTransaction(async () => {
+      await this.lockBatch(batchId);
+      const rows = await this.db.query<{ id: string; status: string }>(
+        `SELECT id, status FROM executions WHERE batch_id = ? AND status IN ('queued', 'running')${executionId ? ' AND id = ?' : ''}`,
+        executionId ? [batchId, executionId] : [batchId],
+      );
+      const now = new Date().toISOString();
+      for (const row of rows) {
+        if (row.status === "queued") {
+          await this.db.execute(`UPDATE executions SET status = 'cancelled', completed_at = ?,
+            cancellation_requested_at = COALESCE(cancellation_requested_at, ?), error = 'Cancelled before dispatch'
+            WHERE id = ? AND status = 'queued'`, [now, now, row.id]);
+        } else {
+          await this.db.execute(`UPDATE executions SET cancellation_requested_at = COALESCE(cancellation_requested_at, ?)
+            WHERE id = ? AND status = 'running'`, [now, row.id]);
+        }
+      }
+      if (rows.length) {
+        await this.db.execute(`UPDATE batch_executions SET cancellation_requested_at = COALESCE(cancellation_requested_at, ?)
+          WHERE id = ?`, [now, batchId]);
+      }
+      await this.updateBatchStatus(batchId);
+      return {
+        cancelledIds: rows.filter(row => row.status === "queued").map(row => row.id),
+        runningCount: rows.filter(row => row.status === "running").length,
+      };
+    });
+    for (const id of result.cancelledIds) this.executionQueue.cancel(id);
+    return { cancelledCount: result.cancelledIds.length, runningCount: result.runningCount };
+  }
+
+  private async lockBatch(batchId: string): Promise<BatchExecutionRow> {
+    const row = await this.db.queryOne<BatchExecutionRow>(
+      `SELECT * FROM batch_executions WHERE id = ?${this.db.getDialect() === "postgres" ? " FOR UPDATE" : ""}`, [batchId],
+    );
+    if (!row) throw new BatchLifecycleError(`Batch execution ${batchId} not found`);
+    return row;
+  }
+
+  /** Caller holds the parent lock so status and counts commit with child transitions. */
+  private async updateBatchStatus(batchId: string): Promise<void> {
+    const batch = await this.db.queryOne<BatchExecutionRow>("SELECT * FROM batch_executions WHERE id = ?", [batchId]);
+    if (!batch) throw new BatchLifecycleError(`Batch execution ${batchId} not found`);
+    const rows = await this.db.query<ExecutionStatusRow>("SELECT status, started_at FROM executions WHERE batch_id = ?", [batchId]);
+    const { stats, status } = summarizeBatch(rows, batch.cancellation_requested_at);
+    const startedAt = rows.map(row => row.started_at).filter((value): value is string => Boolean(value)).sort().at(0);
+    const terminal = stats.running + stats.queued === 0;
+    await this.db.execute(`UPDATE batch_executions SET status = ?, started_at = ?, completed_at = ?,
+      stats_total = ?, stats_queued = ?, stats_running = ?, stats_success = ?, stats_failed = ?, stats_cancelled = ?, stats_interrupted = ?
+      WHERE id = ?`, [status, startedAt ?? null, terminal ? batch.completed_at ?? new Date().toISOString() : null,
+      stats.total, stats.queued, stats.running, stats.success, stats.failed, stats.cancelled, stats.interrupted, batchId]);
+  }
+
+  private isStopping(): boolean { return this.stopping; }
+
+  stopAdmission(): void {
+    this.stopping = true;
+    this.executionQueue.clearQueue();
+  }
+
+  /** Single-process startup/shutdown reconciliation never replays uncertain provider work. */
+  async reconcileInterrupted(): Promise<number> {
+    if (this.pending.size && !this.stopping) throw new BatchLifecycleError("Cannot reconcile live batch workers");
+    await Promise.allSettled(this.admissions);
+    return this.db.withTransaction(async () => {
+      const batches = await this.db.query<{ id: string }>("SELECT id FROM batch_executions WHERE status IN ('queued', 'running') OR id IN (SELECT batch_id FROM executions WHERE status IN ('queued', 'running')) ORDER BY id");
+      for (const batch of batches) await this.lockBatch(batch.id);
+      const now = new Date().toISOString();
+      const changed = await this.db.execute(`UPDATE executions SET
+        error = CASE WHEN status = 'queued' THEN 'Process stopped before dispatch; execution was not replayed'
+          ELSE 'Process stopped after dispatch; provider outcome is unknown. Verify provider state before retrying' END,
+        status = CASE WHEN status = 'queued' THEN 'cancelled' ELSE 'interrupted' END, completed_at = ?
+        WHERE batch_id IS NOT NULL AND status IN ('queued', 'running')`, [now]);
+      for (const batch of batches) await this.updateBatchStatus(batch.id);
+      return changed.changes;
+    });
+  }
 
   /**
    * Expand group IDs to node IDs
@@ -628,75 +609,50 @@ export class BatchExecutionService {
    * @param nodeId - Target node ID
    * @param request - Batch execution request containing action details
    */
-  private async executeAction(
-    executionId: string,
-    nodeId: string,
-    request: BatchExecutionRequest,
-  ): Promise<void> {
-    const logger = new LoggerService();
-
+  private async executeAction(batchId: string, entry: QueuedExecution, request: BatchExecutionRequest): Promise<void> {
     try {
-      logger.info(
-        `Executing ${request.type} action for node ${nodeId} (execution ${executionId})`,
-        { component: "BatchExecutionService" },
-      );
-
-      // Determine which integration tool to use
-      // Use the tool from request if specified, otherwise default to bolt
-      const integrationTool = request.tool ?? "bolt";
-
-      // Execute action through IntegrationManager
-      const result = await this.integrationManager.executeAction(integrationTool, {
-        type: request.type,
-        target: nodeId,
-        action: request.action,
-        parameters: request.parameters,
+      if (this.isStopping()) return;
+      await this.executionQueue.acquire(entry);
+      if (this.isStopping()) return;
+      const claimed = await this.db.withTransaction(async () => {
+        await this.lockBatch(batchId);
+        if (this.isStopping()) return false;
+        const result = await this.db.execute(`UPDATE executions SET status = 'running', started_at = ?
+          WHERE id = ? AND status = 'queued'`, [new Date().toISOString(), entry.id]);
+        await this.updateBatchStatus(batchId);
+        return result.changes === 1;
       });
-
-      // Update execution record with results
-      await this.executionRepository.update(executionId, {
-        status: result.status,
-        completedAt: result.completedAt,
-        results: result.results,
-        error: result.error,
-        command: result.command,
+      if (!claimed || this.isStopping()) return;
+      const result = await this.integrationManager.executeAction(request.tool ?? "bolt", {
+        type: request.type, target: entry.nodeId, action: request.action, parameters: request.parameters,
       });
-
-      logger.info(
-        `Completed ${request.type} action for node ${nodeId} with status ${result.status}`,
-        { component: "BatchExecutionService" },
-      );
+      if (this.isStopping()) return;
+      if (!["success", "failed", "partial"].includes(result.status)) {
+        throw new BatchLifecycleError("Provider returned without a terminal outcome");
+      }
+      await this.db.withTransaction(async () => {
+        await this.lockBatch(batchId);
+        const record = await this.executionRepository.findById(entry.id);
+        if (record?.status !== "running") return;
+        await this.executionRepository.update(entry.id, {
+          status: result.status, completedAt: result.completedAt ?? new Date().toISOString(),
+          results: result.results, error: result.error, command: result.command,
+        });
+        await this.updateBatchStatus(batchId);
+      });
     } catch (error) {
-      logger.error(
-        `Error executing ${request.type} action for node ${nodeId}`,
-        { component: "BatchExecutionService" },
-        error instanceof Error ? error : undefined,
-      );
-
-      const errorMessage = error instanceof Error ? error.message : "Unknown error";
-
-      // Update execution record with error
-      await this.executionRepository.update(executionId, {
-        status: "failed",
-        completedAt: new Date().toISOString(),
-        results: [
-          {
-            nodeId,
-            status: "failed",
-            error: errorMessage,
-            duration: 0,
-          },
-        ],
-        error: errorMessage,
-      });
+      if (!this.isStopping()) {
+        await this.db.withTransaction(async () => {
+          await this.lockBatch(batchId);
+          await this.db.execute(`UPDATE executions SET status = CASE WHEN status = 'queued' THEN 'cancelled' ELSE 'interrupted' END,
+            completed_at = ?, error = ? WHERE id = ? AND status IN ('queued', 'running')`,
+          [new Date().toISOString(), error instanceof Error ? error.message : "Unknown execution outcome", entry.id]);
+          await this.updateBatchStatus(batchId);
+        });
+      }
     } finally {
-      // Always release the queue slot when execution completes
-      this.executionQueue.release(executionId);
-
-      logger.info(
-        `Released queue slot for execution ${executionId}`,
-        { component: "BatchExecutionService" },
-      );
+      this.executionQueue.releaseReservations([entry.id]);
+      this.executionQueue.release(entry.id);
     }
   }
 }

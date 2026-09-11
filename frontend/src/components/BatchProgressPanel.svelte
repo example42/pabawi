@@ -1,49 +1,7 @@
 <script lang="ts">
   import LoadingSpinner from './LoadingSpinner.svelte';
-  import { get } from '../lib/api';
-
-  interface ExecutionDetail {
-    id: string;
-    nodeId: string;
-    nodeName: string;
-    status: 'queued' | 'running' | 'success' | 'failed';
-    startedAt?: string;
-    completedAt?: string;
-    duration?: number;
-    result?: {
-      exitCode?: number;
-      stdout?: string;
-      stderr?: string;
-    };
-  }
-
-  interface BatchExecution {
-    id: string;
-    type: 'command' | 'task' | 'plan';
-    action: string;
-    parameters?: Record<string, unknown>;
-    targetNodes: string[];
-    targetGroups: string[];
-    status: 'running' | 'success' | 'failed' | 'partial' | 'cancelled';
-    createdAt: string;
-    startedAt?: string;
-    completedAt?: string;
-    userId: string;
-    executionIds: string[];
-    stats: {
-      total: number;
-      queued: number;
-      running: number;
-      success: number;
-      failed: number;
-    };
-  }
-
-  interface BatchStatusResponse {
-    batch: BatchExecution;
-    executions: ExecutionDetail[];
-    progress: number;
-  }
+  import { untrack } from 'svelte';
+  import { get, post, type BatchExecution, type BatchStatusResponse, type ExecutionDetail } from '../lib/api';
 
   interface Props {
     batchId: string;
@@ -63,16 +21,23 @@
   let pollingTimeoutId = $state<number | null>(null);
 
   // Filter state
-  let filterStatus = $state<'all' | 'running' | 'success' | 'failed'>('all');
+  let filterStatus = $state<'all' | ExecutionDetail['status']>('all');
 
   // Cancellation state
   let cancelling = $state<boolean>(false);
   let cancelError = $state<string | null>(null);
 
+  let requestGeneration = 0;
+  let latestRequest = 0;
+  let completionReported = false;
+
   // Fetch batch status from API
   async function fetchBatchStatus(): Promise<void> {
+    const generation = requestGeneration;
+    const request = ++latestRequest;
     try {
       const data = await get<BatchStatusResponse>(`/api/executions/batch/${batchId}`);
+      if (generation !== requestGeneration || request !== latestRequest) return;
       batchStatus = data;
       error = null;
       loading = false;
@@ -85,8 +50,9 @@
         stopPolling();
 
         // Call onComplete callback if provided
-        if (onComplete) {
-          onComplete();
+        if (!completionReported) {
+          completionReported = true;
+          onComplete?.();
         }
       } else {
         // Implement exponential backoff: 2s → 4s → 8s (max)
@@ -95,6 +61,7 @@
         }
       }
     } catch (err) {
+      if (generation !== requestGeneration || request !== latestRequest) return;
       error = err instanceof Error ? err.message : 'Failed to fetch batch status';
       console.error('[BatchProgressPanel] Error fetching batch status:', err);
       loading = false;
@@ -107,23 +74,19 @@
 
   // Check if all executions are complete
   function isAllExecutionsComplete(batch: BatchExecution): boolean {
-    const terminalStatuses: Array<BatchExecution['status']> = ['success', 'failed', 'partial', 'cancelled'];
+    const terminalStatuses: Array<BatchExecution['status']> = ['success', 'failed', 'partial', 'cancelled', 'interrupted'];
     return terminalStatuses.includes(batch.status);
   }
 
   // Start polling for batch status
   function startPolling(): void {
     if (!polling) return;
-
-    // Fetch immediately
-    fetchBatchStatus();
-
-    // Schedule next poll
-    pollingTimeoutId = window.setTimeout(() => {
-      if (polling) {
-        startPolling();
+    const generation = requestGeneration;
+    void fetchBatchStatus().finally(() => {
+      if (polling && generation === requestGeneration) {
+        pollingTimeoutId = window.setTimeout(startPolling, pollingInterval);
       }
-    }, pollingInterval);
+    });
   }
 
   // Stop polling
@@ -137,10 +100,23 @@
 
   // Start polling when component mounts
   $effect(() => {
-    startPolling();
+    batchId;
+    untrack(() => {
+      requestGeneration++;
+      batchStatus = null;
+      loading = true;
+      error = null;
+      cancelError = null;
+      cancelling = false;
+      completionReported = false;
+      polling = true;
+      pollingInterval = 2000;
+      startPolling();
+    });
 
     // Cleanup on unmount
     return () => {
+      requestGeneration++;
       stopPolling();
     };
   });
@@ -209,39 +185,24 @@
     if (!batchStatus || cancelling) return;
 
     // Confirm cancellation
-    if (!confirm('Are you sure you want to cancel all remaining executions in this batch?')) {
+    if (!confirm('Cancel queued executions? Already dispatched work will continue until it finishes.')) {
       return;
     }
 
     cancelling = true;
     cancelError = null;
+    const generation = requestGeneration;
 
     try {
-      const response = await fetch(`/api/executions/batch/${batchId}/cancel`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ message: 'Failed to cancel batch' }));
-        throw new Error(errorData.message || `HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      const result = await response.json();
-      console.log('[BatchProgressPanel] Batch cancelled:', result);
-
-      // Refresh batch status immediately
+      await post(`/api/executions/batch/${batchId}/cancel`, {}, { maxRetries: 0 });
+      if (generation !== requestGeneration) return;
       await fetchBatchStatus();
-
-      // Stop polling since batch is cancelled
-      stopPolling();
     } catch (err) {
+      if (generation !== requestGeneration) return;
       cancelError = err instanceof Error ? err.message : 'Failed to cancel batch';
       console.error('[BatchProgressPanel] Error cancelling batch:', err);
     } finally {
-      cancelling = false;
+      if (generation === requestGeneration) cancelling = false;
     }
   }
 
@@ -250,7 +211,7 @@
     if (!batchStatus) return false;
 
     // Can cancel if there are queued or running executions
-    return batchStatus.batch.stats.queued > 0 || batchStatus.batch.stats.running > 0;
+    return batchStatus.batch.stats.queued > 0 || (!batchStatus.batch.cancellationRequestedAt && batchStatus.batch.stats.running > 0);
   }
 </script>
 
@@ -307,6 +268,16 @@
 
   <!-- Batch Status Display -->
   {#if batchStatus}
+    {#if batchStatus.batch.cancellationRequestedAt && batchStatus.batch.stats.running > 0}
+      <p role="status" class="mb-3 text-sm text-amber-700 dark:text-amber-300">
+        Cancellation requested. {batchStatus.batch.stats.running} dispatched executions are still running; {batchStatus.batch.stats.queued} executions remain queued.
+      </p>
+    {/if}
+    {#if batchStatus.batch.stats.cancelled || batchStatus.batch.stats.interrupted}
+      <p class="mb-3 text-sm text-gray-600 dark:text-gray-300">
+        Cancelled before dispatch: {batchStatus.batch.stats.cancelled}. Unknown outcomes after interruption: {batchStatus.batch.stats.interrupted}.
+      </p>
+    {/if}
     <!-- Summary Statistics -->
     <div class="mb-6" role="region" aria-label="Batch execution statistics">
       <div class="grid grid-cols-2 sm:grid-cols-5 gap-4">
@@ -385,9 +356,13 @@
             aria-label="Filter executions by status"
           >
             <option value="all">All</option>
+            <option value="queued">Queued</option>
             <option value="running">Running</option>
             <option value="success">Success</option>
             <option value="failed">Failed</option>
+            <option value="partial">Partial</option>
+            <option value="cancelled">Cancelled</option>
+            <option value="interrupted">Interrupted</option>
           </select>
 
           <!-- Cancel Button -->
@@ -466,13 +441,16 @@
                         {execution.nodeName}
                       </span>
                     </div>
+                    {#if execution.error}<p class="text-xs text-amber-700 dark:text-amber-300">{execution.error}</p>{/if}
                     <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">
                       {#if execution.duration}
                         Duration: {formatDuration(execution.duration)}
                       {:else if execution.startedAt}
                         Started at {new Date(execution.startedAt).toLocaleTimeString()}
-                      {:else}
+                      {:else if execution.status === 'queued'}
                         Waiting in queue
+                      {:else}
+                        Not started
                       {/if}
                     </div>
                   </div>
@@ -515,6 +493,8 @@
           <span class="text-red-600 dark:text-red-400 font-medium">✗ Batch execution failed</span>
         {:else if batchStatus.batch.status === 'partial'}
           <span class="text-yellow-600 dark:text-yellow-400 font-medium">⚠ Batch completed with some failures</span>
+        {:else if batchStatus.batch.status === 'interrupted'}
+          <span class="text-amber-700 dark:text-amber-300 font-medium">Execution interrupted. Verify provider state before retrying.</span>
         {:else if batchStatus.batch.status === 'cancelled'}
           <span class="text-gray-600 dark:text-gray-400 font-medium">Batch execution cancelled</span>
         {/if}

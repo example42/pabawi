@@ -10,8 +10,9 @@
     targetNodes: string[];
     action: string;
     parameters?: Record<string, unknown>;
-    status: 'running' | 'success' | 'failed' | 'partial';
-    startedAt: string;
+    status: 'queued' | 'running' | 'success' | 'failed' | 'partial' | 'cancelled' | 'interrupted';
+    startedAt?: string;
+    createdAt: string;
     completedAt?: string;
     results: any[];
     error?: string;
@@ -65,13 +66,13 @@
   }
 
   // Format timestamp
-  function formatTimestamp(timestamp: string): string {
-    return new Date(timestamp).toLocaleString();
+  function formatTimestamp(timestamp?: string): string {
+    return timestamp ? new Date(timestamp).toLocaleString() : 'Not started';
   }
 
   // Format duration - always in seconds
-  function formatDuration(startedAt: string, completedAt?: string): string {
-    if (!completedAt) {
+  function formatDuration(startedAt: string | undefined, completedAt?: string): string {
+    if (!startedAt || !completedAt) {
       return '-';
     }
 

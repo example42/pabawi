@@ -733,9 +733,11 @@ export interface ExecutionDetail {
   id: string;
   nodeId: string;
   nodeName: string;
-  status: 'queued' | 'running' | 'success' | 'failed';
-  startedAt?: Date;
-  completedAt?: Date;
+  status: 'queued' | 'running' | 'success' | 'failed' | 'partial' | 'cancelled' | 'interrupted';
+  cancellationRequestedAt?: string;
+  startedAt?: string;
+  completedAt?: string;
+  error?: string;
   duration?: number;
   result?: {
     exitCode?: number;
@@ -751,10 +753,11 @@ export interface BatchExecution {
   parameters?: Record<string, unknown>;
   targetNodes: string[];
   targetGroups: string[];
-  status: 'running' | 'success' | 'failed' | 'partial' | 'cancelled';
-  createdAt: Date;
-  startedAt?: Date;
-  completedAt?: Date;
+  status: 'queued' | 'running' | 'success' | 'failed' | 'partial' | 'cancelled' | 'interrupted';
+  createdAt: string;
+  cancellationRequestedAt?: string;
+  startedAt?: string;
+  completedAt?: string;
   userId: string;
   executionIds: string[];
   stats: {
@@ -763,6 +766,8 @@ export interface BatchExecution {
     running: number;
     success: number;
     failed: number;
+    cancelled: number;
+    interrupted: number;
   };
 }
 

@@ -42,6 +42,7 @@ export class ExecutionQueue {
   private readonly maxQueueSize: number;
   private runningExecutions = new Set<string>();
   private queuedExecutions = new Map<string, QueuedExecution>();
+  private reservedExecutions = new Map<string, QueuedExecution>();
   private waitingPromises = new Map<
     string,
     { resolve: () => void; reject: (error: Error) => void }
@@ -50,6 +51,19 @@ export class ExecutionQueue {
   constructor(limit = 5, maxQueueSize = 50) {
     this.limit = limit;
     this.maxQueueSize = maxQueueSize;
+  }
+
+  /** Reserve the entire admission before a caller starts durable writes. */
+  public reserve(executions: QueuedExecution[]): void {
+    const occupied = this.runningExecutions.size + this.queuedExecutions.size + this.reservedExecutions.size;
+    if (occupied + executions.length > this.limit + this.maxQueueSize) {
+      throw new ExecutionQueueFullError('Execution queue is full for this batch', occupied, this.maxQueueSize);
+    }
+    for (const execution of executions) this.reservedExecutions.set(execution.id, execution);
+  }
+
+  public releaseReservations(ids: string[]): void {
+    for (const id of ids) this.reservedExecutions.delete(id);
   }
 
   /**
@@ -65,6 +79,10 @@ export class ExecutionQueue {
    * @throws ExecutionQueueFullError if queue is full
    */
   public async acquire(execution: QueuedExecution): Promise<void> {
+    if (!this.reservedExecutions.delete(execution.id)
+      && this.runningExecutions.size + this.queuedExecutions.size + this.reservedExecutions.size >= this.limit + this.maxQueueSize) {
+      throw new ExecutionQueueFullError('Execution queue is full', this.queuedExecutions.size, this.maxQueueSize);
+    }
     // If under limit, allow immediate execution
     if (this.runningExecutions.size < this.limit) {
       this.runningExecutions.add(execution.id);
@@ -145,6 +163,7 @@ export class ExecutionQueue {
    * @returns true if execution was cancelled, false if not found or already running
    */
   public cancel(executionId: string): boolean {
+    if (this.reservedExecutions.delete(executionId)) return true;
     if (!this.queuedExecutions.has(executionId)) {
       return false;
     }
@@ -170,9 +189,9 @@ export class ExecutionQueue {
   public getStatus(): QueueStatus {
     return {
       running: this.runningExecutions.size,
-      queued: this.queuedExecutions.size,
+      queued: this.queuedExecutions.size + this.reservedExecutions.size,
       limit: this.limit,
-      queue: Array.from(this.queuedExecutions.values())
+      queue: [...this.queuedExecutions.values(), ...this.reservedExecutions.values()]
         .sort((a, b) => a.enqueuedAt.getTime() - b.enqueuedAt.getTime())
         .map((exec) => ({
           id: exec.id,
@@ -215,7 +234,7 @@ export class ExecutionQueue {
    * @returns true if execution is currently queued
    */
   public isQueued(executionId: string): boolean {
-    return this.queuedExecutions.has(executionId);
+    return this.queuedExecutions.has(executionId) || this.reservedExecutions.has(executionId);
   }
 
   /**
@@ -232,6 +251,7 @@ export class ExecutionQueue {
 
     // Clear the queue and promises
     this.queuedExecutions.clear();
+    this.reservedExecutions.clear();
     this.waitingPromises.clear();
   }
 }
