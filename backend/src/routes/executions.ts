@@ -4,7 +4,7 @@ import type {
   ExecutionRepository,
   ExecutionType,
   NodeResult,
-  ExecutionRecord,
+  NewExecution,
 } from "../database/ExecutionRepository";
 import { type ExecutionFilters } from "../database/ExecutionRepository";
 import type { ExecutionQueue } from "../services/ExecutionQueue";
@@ -24,7 +24,7 @@ const ExecutionIdParamSchema = z.object({
 
 const ExecutionFiltersQuerySchema = z.object({
   type: z.enum(["command", "task", "facts", "puppet", "package"]).optional(),
-  status: z.enum(["running", "success", "failed", "partial"]).optional(),
+  status: z.enum(["queued", "running", "success", "failed", "partial", "cancelled", "interrupted"]).optional(),
   targetNode: z.string().optional(),
   startDate: z.string().datetime().optional(),
   endDate: z.string().datetime().optional(),
@@ -860,7 +860,7 @@ export function createExecutionsRouter(
 
         // Create new execution with preserved parameters
         // Allow modifications from request body
-        const executionData: Omit<ExecutionRecord, "id" | "originalExecutionId"> = {
+        const executionData: Omit<NewExecution, "originalExecutionId"> = {
           type: (modifications.type ?? originalExecution.type) as ExecutionType,
           targetNodes:
             (modifications.targetNodes ?? originalExecution.targetNodes),
@@ -1404,6 +1404,18 @@ export function createExecutionsRouter(
               message: `Execution '${executionId}' not found`,
             },
           });
+          return;
+        }
+
+        if (execution.batchId) {
+          if (!batchExecutionService) {
+            res.status(503).json({ error: { code: "SERVICE_UNAVAILABLE", message: "Batch lifecycle service unavailable" } });
+            return;
+          }
+          const result = await batchExecutionService.cancelExecution(executionId, execution.batchId);
+          res.json({ executionId, ...result, message: result.runningCount
+            ? "Cancellation requested; dispatched work cannot be interrupted and is still running"
+            : `Cancelled ${String(result.cancelledCount)} queued executions` });
           return;
         }
 
@@ -2130,7 +2142,7 @@ export function createExecutionsRouter(
 
         const duration = Date.now() - startTime;
 
-        logger.info("Batch execution cancelled successfully", {
+        logger.info("Batch cancellation recorded", {
           component: "ExecutionsRouter",
           operation: "cancelBatch",
           metadata: {
@@ -2143,7 +2155,8 @@ export function createExecutionsRouter(
         const responseData = {
           batchId,
           cancelledCount: result.cancelledCount,
-          message: `Cancelled ${String(result.cancelledCount)} execution${result.cancelledCount !== 1 ? 's' : ''}`,
+          runningCount: result.runningCount,
+          message: `Cancelled ${String(result.cancelledCount)} queued executions; ${String(result.runningCount)} dispatched executions remain running`,
         };
 
         if (req.expertMode) {

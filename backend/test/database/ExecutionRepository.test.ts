@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { initializeTestSchema } from "../helpers/schema";
 import { SQLiteAdapter } from "../../src/database/SQLiteAdapter";
 import type { DatabaseAdapter } from "../../src/database/DatabaseAdapter";
 import {
@@ -16,30 +17,7 @@ describe("ExecutionRepository", () => {
     db = new SQLiteAdapter(":memory:");
     await db.initialize();
 
-    // Create executions table
-    await db.execute(`
-      CREATE TABLE executions (
-        id TEXT PRIMARY KEY,
-        type TEXT NOT NULL,
-        target_nodes TEXT NOT NULL,
-        action TEXT NOT NULL,
-        parameters TEXT,
-        status TEXT NOT NULL,
-        started_at TEXT NOT NULL,
-        completed_at TEXT,
-        results TEXT NOT NULL,
-        error TEXT,
-        command TEXT,
-        expert_mode INTEGER DEFAULT 0,
-        original_execution_id TEXT,
-        re_execution_count INTEGER DEFAULT 0,
-        stdout TEXT,
-        stderr TEXT,
-        execution_tool TEXT DEFAULT 'bolt',
-        batch_id TEXT,
-        batch_position INTEGER
-      )
-    `, []);
+    await initializeTestSchema(db);
 
     repository = new ExecutionRepository(db);
   });
@@ -56,6 +34,14 @@ describe("ExecutionRepository", () => {
   });
 
   describe("create", () => {
+    it("includes queued executions without start times in dated history", async () => {
+      const id = await repository.create({ type: "command", action: "uptime", targetNodes: ["node1"],
+        status: "queued", createdAt: "2026-09-11T12:00:00Z", results: [] });
+      const rows = await repository.findAll({ startDate: "2026-09-11T00:00:00Z", endDate: "2026-09-12T00:00:00Z" });
+      expect(rows.map(row => row.id)).toEqual([id]);
+      expect(rows[0].startedAt).toBeUndefined();
+    });
+
     it("should create a new execution record", async () => {
       const execution = {
         type: "command" as ExecutionType,
@@ -241,7 +227,7 @@ describe("ExecutionRepository", () => {
       expect(page2).toHaveLength(1);
     });
 
-    it("should order by started_at DESC", async () => {
+    it("should order by creation time DESC", async () => {
       const executions = await repository.findAll();
       expect(executions[0].startedAt).toBe("2024-01-03T10:00:00Z");
       expect(executions[2].startedAt).toBe("2024-01-01T10:00:00Z");

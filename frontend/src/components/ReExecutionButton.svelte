@@ -8,7 +8,7 @@
     targetNodes: string[];
     action: string;
     parameters?: Record<string, unknown>;
-    status: 'running' | 'success' | 'failed' | 'partial';
+    status: 'queued' | 'running' | 'success' | 'failed' | 'partial' | 'cancelled' | 'interrupted';
     command?: string;
     executionTool?: 'bolt' | 'ansible' | 'ssh';
   }
@@ -26,7 +26,7 @@
   let navigating = $state(false);
 
   // Determine if button should be disabled
-  const isDisabled = $derived(!hasPermission("execute", execution.executionTool || "bolt") || disabled || execution.status === 'running' || navigating);
+  const isDisabled = $derived(!hasPermission("execute", execution.executionTool || "bolt") || disabled || ['running', 'queued'].includes(execution.status) || navigating);
 
   // Handle re-execute click
   function handleReExecute(): void {

@@ -278,6 +278,7 @@ async function startServer(): Promise<Express> {
       executionRepository,
       integrationManager,
     );
+    await batchExecutionService.reconcileInterrupted();
     logger.info("Batch execution service initialized successfully", {
       component: "Server",
       operation: "startServer",
@@ -906,6 +907,7 @@ async function startServer(): Promise<Express> {
         operation: "shutdown",
       });
       streamingManager.cleanup();
+      batchExecutionService.stopAdmission();
       integrationManager.stopHealthCheckScheduler();
       if (entraIdCleanupInterval) {
         clearInterval(entraIdCleanupInterval);
@@ -913,7 +915,7 @@ async function startServer(): Promise<Express> {
       clearInterval(consoleCleanupInterval);
       const mcpClosed = closeMcp?.() ?? Promise.resolve();
       server.close(() => {
-        void mcpClosed.then(() => databaseService.close()).then(() => {
+        void mcpClosed.then(() => batchExecutionService.reconcileInterrupted()).then(() => databaseService.close()).then(() => {
           logger.info("Server closed", {
             component: "Server",
             operation: "shutdown",

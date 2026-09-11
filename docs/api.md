@@ -250,13 +250,37 @@ are always rejected. The read-only `GET` routes require authentication only.
 
 | Param | Description |
 |---|---|
-| `status` | `success` / `failed` / `running` / `partial` |
+| `status` | `queued` / `running` / `success` / `failed` / `partial` / `cancelled` / `interrupted` |
 | `type` | `command` / `task` / `puppet-run` / `package` / `facts` |
 | `targetNode` | Filter by node name |
 | `page` | Page number |
 | `pageSize` | Items per page |
 
 **SSE stream (`GET /api/executions/:id/stream`):** Returns `text/event-stream`. Events have `type` (`output` / `status` / `complete` / `error`) and JSON data.
+
+**Batch lifecycle:** `POST /api/executions/batch` reserves capacity for the entire
+batch and atomically persists the parent and all children before dispatching any
+provider action. HTTP 201 returns stable IDs without waiting for execution slots
+or provider completion. An oversized batch receives HTTP 429 without creating
+records or contacting providers. Children record the submitting user and tool.
+`createdAt` records admission; `startedAt` is absent until dispatch. History sorts
+and date filters use creation time, including work cancelled before dispatch.
+
+Batch cancellation, including `POST /api/executions/:id/cancel` for a batch child,
+returns `cancelledCount` for queued work and `runningCount` for dispatched work.
+Queued targets are removed from dispatch. Current execution plugins do not expose
+an abort contract, so running targets continue and retain their real outcomes.
+`cancellationRequestedAt` remains present after completion. Poll until the batch
+is terminal; a cancellation response does not mean running work has stopped.
+The status filter limits returned children, while batch counts and progress still
+cover every target. Terminal progress includes cancelled and interrupted targets.
+
+Recovery supports one application process. Shutdown stops admission; shutdown and
+startup reconciliation mark undispatched batch work `cancelled` and dispatched
+work with an unknown outcome `interrupted`. Neither is automatically replayed.
+Verify provider state before retrying interrupted work. Multi-process ownership,
+global concurrency across direct execution routes, and durable request idempotency
+are separate work; a lost admission response must not be blindly resubmitted.
 
 ---
 

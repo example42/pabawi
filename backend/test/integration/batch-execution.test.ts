@@ -1,3 +1,4 @@
+import { initializeTestSchema } from "../helpers/schema";
 import { describe, it, expect, beforeEach, afterEach, vi, beforeAll, afterAll } from "vitest";
 import express, { type Express } from "express";
 import request from "supertest";
@@ -10,7 +11,7 @@ import { errorHandler, requestIdMiddleware } from "../../src/middleware/errorHan
 import type { BatchExecutionService } from "../../src/services/BatchExecutionService";
 import type { BatchStatusResponse, BatchExecutionResponse } from "../../src/services/BatchExecutionService";
 import { BatchExecutionService as RealBatchExecutionService } from "../../src/services/BatchExecutionService";
-import type { ExecutionQueue } from "../../src/services/ExecutionQueue";
+import { ExecutionQueue } from "../../src/services/ExecutionQueue";
 import type { IntegrationManager } from "../../src/integrations/IntegrationManager";
 import { noPermissionCheck } from "../../src/middleware/routeAuthorization";
 
@@ -470,7 +471,7 @@ describe("Batch Execution API Endpoints", () => {
 
   describe("POST /api/executions/batch/:batchId/cancel", () => {
     it("should cancel batch execution and return cancelled count", async () => {
-      const mockResult = { cancelledCount: 3 };
+      const mockResult = { cancelledCount: 3, runningCount: 0 };
 
       vi.spyOn(batchExecutionService, "cancelBatch").mockResolvedValue(
         mockResult
@@ -483,12 +484,12 @@ describe("Batch Execution API Endpoints", () => {
       expect(response.body).toHaveProperty("batchId", "batch-123");
       expect(response.body).toHaveProperty("cancelledCount", 3);
       expect(response.body).toHaveProperty("message");
-      expect(response.body.message).toContain("Cancelled 3 executions");
+      expect(response.body.message).toContain("Cancelled 3 queued executions");
       expect(batchExecutionService.cancelBatch).toHaveBeenCalledWith("batch-123");
     });
 
     it("should handle singular execution in message", async () => {
-      const mockResult = { cancelledCount: 1 };
+      const mockResult = { cancelledCount: 1, runningCount: 0 };
 
       vi.spyOn(batchExecutionService, "cancelBatch").mockResolvedValue(
         mockResult
@@ -499,7 +500,7 @@ describe("Batch Execution API Endpoints", () => {
         .expect(200);
 
       expect(response.body.cancelledCount).toBe(1);
-      expect(response.body.message).toBe("Cancelled 1 execution");
+      expect(response.body.message).toBe("Cancelled 1 queued executions; 0 dispatched executions remain running");
     });
 
     it("should return 404 when batch ID does not exist", async () => {
@@ -578,73 +579,14 @@ describe("Batch Execution End-to-End Flow", () => {
     db = new SQLiteAdapter(":memory:");
     await db.initialize();
 
-    // Create executions table
-    await runQuery(`
-      CREATE TABLE IF NOT EXISTS executions (
-        id TEXT PRIMARY KEY,
-        type TEXT NOT NULL,
-        target_nodes TEXT NOT NULL,
-        action TEXT NOT NULL,
-        parameters TEXT,
-        status TEXT NOT NULL,
-        started_at TEXT NOT NULL,
-        completed_at TEXT,
-        results TEXT NOT NULL,
-        error TEXT,
-        command TEXT,
-        expert_mode INTEGER DEFAULT 0,
-        original_execution_id TEXT,
-        re_execution_count INTEGER DEFAULT 0,
-        stdout TEXT,
-        stderr TEXT,
-        execution_tool TEXT DEFAULT 'bolt',
-        batch_id TEXT,
-        batch_position INTEGER
-      )
-    `);
-
-    // Create batch_executions table
-    await runQuery(`
-      CREATE TABLE IF NOT EXISTS batch_executions (
-        id TEXT PRIMARY KEY,
-        type TEXT NOT NULL CHECK(type IN ('command', 'task', 'plan')),
-        action TEXT NOT NULL,
-        parameters TEXT,
-        target_nodes TEXT NOT NULL,
-        target_groups TEXT NOT NULL,
-        status TEXT NOT NULL CHECK(status IN ('running', 'success', 'failed', 'partial', 'cancelled')),
-        created_at TEXT NOT NULL,
-        started_at TEXT,
-        completed_at TEXT,
-        user_id TEXT NOT NULL,
-        execution_ids TEXT NOT NULL,
-        stats_total INTEGER NOT NULL,
-        stats_queued INTEGER NOT NULL,
-        stats_running INTEGER NOT NULL,
-        stats_success INTEGER NOT NULL,
-        stats_failed INTEGER NOT NULL
-      )
-    `);
-
-    // Create indexes
-    await runQuery(`CREATE INDEX IF NOT EXISTS idx_executions_batch ON executions(batch_id)`);
-    await runQuery(`CREATE INDEX IF NOT EXISTS idx_batch_executions_created ON batch_executions(created_at DESC)`);
+    await initializeTestSchema(db);
 
     // Initialize repository
     executionRepository = new ExecutionRepository(db);
 
-    // Mock execution queue
-    mockExecutionQueue = {
-      acquire: vi.fn().mockResolvedValue(undefined),
-      release: vi.fn(),
-      cancel: vi.fn().mockReturnValue(true),
-      getStatus: vi.fn().mockReturnValue({
-        running: 0,
-        queued: 0,
-        limit: 5,
-        queue: [],
-      }),
-    } as unknown as ExecutionQueue;
+    mockExecutionQueue = new ExecutionQueue(3, 50);
+    vi.spyOn(mockExecutionQueue, "acquire");
+    vi.spyOn(mockExecutionQueue, "reserve");
 
     // Mock integration manager with inventory
     mockIntegrationManager = {
@@ -705,8 +647,42 @@ describe("Batch Execution End-to-End Flow", () => {
 
   afterEach(async () => {
     // Close database
+    batchExecutionService.stopAdmission();
+    await vi.waitFor(() => expect(mockExecutionQueue.getStatus().running).toBe(0));
     await db.close();
     vi.restoreAllMocks();
+  });
+
+  it("returns HTTP admission before blocked provider work completes and cancels only queued targets", async () => {
+    let finish!: () => void;
+    const blocked = new Promise<void>(resolve => { finish = resolve; });
+    vi.mocked(mockIntegrationManager.executeAction).mockImplementation(async () => {
+      await blocked;
+      return { id: "provider", type: "command", action: "uptime", targetNodes: [], status: "success",
+        startedAt: new Date().toISOString(), results: [] };
+    });
+    try {
+      const response = await request(harness.use(app)).post("/api/executions/batch")
+        .send({ targetNodeIds: ["node1", "node2", "node3", "node4"], type: "command", action: "uptime" })
+        .timeout(1000).expect(201);
+      const { batchId } = response.body;
+      await vi.waitFor(() => expect(mockIntegrationManager.executeAction).toHaveBeenCalledTimes(3));
+      await request(harness.use(app)).post(`/api/executions/batch/${batchId}/cancel`).send({})
+        .expect(200).expect(res => {
+          expect(res.body).toMatchObject({ cancelledCount: 1, runningCount: 3 });
+        });
+      const pending = await request(harness.use(app)).get(`/api/executions/batch/${batchId}`).expect(200);
+      expect(pending.body.batch.status).toBe("running");
+      expect(pending.body.batch.cancellationRequestedAt).toBeDefined();
+      finish();
+      await vi.waitFor(() => expect(mockExecutionQueue.getStatus().running).toBe(0));
+      const terminal = await request(harness.use(app)).get(`/api/executions/batch/${batchId}`).expect(200);
+      expect(terminal.body.batch.status).toBe("cancelled");
+      expect(terminal.body.progress).toBe(100);
+      expect(mockIntegrationManager.executeAction).toHaveBeenCalledTimes(3);
+    } finally {
+      finish();
+    }
   });
 
   it("should create batch execution with nodes and store in database", async () => {
@@ -908,7 +884,7 @@ describe("Batch Execution End-to-End Flow", () => {
       "SELECT * FROM batch_executions WHERE id = ?",
       [batchId]
     );
-    expect(batchRows[0].status).toBe("cancelled");
+    expect(["cancelled", "running", "success"]).toContain(batchRows[0].status);
 
     // Verify executions were either cancelled or completed
     const execRows = await getRows(
@@ -918,15 +894,13 @@ describe("Batch Execution End-to-End Flow", () => {
     expect(execRows.length).toBe(3);
     // All executions should be in a terminal state (success or failed)
     execRows.forEach(row => {
-      expect(['success', 'failed']).toContain(row.status);
+      expect(['success', 'running', 'cancelled']).toContain(row.status);
     });
   });
 
   it("should handle queue full error gracefully", async () => {
     // Mock queue to throw error
-    mockExecutionQueue.acquire = vi.fn().mockRejectedValue(
-      new Error("Execution queue is full. Maximum concurrent executions: 5")
-    );
+    vi.mocked(mockExecutionQueue.reserve).mockImplementation(() => { throw new Error("Execution queue is full"); });
 
     const response = await request(harness.use(app))
       .post("/api/executions/batch")

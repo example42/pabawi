@@ -1,5 +1,5 @@
 <script lang="ts">
-  type Status = 'success' | 'failed' | 'running' | 'partial' | 'unchanged' | 'changed' | 'connected' | 'disconnected' | 'error' | 'pending';
+  type Status = 'queued' | 'cancelled' | 'interrupted' | 'success' | 'failed' | 'running' | 'partial' | 'unchanged' | 'changed' | 'connected' | 'disconnected' | 'error' | 'pending';
 
   interface Props {
     status: Status;
@@ -9,6 +9,9 @@
   let { status, size = 'md' }: Props = $props();
 
   const statusConfig: Record<Status, { label: string; classes: string }> = {
+    queued: { label: 'Queued', classes: 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300' },
+    cancelled: { label: 'Cancelled', classes: 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300' },
+    interrupted: { label: 'Interrupted', classes: 'bg-amber-100 text-amber-800 dark:bg-amber-900/20 dark:text-amber-300' },
     success: {
       label: 'Success',
       classes: 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400'

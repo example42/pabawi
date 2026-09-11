@@ -12,7 +12,7 @@
   import ExecutionList from '../components/ExecutionList.svelte';
   import ParallelExecutionModal from '../components/ParallelExecutionModal.svelte';
   import { router } from '../lib/router.svelte';
-  import { get } from '../lib/api';
+  import { get, post } from '../lib/api';
   import { showError, showSuccess } from '../lib/toast.svelte';
   import { ansiToHtml } from '../lib/ansiToHtml';
   import { expertMode } from '../lib/expertMode.svelte';
@@ -27,8 +27,10 @@
     targetNodes: string[];
     action: string;
     parameters?: Record<string, unknown>;
-    status: 'running' | 'success' | 'failed' | 'partial';
-    startedAt: string;
+    status: 'queued' | 'running' | 'success' | 'failed' | 'partial' | 'cancelled' | 'interrupted';
+    startedAt?: string;
+    createdAt: string;
+    cancellationRequestedAt?: string;
     completedAt?: string;
     results: NodeResult[];
     error?: string;
@@ -210,13 +212,13 @@
   }
 
   // Format timestamp
-  function formatTimestamp(timestamp: string): string {
-    return new Date(timestamp).toLocaleString();
+  function formatTimestamp(timestamp?: string): string {
+    return timestamp ? new Date(timestamp).toLocaleString() : 'Not started';
   }
 
   // Format duration - always in seconds
-  function formatDuration(startedAt: string, completedAt?: string): string {
-    if (!completedAt) {
+  function formatDuration(startedAt: string | undefined, completedAt?: string): string {
+    if (!startedAt || !completedAt) {
       return '-';
     }
 
@@ -316,12 +318,7 @@
     cancelling = true;
 
     try {
-      await fetch(`/api/executions/${executionId}/cancel`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
+      const result = await post<{ message: string }>(`/api/executions/${executionId}/cancel`, {}, { maxRetries: 0 });
 
       // Refresh execution details
       await fetchExecutionDetail(executionId);
@@ -329,7 +326,7 @@
       // Refresh the list
       await fetchExecutions();
 
-      showSuccess('Execution cancelled successfully');
+      showSuccess(result.message);
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'Failed to cancel execution';
       console.error('Error cancelling execution:', err);
@@ -478,10 +475,13 @@
             class="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
           >
             <option value="all">All Statuses</option>
+            <option value="queued">Queued</option>
             <option value="running">Running</option>
             <option value="success">Success</option>
             <option value="failed">Failed</option>
             <option value="partial">Partial</option>
+            <option value="cancelled">Cancelled</option>
+            <option value="interrupted">Interrupted</option>
           </select>
         </div>
 
@@ -914,7 +914,7 @@
             <div class="flex justify-between">
               <div class="flex gap-2">
                 <ReExecutionButton execution={selectedExecution} size="md" variant="button" />
-                {#if selectedExecution.status === 'running'}
+                {#if ['queued', 'running'].includes(selectedExecution.status) && !selectedExecution.cancellationRequestedAt}
                   <button
                     type="button"
                     class="rounded-lg border border-red-300 bg-white px-4 py-2 text-sm font-medium text-red-700 shadow-sm hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed dark:border-red-600 dark:bg-gray-700 dark:text-red-400 dark:hover:bg-red-900/20"

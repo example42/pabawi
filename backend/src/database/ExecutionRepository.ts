@@ -11,7 +11,10 @@ interface DbRow {
   action: string;
   parameters: string | null;
   status: string;
-  started_at: string;
+  started_at: string | null;
+  created_at: string;
+  cancellation_requested_at: string | null;
+  user_id: string | null;
   completed_at: string | null;
   results: string;
   error: string | null;
@@ -41,7 +44,7 @@ export type ExecutionTool = "bolt" | "ansible" | "ssh";
 /**
  * Execution status
  */
-export type ExecutionStatus = "running" | "success" | "failed" | "partial";
+export type ExecutionStatus = "queued" | "running" | "success" | "failed" | "partial" | "cancelled" | "interrupted";
 
 /**
  * Node execution result
@@ -69,7 +72,10 @@ export interface ExecutionRecord {
   action: string;
   parameters?: Record<string, unknown>;
   status: ExecutionStatus;
-  startedAt: string;
+  startedAt?: string;
+  createdAt: string;
+  cancellationRequestedAt?: string;
+  userId?: string;
   completedAt?: string;
   results: NodeResult[];
   error?: string;
@@ -94,6 +100,8 @@ export interface ExecutionFilters {
   startDate?: string;
   endDate?: string;
 }
+
+export type NewExecution = Omit<ExecutionRecord, "id" | "createdAt"> & { createdAt?: string };
 
 /**
  * Pagination parameters
@@ -127,11 +135,11 @@ export class ExecutionRepository {
   /**
    * Create a new execution record
    */
-  public async create(execution: Omit<ExecutionRecord, "id">): Promise<string> {
-    const id = randomUUID();
+  public async create(execution: NewExecution, id: string = randomUUID()): Promise<string> {
     const record: ExecutionRecord = {
       id,
       ...execution,
+      createdAt: execution.createdAt ?? execution.startedAt ?? new Date().toISOString(),
     };
 
     const params = [
@@ -141,7 +149,7 @@ export class ExecutionRepository {
       record.action,
       record.parameters ? JSON.stringify(record.parameters) : null,
       record.status,
-      record.startedAt,
+      record.startedAt ?? null,
       record.completedAt ?? null,
       JSON.stringify(record.results),
       record.error ?? null,
@@ -154,6 +162,9 @@ export class ExecutionRepository {
       record.executionTool ?? "bolt",
       record.batchId ?? null,
       record.batchPosition ?? null,
+      record.createdAt,
+      record.cancellationRequestedAt ?? null,
+      record.userId ?? null,
     ];
 
     const placeholders = params.map(() => "?").join(", ");
@@ -162,7 +173,7 @@ export class ExecutionRepository {
         id, type, target_nodes, action, parameters, status,
         started_at, completed_at, results, error, command, expert_mode,
         original_execution_id, re_execution_count, stdout, stderr, execution_tool,
-        batch_id, batch_position
+        batch_id, batch_position, created_at, cancellation_requested_at, user_id
       ) VALUES (${placeholders})
     `;
 
@@ -185,6 +196,8 @@ export class ExecutionRepository {
   ): Promise<void> {
     const allowedFields = [
       "status",
+      "startedAt",
+      "cancellationRequestedAt",
       "completedAt",
       "results",
       "error",
@@ -291,12 +304,12 @@ export class ExecutionRepository {
     }
 
     if (filters.startDate) {
-      conditions.push("started_at >= ?");
+      conditions.push("created_at >= ?");
       params.push(filters.startDate);
     }
 
     if (filters.endDate) {
-      conditions.push("started_at <= ?");
+      conditions.push("created_at <= ?");
       params.push(filters.endDate);
     }
 
@@ -307,7 +320,7 @@ export class ExecutionRepository {
     const sql = `
       SELECT * FROM executions
       ${whereClause}
-      ORDER BY started_at DESC
+      ORDER BY created_at DESC
       LIMIT ? OFFSET ?
     `;
 
@@ -356,7 +369,7 @@ export class ExecutionRepository {
     const sql = `
       SELECT * FROM executions
       WHERE original_execution_id = ?
-      ORDER BY started_at DESC
+      ORDER BY created_at DESC
     `;
 
     try {
@@ -382,7 +395,7 @@ export class ExecutionRepository {
    */
   public async createReExecution(
     originalExecutionId: string,
-    execution: Omit<ExecutionRecord, "id" | "originalExecutionId">,
+    execution: Omit<NewExecution, "originalExecutionId">,
   ): Promise<string> {
     return this.db.withTransaction(async () => {
       const original = await this.db.queryOne<{ id: string }>(
@@ -454,7 +467,10 @@ export class ExecutionRepository {
         ? (JSON.parse(row.parameters) as Record<string, unknown>)
         : undefined,
       status: row.status as ExecutionStatus,
-      startedAt: row.started_at,
+      startedAt: row.started_at ?? undefined,
+      createdAt: row.created_at,
+      cancellationRequestedAt: row.cancellation_requested_at ?? undefined,
+      userId: row.user_id ?? undefined,
       completedAt: row.completed_at ?? undefined,
       results: JSON.parse(row.results) as NodeResult[],
       error: row.error ?? undefined,

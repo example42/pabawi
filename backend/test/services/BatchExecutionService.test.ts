@@ -1,50 +1,13 @@
+import { initializeTestSchema } from "../helpers/schema";
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { SQLiteAdapter } from "../../src/database/SQLiteAdapter";
 import type { DatabaseAdapter } from "../../src/database/DatabaseAdapter";
 import { BatchExecutionService } from "../../src/services/BatchExecutionService";
-import type { ExecutionQueue } from "../../src/services/ExecutionQueue";
-import type { ExecutionRepository } from "../../src/database/ExecutionRepository";
+import { ExecutionQueue } from "../../src/services/ExecutionQueue";
+import { ExecutionRepository } from "../../src/database/ExecutionRepository";
 import type { IntegrationManager } from "../../src/integrations/IntegrationManager";
 
-async function createSchema(db: DatabaseAdapter): Promise<void> {
-  await db.execute(`
-    CREATE TABLE batch_executions (
-      id TEXT PRIMARY KEY,
-      type TEXT NOT NULL,
-      action TEXT NOT NULL,
-      parameters TEXT,
-      target_nodes TEXT NOT NULL,
-      target_groups TEXT NOT NULL,
-      status TEXT NOT NULL,
-      created_at TEXT NOT NULL,
-      started_at TEXT,
-      completed_at TEXT,
-      user_id TEXT NOT NULL,
-      execution_ids TEXT NOT NULL,
-      stats_total INTEGER NOT NULL,
-      stats_queued INTEGER NOT NULL,
-      stats_running INTEGER NOT NULL,
-      stats_success INTEGER NOT NULL,
-      stats_failed INTEGER NOT NULL
-    )
-  `);
-  await db.execute(`
-    CREATE TABLE executions (
-      id TEXT PRIMARY KEY,
-      type TEXT NOT NULL,
-      target_nodes TEXT NOT NULL,
-      action TEXT NOT NULL,
-      parameters TEXT,
-      status TEXT NOT NULL,
-      started_at TEXT NOT NULL,
-      completed_at TEXT,
-      results TEXT NOT NULL,
-      batch_id TEXT,
-      batch_position INTEGER,
-      error TEXT
-    )
-  `);
-}
+async function createSchema(db: DatabaseAdapter): Promise<void> { await initializeTestSchema(db); }
 
 async function insertBatch(db: DatabaseAdapter, batchId: string, overrides: Record<string, unknown> = {}): Promise<void> {
   const defaults = {
@@ -409,18 +372,11 @@ describe("BatchExecutionService - createBatch", () => {
     await db.initialize();
     await createSchema(db);
 
-    mockExecutionQueue = {
-      acquire: vi.fn().mockResolvedValue(undefined),
-      release: vi.fn(),
-    } as unknown as ExecutionQueue;
-
-    mockExecutionRepository = {
-      create: vi.fn().mockImplementation(async () => {
-        const { randomUUID } = await import("crypto");
-        return randomUUID();
-      }),
-      update: vi.fn().mockResolvedValue(undefined),
-    } as unknown as ExecutionRepository;
+    mockExecutionQueue = new ExecutionQueue(3, 50);
+    vi.spyOn(mockExecutionQueue, "acquire");
+    vi.spyOn(mockExecutionQueue, "reserve");
+    mockExecutionRepository = new ExecutionRepository(db);
+    vi.spyOn(mockExecutionRepository, "create");
 
     mockIntegrationManager = {
       getAggregatedInventory: vi.fn().mockResolvedValue({
@@ -442,6 +398,8 @@ describe("BatchExecutionService - createBatch", () => {
   });
 
   afterEach(async () => {
+    service.stopAdmission();
+    await vi.waitFor(() => expect(mockExecutionQueue.getStatus().running).toBe(0));
     await db.close();
   });
 
@@ -451,7 +409,7 @@ describe("BatchExecutionService - createBatch", () => {
     expect(result.executionIds).toHaveLength(2);
     expect(result.targetCount).toBe(2);
     expect(result.expandedNodeIds).toEqual(["node1", "node2"]);
-    expect(mockExecutionQueue.acquire).toHaveBeenCalledTimes(2);
+    expect(mockExecutionQueue.reserve).toHaveBeenCalledTimes(1);
     expect(mockExecutionRepository.create).toHaveBeenCalledTimes(2);
   });
 
@@ -486,7 +444,7 @@ describe("BatchExecutionService - createBatch", () => {
     expect(result.executionIds).toHaveLength(1);
     expect(mockExecutionRepository.create).toHaveBeenCalledWith(expect.objectContaining({
       parameters: { package: "nginx", version: "latest" },
-    }));
+    }), expect.any(String));
   });
 
   it("should throw error for invalid node IDs", async () => {
@@ -495,17 +453,9 @@ describe("BatchExecutionService - createBatch", () => {
   });
 
   it("should handle execution queue full error", async () => {
-    let acquireCount = 0;
-    vi.mocked(mockExecutionQueue.acquire).mockImplementation(async () => {
-      acquireCount++;
-      if (acquireCount === 2) {
-        const error = new Error("Queue is full");
-        error.name = "ExecutionQueueFullError";
-        throw error;
-      }
-    });
+    vi.mocked(mockExecutionQueue.reserve).mockImplementation(() => { throw new Error("Execution queue is full"); });
     await expect(service.createBatch({ targetNodeIds: ["node1", "node2"], type: "command", action: "uptime" }, "user1"))
-      .rejects.toThrow("Failed to enqueue execution for node node2");
+      .rejects.toThrow("Execution queue is full");
   });
 
   it("should create batch record in database with correct stats", async () => {
@@ -514,7 +464,7 @@ describe("BatchExecutionService - createBatch", () => {
     expect(batchRow).toBeDefined();
     expect(batchRow.type).toBe("command");
     expect(batchRow.action).toBe("uptime");
-    expect(batchRow.status).toBe("running");
+    expect(batchRow.status).toBe("queued");
     expect(batchRow.user_id).toBe("user1");
     expect(batchRow.stats_total).toBe(3);
     expect(batchRow.stats_queued).toBe(3);
@@ -566,19 +516,19 @@ describe("BatchExecutionService - cancelBatch", () => {
     }
 
     const result = await service.cancelBatch(batchId);
-    expect(result.cancelledCount).toBe(3);
+    expect(result).toEqual({ cancelledCount: 0, runningCount: 3 });
 
     const updatedExecutions = await db.query<any>("SELECT * FROM executions WHERE batch_id = ?", [batchId]);
     expect(updatedExecutions).toHaveLength(3);
     for (const exec of updatedExecutions) {
-      expect(exec.status).toBe("failed");
-      expect(exec.error).toBe("Cancelled by user");
-      expect(exec.completed_at).toBeTruthy();
+      expect(exec.status).toBe("running");
+      expect(exec.cancellation_requested_at).toBeTruthy();
+      expect(exec.completed_at).toBeNull();
     }
 
     const updatedBatch = await db.queryOne<any>("SELECT * FROM batch_executions WHERE id = ?", [batchId]);
-    expect(updatedBatch.status).toBe("cancelled");
-    expect(updatedBatch.completed_at).toBeTruthy();
+    expect(updatedBatch.status).toBe("running");
+    expect(updatedBatch.completed_at).toBeNull();
   });
 
   it("should only cancel running executions, not completed ones", async () => {
@@ -590,7 +540,7 @@ describe("BatchExecutionService - cancelBatch", () => {
     await insertExecution(db, { id: "exec3", nodeId: "node3", status: "running", startedAt: "2024-01-01T10:00:00Z", completedAt: null, results: JSON.stringify([]) }, batchId, 2);
 
     const result = await service.cancelBatch(batchId);
-    expect(result.cancelledCount).toBe(2);
+    expect(result).toEqual({ cancelledCount: 0, runningCount: 2 });
 
     const successExecution = await db.queryOne<any>("SELECT * FROM executions WHERE id = ?", ["exec1"]);
     expect(successExecution.status).toBe("success");
@@ -621,6 +571,6 @@ describe("BatchExecutionService - cancelBatch", () => {
     expect(result.cancelledCount).toBe(0);
 
     const updatedBatch = await db.queryOne<any>("SELECT * FROM batch_executions WHERE id = ?", [batchId]);
-    expect(updatedBatch.status).toBe("cancelled");
+    expect(updatedBatch.status).toBe("success");
   });
 });
