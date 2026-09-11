@@ -195,6 +195,11 @@ export interface ApiResponse<T> {
 }
 
 export interface RetryOptions {
+  /**
+   * Transport retry budget. Omit to take the method-derived default: safe
+   * (idempotent) methods retry, non-idempotent ones do not unless the request
+   * carries an `idempotencyKey`. See {@link defaultMaxRetriesFor}.
+   */
   maxRetries?: number;
   retryDelay?: number;
   retryableStatuses?: number[];
@@ -202,10 +207,23 @@ export interface RetryOptions {
   timeout?: number;
   signal?: AbortSignal;
   showRetryNotifications?: boolean; // New option to control retry notifications
+  /**
+   * Durable idempotency key sent as `Idempotency-Key`. Generate it once per
+   * user-initiated submission with {@link newIdempotencyKey}, before the first
+   * attempt, and never inside a retry loop: a key regenerated per attempt
+   * gives no protection at all. Supported by `POST /api/executions/batch` and
+   * `POST /api/puppet-run`; other routes ignore the header.
+   */
+  idempotencyKey?: string;
 }
 
-const DEFAULT_RETRY_OPTIONS: RetryOptions = {
-  maxRetries: 3,
+/** Retry budget for requests whose repetition cannot duplicate server work. */
+const SAFE_METHOD_RETRIES = 3;
+
+/** HTTP methods that can be replayed without duplicating server-side effects. */
+const IDEMPOTENT_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
+
+const DEFAULT_RETRY_OPTIONS: Omit<RetryOptions, 'maxRetries'> = {
   retryDelay: 1000,
   retryableStatuses: [408, 429, 500, 502, 503, 504],
   onRetry: () => {
@@ -215,6 +233,37 @@ const DEFAULT_RETRY_OPTIONS: RetryOptions = {
   signal: undefined,
   showRetryNotifications: true, // Show retry notifications by default
 };
+
+/**
+ * Default transport retry budget for a request.
+ *
+ * A lost response to a non-idempotent request is indistinguishable from a lost
+ * request, so replaying it can duplicate infrastructure work. Such methods get
+ * no transport retry unless the caller supplies a durable idempotency key, which
+ * lets the server collapse the replay into the original submission.
+ */
+export function defaultMaxRetriesFor(
+  method: string | undefined,
+  idempotencyKey: string | undefined,
+): number {
+  const normalised = (method ?? 'GET').toUpperCase();
+  if (IDEMPOTENT_METHODS.has(normalised)) return SAFE_METHOD_RETRIES;
+  return idempotencyKey ? SAFE_METHOD_RETRIES : 0;
+}
+
+/**
+ * Generate an idempotency key for one user-initiated submission.
+ *
+ * Call this at the call site before the first attempt and reuse the same value
+ * for every transport retry of that submission. A fresh click is a fresh
+ * intent and needs a fresh key.
+ */
+export function newIdempotencyKey(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 14)}`;
+}
 
 /**
  * Sleep for specified milliseconds
@@ -334,7 +383,9 @@ export async function fetchWithRetry<T = unknown>(
   retryOptions?: RetryOptions
 ): Promise<T> {
   // Merge options with defaults, ensuring required fields are present
-  const maxRetries = retryOptions?.maxRetries ?? DEFAULT_RETRY_OPTIONS.maxRetries ?? 3;
+  const idempotencyKey = retryOptions?.idempotencyKey;
+  const maxRetries = retryOptions?.maxRetries
+    ?? defaultMaxRetriesFor(options?.method, idempotencyKey);
   const retryDelay = retryOptions?.retryDelay ?? DEFAULT_RETRY_OPTIONS.retryDelay ?? 1000;
   const retryableStatuses = retryOptions?.retryableStatuses ?? DEFAULT_RETRY_OPTIONS.retryableStatuses ?? [408, 429, 500, 502, 503, 504];
   const onRetry = retryOptions?.onRetry ?? DEFAULT_RETRY_OPTIONS.onRetry ?? ((): void => {
@@ -367,6 +418,11 @@ export async function fetchWithRetry<T = unknown>(
   // Add correlation ID header
   headers.set('X-Correlation-ID', correlationId);
 
+  // Durable idempotency key, stable across every attempt of this call
+  if (idempotencyKey) {
+    headers.set('Idempotency-Key', idempotencyKey);
+  }
+
   // Add authentication header if user is authenticated (Requirement: 5.1, 19.2)
   const authHeader = authManager.getAuthHeader();
   if (authHeader) {
@@ -393,8 +449,16 @@ export async function fetchWithRetry<T = unknown>(
     signal: requestSignal,
   };
 
+  // `attempt` counts transport retries only. An authenticated replay after a
+  // successful token refresh is not a retry: it is the first authorized send of
+  // this request, so it must not consume the budget (a zero-retry mutation still
+  // gets exactly one replay). The one-shot flag is call-scoped so a server that
+  // keeps answering 401 cannot loop here.
+  let attempt = 0;
+  let authReplayed = false;
+
   try {
-    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    while (attempt <= maxRetries) {
       try {
         const fetchStartTime = performance.now();
         const response = await fetch(url, requestOptions);
@@ -439,7 +503,8 @@ export async function fetchWithRetry<T = unknown>(
         }
 
         // Handle 401 Unauthorized - attempt token refresh (Requirement: 19.2, 19.3)
-        if (response.status === 401 && authManager.isAuthenticated && attempt === 0) {
+        if (response.status === 401 && authManager.isAuthenticated && !authReplayed) {
+          authReplayed = true;
           logger.info('API', 'fetch', 'Received 401, attempting token refresh');
 
           const refreshSuccess = await authManager.refreshAccessToken();
@@ -451,9 +516,9 @@ export async function fetchWithRetry<T = unknown>(
               headers.set('Authorization', newAuthHeader);
             }
 
-            logger.info('API', 'fetch', 'Token refreshed, retrying request');
+            logger.info('API', 'fetch', 'Token refreshed, replaying request');
 
-            // Retry the request with new token (don't count as a retry attempt)
+            // Replay with the new token without consuming the retry budget
             continue;
           } else {
             // Token refresh failed, user needs to re-login
@@ -500,6 +565,7 @@ export async function fetchWithRetry<T = unknown>(
           }
 
           await sleep(retryDelay * (attempt + 1)); // Exponential backoff
+          attempt++;
           continue;
         }
 
@@ -548,6 +614,7 @@ export async function fetchWithRetry<T = unknown>(
           }
 
           await sleep(retryDelay * (attempt + 1)); // Exponential backoff
+          attempt++;
           continue;
         }
 

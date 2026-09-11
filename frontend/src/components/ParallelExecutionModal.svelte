@@ -7,7 +7,7 @@
   import ExecutePlaybookForm from './ExecutePlaybookForm.svelte';
   import ExecuteTaskForm from './ExecuteTaskForm.svelte';
   import RunPuppetForm from './RunPuppetForm.svelte';
-  import { get, post } from '../lib/api';
+  import { get, newIdempotencyKey, post } from '../lib/api';
 
   interface Node {
     id: string;
@@ -523,6 +523,11 @@
     loading = true;
     error = null;
 
+    // One key per submission, generated before the request goes out, so a lost
+    // response can be resent without starting the action a second time. A fresh
+    // click is a fresh intent and gets a fresh key.
+    const idempotencyKey = newIdempotencyKey();
+
     try {
       const batchType = mapActionTypeToBatchType(selectedAction);
 
@@ -644,7 +649,8 @@
 
         const response = await post<{ executionIds: string[]; targetCount: number }>(
           '/api/puppet-run',
-          puppetPayload
+          puppetPayload,
+          { idempotencyKey }
         );
 
         console.log('[ParallelExecutionModal] Puppet run started:', response.executionIds.length, 'Targets:', response.targetCount);
@@ -656,7 +662,8 @@
         // Send POST request to batch execution endpoint
         const response = await post<{ batchId: string; executionIds: string[]; targetCount: number; expandedNodeIds: string[] }>(
           '/api/executions/batch',
-          requestBody
+          requestBody,
+          { idempotencyKey }
         );
 
         // Success - display batch ID and call onSuccess callback

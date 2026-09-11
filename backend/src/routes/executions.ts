@@ -13,7 +13,15 @@ import type { BatchExecutionService } from "../services/BatchExecutionService";
 import { type DIContainer, createDefaultContainer } from "../container/DIContainer";
 import type { PermissionMiddlewareFactory } from "../middleware/routeAuthorization";
 import type { BoltCommandWhitelistService } from "../validation/CommandWhitelistService";
+import {
+  IdempotencyConflictError,
+  IdempotencyKeyError,
+  RequestIdempotencyService,
+} from "../services/RequestIdempotencyService";
 import { BoltCommandNotAllowedError } from "../validation/CommandWhitelistService";
+
+/** Route identity the batch admission key is scoped to. */
+const BATCH_IDEMPOTENCY_SCOPE = "POST /api/executions/batch";
 
 /**
  * Request validation schemas
@@ -65,6 +73,11 @@ const BatchExecutionRequestSchema = z.object({
  * @param commandWhitelistService - Optional whitelist validator. When supplied,
  *   `type: "command"` batch/re-execute requests are validated against the same
  *   whitelist (and shell-metacharacter block) that guards the single-node route.
+ * @param requestIdempotency - Optional durable idempotency store. When supplied,
+ *   a batch submission carrying `Idempotency-Key` is replayable: the key and the
+ *   batch commit together, so a lost response can be resent without admitting a
+ *   second batch. Without it the header is ignored and submissions stay
+ *   single-shot.
  */
 export function createExecutionsRouter(
   executionRepository: ExecutionRepository,
@@ -73,6 +86,7 @@ export function createExecutionsRouter(
   batchExecutionService?: BatchExecutionService,
   container: DIContainer = createDefaultContainer(),
   commandWhitelistService?: BoltCommandWhitelistService,
+  requestIdempotency?: RequestIdempotencyService,
 ): Router {
   const router = Router();
   const logger = container.resolve("logger");
@@ -1771,10 +1785,26 @@ export function createExecutionsRouter(
           },
         });
 
+        // Durable idempotency: a client that lost this response can resend the
+        // same submission with the same key and get the original batch back
+        // instead of admitting a second one. Without a key the submission is
+        // single-shot, which is why the transport must not retry it.
+        const suppliedKey = req.get("Idempotency-Key");
+        const idempotency = suppliedKey !== undefined && requestIdempotency
+          ? {
+            service: requestIdempotency,
+            key: RequestIdempotencyService.validateKey(suppliedKey),
+            scope: BATCH_IDEMPOTENCY_SCOPE,
+            fingerprint: RequestIdempotencyService.fingerprint(BATCH_IDEMPOTENCY_SCOPE, batchRequest),
+            status: 201,
+          }
+          : undefined;
+
         // Create batch execution
         const response = await batchExecutionService.createBatch(
           batchRequest,
           userId,
+          idempotency,
         );
 
         logger.info(
@@ -1808,6 +1838,28 @@ export function createExecutionsRouter(
         }
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
+
+        // An unusable or reused key is the client's to correct; neither admits work.
+        if (error instanceof IdempotencyKeyError) {
+          logger.warn("Rejected batch submission with an unusable idempotency key", {
+            component: "ExecutionsRouter",
+            operation: "createBatch",
+          });
+          res.status(400).json({
+            error: { code: "INVALID_IDEMPOTENCY_KEY", message: errorMessage },
+          });
+          return;
+        }
+        if (error instanceof IdempotencyConflictError) {
+          logger.warn("Rejected batch submission reusing an idempotency key", {
+            component: "ExecutionsRouter",
+            operation: "createBatch",
+          });
+          res.status(409).json({
+            error: { code: "IDEMPOTENCY_KEY_CONFLICT", message: errorMessage },
+          });
+          return;
+        }
 
         // Check for queue full error
         if (errorMessage.includes("queue") && errorMessage.includes("full")) {

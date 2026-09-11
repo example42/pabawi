@@ -345,6 +345,58 @@ deployment was exercised. Multi-process ownership and direct-route concurrency
 remain outside this batch contract; A14 retry/idempotency is the next execution
 correctness action.
 
+**A14 / I05, 2026-09-11: implemented and verified.** The transport retry budget is
+derived from the request method: safe methods retry, non-idempotent ones do not
+unless the request carries a durable idempotency key. Explicit budgets still win,
+and no mutation caller now relies on an unsafe default.
+
+An authenticated replay after a token refresh is no longer a retry. It is a
+call-scoped one-shot, so a zero-retry mutation performs exactly one replay with
+the refreshed token, a refused replay surfaces the server's own error instead of
+a generic retry-exhausted message, and the retry budget of the replayed request
+stays intact.
+
+Batch and multi-node Puppet run admission accept `Idempotency-Key`. The key and
+the work it admits are claimed in one transaction through a conflict-tolerant
+insert, so a lost response can be resent without admitting a second batch or a
+second set of runs, a failed admission releases the key, and a replay dispatches
+nothing and returns the original identifiers. Keys are scoped per user and per
+route and carry a request fingerprint, so a reused key is refused rather than
+answered with another submission's outcome. Replayed submissions release the
+queue capacity they reserved. Puppet run records are now persisted together
+before any provider work starts, at the cost of holding SQLite's exclusive
+connection for the whole target list; that route still has no target limit and
+still bypasses the execution queue, so it cannot reject an oversized submission
+the way batch admission does. Migration 030 adds the store. Startup purges keys
+older than 24 hours, so a long-running process keeps its keys until the next
+restart rather than expiring them on a timer.
+
+A14 validation: 3,626 backend tests passed (56 skipped, one todo) and all 1,015
+frontend tests passed. The 17 new service and HTTP idempotency tests pass on
+SQLite and on a disposable PostgreSQL 15 database, including concurrent duplicate
+submissions, rollback key release, cross-user isolation, fingerprint conflicts and
+retention. Seven of the nine HTTP contracts and nine of the twelve transport tests
+fail against the previous code, including the reported zero-retry authenticated
+replay defect, which reproduces as `Request failed after maximum retries`.
+`ON CONFLICT DO NOTHING` was verified on both dialects to report zero affected
+rows, to leave the surrounding transaction usable, and to wait for a concurrent
+submission to commit or roll back, so no dialect-specific unique-violation
+discriminator is needed. Backend and frontend TypeScript, backend and frontend
+lint and `git diff --check` passed; a stale `AggregatedResultsView` test fixture
+that broke the frontend typecheck under A13 was repaired at the same time.
+
+Durable keys cover the two admission routes named in the finding. The provisioning
+routes (AWS, Azure, Proxmox) and every other mutation are protected by the
+zero-retry default alone; every explicit retry budget in those clients was audited
+and already applies only to reads. Batch group expansion and target validation
+still run before the key is claimed, so a resend whose targets have since left
+inventory receives `INVALID_NODES` instead of the batch it already holds; the
+response depends on the expanded list, so the order cannot simply be swapped.
+Multi-process key ownership, direct-route admission, shared admission for the
+Puppet run route and the untracked dispatch of its workers remain outside this
+change and belong with I11. No live provider, production database, publication or deployment was
+exercised. A15 console provider and broker wiring is the next action.
+
 ## Executive assessment
 
 The principal risk is inconsistent enforcement at trust boundaries. Authentication and RBAC infrastructure exist, but several infrastructure-changing routes enforce authentication without authorization. AWS, Azure, Proxmox and Puppetserver handlers can therefore exercise server-held credentials on behalf of users who lack the corresponding permissions. Hiera data and execution output have related read-access gaps. This is especially serious where self-registration is enabled.
@@ -597,6 +649,9 @@ Cancellation at lines 476-510 only updates database rows. It does not remove que
 **Acceptance:** a batch of N+1 blocked jobs returns an ID before any completes; partial admission cannot create unexplained orphan actions. Cancelled queued targets never run. A late completion cannot silently erase cancellation state. Restart reconciliation accounts for interrupted work.
 
 ### I05. P1: Mutation retry policy can duplicate infrastructure execution
+
+**Resolved by A14 on 2026-09-11.** The following describes the original finding;
+implementation and validation are recorded above.
 
 **Source-confirmed.** [ParallelExecutionModal.svelte](../../frontend/src/components/ParallelExecutionModal.svelte), lines 645 and 657, submits Puppet runs and batches with default retries. [api.ts](../../frontend/src/lib/api.ts), lines 343 and 477 onward, allows three retries, including network failures. Other callers deliberately disable retries, demonstrating inconsistent semantics rather than an unavoidable transport limitation.
 

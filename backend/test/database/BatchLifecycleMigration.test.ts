@@ -41,7 +41,8 @@ for (const dialect of ['sqlite', 'postgres'] as const) {
         const original = await db.queryOne<Record<string, unknown>>("SELECT * FROM executions WHERE id = 'child'");
         const batch = await db.queryOne<Record<string, unknown>>("SELECT * FROM batch_executions WHERE id = 'batch'");
         const runner = new MigrationRunner(db, migrations);
-        expect(await runner.runPendingMigrations()).toBe(1);
+        // Every migration from 029 onwards has to leave the populated history below intact.
+        expect(await runner.runPendingMigrations()).toBe(2);
         expect(await db.queryOne("SELECT * FROM executions WHERE id = 'child'")).toMatchObject({
           ...original, created_at: original!.started_at, user_id: 'actor', cancellation_requested_at: null,
         });

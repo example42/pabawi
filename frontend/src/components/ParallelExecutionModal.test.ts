@@ -7,7 +7,13 @@ import * as api from '../lib/api';
 vi.mock('../lib/api', () => ({
   get: vi.fn(),
   post: vi.fn(),
+  // Each submission carries a durable key so a lost response can be resent
+  // without starting the action twice. Fixed here so assertions can name it.
+  newIdempotencyKey: vi.fn(() => 'submission-key'),
 }));
+
+/** Retry options every submission is expected to carry. */
+const submissionOptions = { idempotencyKey: 'submission-key' };
 
 describe('ParallelExecutionModal Component', () => {
   const mockOnClose = vi.fn();
@@ -1505,7 +1511,7 @@ describe('ParallelExecutionModal Component', () => {
           action: 'uptime',
           targetNodeIds: ['node1'],
           tool: 'ansible',
-        });
+        }, submissionOptions);
       });
     });
 
@@ -1802,7 +1808,7 @@ describe('ParallelExecutionModal Component', () => {
           targetNodeIds: ['node3'],
           targetGroupIds: ['group1'],
           tool: 'bolt',
-        });
+        }, submissionOptions);
       });
     });
 
@@ -2628,7 +2634,7 @@ describe('ParallelExecutionModal Component', () => {
           action: 'uptime',
           targetNodeIds: ['node1'],
           tool: 'bolt',
-        });
+        }, submissionOptions);
       });
     });
 
@@ -2760,7 +2766,7 @@ describe('ParallelExecutionModal Component', () => {
           parameters: expect.objectContaining({
             packageName: 'nginx',
           }),
-        }));
+        }), submissionOptions);
       });
     });
 
@@ -2817,7 +2823,7 @@ describe('ParallelExecutionModal Component', () => {
           targetNodeIds: ['node3'],
           targetGroupIds: ['group1'],
           tool: 'bolt',
-        });
+        }, submissionOptions);
       });
     });
 
@@ -2957,7 +2963,7 @@ describe('ParallelExecutionModal Component', () => {
           action: 'uptime',
           targetNodeIds: ['node1', 'node2'],
           tool: 'bolt',
-        });
+        }, submissionOptions);
       });
     });
 
@@ -3010,7 +3016,7 @@ describe('ParallelExecutionModal Component', () => {
           action: 'uptime',
           targetGroupIds: ['group1'],
           tool: 'bolt',
-        });
+        }, submissionOptions);
       });
     });
 
@@ -3060,7 +3066,7 @@ describe('ParallelExecutionModal Component', () => {
           targetNodeIds: ['node1'],
           parameters: { timeout: 30 },
           tool: 'bolt',
-        });
+        }, submissionOptions);
       });
     });
 

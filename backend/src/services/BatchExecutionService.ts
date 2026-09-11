@@ -3,6 +3,7 @@ import type { DatabaseAdapter } from "../database/DatabaseAdapter";
 import type { ExecutionQueue, QueuedExecution } from "./ExecutionQueue";
 import type { ExecutionRepository, NodeResult } from "../database/ExecutionRepository";
 import type { IntegrationManager } from "../integrations/IntegrationManager";
+import type { RequestIdempotencyService } from "./RequestIdempotencyService";
 import { LoggerService } from "./LoggerService";
 
 /**
@@ -195,6 +196,23 @@ export class BatchLifecycleError extends Error {
   constructor(message: string) { super(message); this.name = "BatchLifecycleError"; }
 }
 
+/** Idempotency context for one batch submission, from the route that owns it. */
+export interface BatchIdempotency {
+  service: RequestIdempotencyService;
+
+  /** Validated client-supplied key. */
+  key: string;
+
+  /** Route identity the key is scoped to. */
+  scope: string;
+
+  /** Fingerprint of the normalised request. */
+  fingerprint: string;
+
+  /** Status the route answers with, stored so every replay matches the first. */
+  status: number;
+}
+
 export interface BatchCancellation {
   cancelledCount: number;
   runningCount: number;
@@ -221,7 +239,7 @@ export function summarizeBatch(rows: { status: string }[], cancellationRequested
 export class BatchExecutionService {
   private readonly logger = new LoggerService();
   private readonly pending = new Set<Promise<void>>();
-  private readonly admissions = new Set<Promise<void>>();
+  private readonly admissions = new Set<Promise<unknown>>();
   private stopping = false;
 
   constructor(
@@ -237,13 +255,25 @@ export class BatchExecutionService {
    * Expands groups to nodes, validates targets, creates batch and individual
    * execution records, and enqueues all executions.
    *
+   * When `idempotency` is supplied, the key is claimed in the same transaction
+   * as the batch. A replayed submission returns the identifiers the first one
+   * was given and dispatches nothing, so a lost response cannot run the action
+   * twice. Identifiers are generated before the transaction precisely so the
+   * promised response is known when the key is claimed.
+   *
    * **Validates: Requirements 5.3, 5.4, 5.5, 5.6, 5.7**
    *
    * @param request - Batch execution request
    * @param userId - User initiating the batch
+   * @param idempotency - Key and request fingerprint for a replayable submission
    * @returns Batch execution response with IDs and target count
+   * @throws IdempotencyConflictError if the key names a different request
    */
-  async createBatch(request: BatchExecutionRequest, userId: string): Promise<BatchExecutionResponse> {
+  async createBatch(
+    request: BatchExecutionRequest,
+    userId: string,
+    idempotency?: BatchIdempotency,
+  ): Promise<BatchExecutionResponse> {
     const groupNodeIds = await this.expandGroups(request.targetGroupIds ?? []);
     const allNodeIds = this.deduplicateNodes([...(request.targetNodeIds ?? []), ...groupNodeIds]);
     if (allNodeIds.length === 0) throw new BatchLifecycleError("Invalid node IDs: batch has no targets");
@@ -256,9 +286,19 @@ export class BatchExecutionService {
       id: randomUUID(), nodeId, type: request.type, action: request.action, enqueuedAt: new Date(createdAt),
     }));
     const executionIds = entries.map(entry => entry.id);
+    const response: BatchExecutionResponse = {
+      batchId, executionIds, targetCount: allNodeIds.length, expandedNodeIds: allNodeIds,
+    };
     this.executionQueue.reserve(entries);
     const admission = this.db.withTransaction(async () => {
       if (this.isStopping()) throw new BatchLifecycleError("Batch admission is stopped");
+      if (idempotency) {
+        const outcome = await idempotency.service.claim(
+          { userId, key: idempotency.key, scope: idempotency.scope, fingerprint: idempotency.fingerprint },
+          { status: idempotency.status, body: response },
+        );
+        if (!outcome.claimed) return outcome.replay.body as BatchExecutionResponse;
+      }
       await this.db.execute(`INSERT INTO batch_executions (
         id, type, action, parameters, target_nodes, target_groups, status, created_at,
         user_id, execution_ids, stats_total, stats_queued, stats_running, stats_success, stats_failed
@@ -274,15 +314,25 @@ export class BatchExecutionService {
           batchId, batchPosition: position, userId,
         }, entry.id);
       }
+      return undefined;
     });
     this.admissions.add(admission);
+    let replay: BatchExecutionResponse | undefined;
     try {
-      await admission;
+      replay = await admission;
     } catch (error) {
       this.executionQueue.releaseReservations(executionIds);
       throw error;
     } finally {
       this.admissions.delete(admission);
+    }
+
+    // A replayed submission dispatches nothing and owns no capacity: the
+    // original admission already holds both, and releasing the reservations
+    // this call made is what keeps a retried submission from leaking slots.
+    if (replay) {
+      this.executionQueue.releaseReservations(executionIds);
+      return replay;
     }
 
     // Schedule outside the transaction and HTTP admission path. All records now exist.
@@ -297,7 +347,7 @@ export class BatchExecutionService {
         }).finally(() => this.pending.delete(work));
       }
     });
-    return { batchId, executionIds, targetCount: allNodeIds.length, expandedNodeIds: allNodeIds };
+    return response;
   }
 
   /**
