@@ -77,12 +77,30 @@ source permissions before querying providers. Scoped results cannot populate or
 consume the unrestricted inventory cache. Node linking correlates source identities.
 Caching varies by provider and request path; Checkmk monitoring reads are live.
 
+Aggregated inventory and node facts wait at most 15 seconds per source operation
+(60 seconds for Checkmk inventory/facts). Health checks wait at most 15 seconds.
+A source has at most 20 outstanding operations through these aggregation paths;
+timing out a caller does not release capacity until the provider actually settles.
+Other sources can still return partial results. These deadlines do not abort the
+underlying provider or apply to every direct provider API route.
+
 Batch admission commits records before dispatch and returns IDs asynchronously.
 Queued cancellation prevents execution. Dispatched cancellation records intent;
 plugins have no general abort contract. Startup/shutdown cancel undispatched batch
 work and mark uncertain dispatched work interrupted without replay. Direct command
 and multi-node Puppet routes do not share batch queue admission. The configured
 batch concurrency limit is not a global execution limit.
+
+On startup, standalone queued records become cancelled and running records become
+interrupted, preserving attribution and terminal records. Recovery never replays
+uncertain provider work. Console session recovery precedes HTTP admission.
+SIGINT and SIGTERM stop HTTP admission, health scheduling and batch admission,
+close local streams/sessions, and attempt draining before database closure. The
+process exits within a 25-second shutdown budget; deadline or cleanup failure
+produces exit code 1 and leaves unfinished records for startup reconciliation.
+Deployment termination grace must exceed 25 seconds. A successful local shutdown
+does not prove that an upstream action stopped. Direct background worker ownership
+is still being consolidated under A22.
 
 Mutation clients default to no transport retries. Batch and multi-node Puppet
 admission support durable user/route-scoped `Idempotency-Key` claims. Other mutation

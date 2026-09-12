@@ -149,6 +149,17 @@ export class ExecutionRepository {
     this.db = db;
   }
 
+  /** Run before admitting requests in the supported single-process topology. */
+  public async reconcileStandaloneExecutions(): Promise<number> {
+    const result = await this.db.execute(`UPDATE executions SET
+      error = CASE WHEN status = 'queued' THEN 'Process stopped before dispatch; execution was not replayed'
+        ELSE 'Process stopped after dispatch; provider outcome is unknown. Verify provider state before retrying' END,
+      status = CASE WHEN status = 'queued' THEN 'cancelled' ELSE 'interrupted' END,
+      completed_at = ? WHERE batch_id IS NULL AND status IN ('queued', 'running')`,
+    [new Date().toISOString()]);
+    return result.changes;
+  }
+
   /**
    * Create a new execution record
    */

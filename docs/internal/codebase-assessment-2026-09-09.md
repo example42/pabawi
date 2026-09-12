@@ -14,6 +14,24 @@ Distributed HA remains separately scoped. Node 24.21.0 passed all seven chart
 render tests and six documentation contract tests. These checks do not establish
 cluster execution or complete A21 shutdown/recovery acceptance.
 
+A21 runtime tranche: both shutdown signals reject new HTTP admission and use a
+25-second deadline with nonzero exit on incomplete cleanup. Startup reconciles
+standalone work as well as batches and invalidates stale console sessions before
+listening. Aggregated inventory/facts/health reads have deadlines and retain
+per-source capacity until real settlement; stopped health schedulers cannot
+resurrect after a late result. Direct background ownership remains an A22
+prerequisite for completing the overall lifecycle contract.
+
+Built-process validation exposed retired migration files surviving incremental
+builds in `dist`. The backend now compiles into staging and replaces generated
+output only after successful compilation. A regression gate injects retired SQL
+and JavaScript files, rebuilds and verifies the exact migration inventory/content.
+Both SIGINT and SIGTERM passed against the rebuilt real server with disposable
+SQLite databases. Backend validation: 3,730 passed, 56 skipped, one todo;
+SQLite/PostgreSQL batch and standalone restart coverage: 28 passed. Backend lint,
+TypeScript build and all 14 build/chart/documentation contract checks passed.
+No installed deployment or real infrastructure provider was accessed.
+
 ## Remediation verification: 2026-09-10
 
 This section records follow-up verification against the working tree after

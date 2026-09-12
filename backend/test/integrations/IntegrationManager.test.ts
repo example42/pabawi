@@ -1075,6 +1075,55 @@ describe("IntegrationManager", () => {
   });
 
   describe("health check scheduler", () => {
+    it("does not restart a stopped scheduler when an in-flight check settles", async () => {
+      vi.useFakeTimers();
+      let resolve!: (value: Map<string, HealthStatus>) => void;
+      const check = vi.spyOn(manager, 'healthCheckAll').mockImplementation(() =>
+        new Promise(done => { resolve = done; }));
+      try {
+        manager.startHealthCheckScheduler();
+        manager.startHealthCheckScheduler();
+        expect(check).toHaveBeenCalledTimes(1);
+        manager.stopHealthCheckScheduler();
+        resolve(new Map());
+        await vi.advanceTimersByTimeAsync(1_000_000);
+        expect(check).toHaveBeenCalledTimes(1);
+        expect(vi.getTimerCount()).toBe(0);
+      } finally {
+        manager.stopHealthCheckScheduler();
+        check.mockRestore();
+        vi.useRealTimers();
+      }
+    });
+
+    it("returns healthy source facts when another provider never settles", async () => {
+      vi.useFakeTimers();
+      const node: Node = { id: 'node', name: 'node', uri: 'node', transport: 'ssh', config: {} };
+      const healthy = new MockInformationSource('healthy', [node], logger);
+      healthy.facts.set('node', { nodeId: 'node', gatheredAt: new Date().toISOString(), facts: {} });
+      const stuck = new MockInformationSource('stuck', [], logger);
+      for (const source of [stuck, healthy]) {
+        manager.registerPlugin(source, { enabled: true, name: source.name, type: 'information', config: {} });
+      }
+      await manager.initializePlugins();
+      vi.spyOn(stuck, 'getInventory').mockImplementation(() => new Promise(() => {}));
+      vi.spyOn(stuck, 'getNodeFacts').mockImplementation(() => new Promise(() => {}));
+      vi.spyOn(stuck, 'healthCheck').mockImplementation(() => new Promise(() => {}));
+      try {
+        const data = manager.getNodeData('node');
+        const health = manager.healthCheckAll(false);
+        await vi.advanceTimersByTimeAsync(30_000);
+        expect((await data).node.id).toBe('node');
+        expect((await data).facts.healthy.nodeId).toBe('node');
+        expect((await health).get('stuck')?.healthy).toBe(false);
+        expect((await health).get('healthy')?.healthy).toBe(true);
+        expect(vi.getTimerCount()).toBe(0);
+      } finally {
+        vi.restoreAllMocks();
+        vi.useRealTimers();
+      }
+    });
+
     it("should start and stop health check scheduler", () => {
       const source = new MockInformationSource("source", [], logger);
 

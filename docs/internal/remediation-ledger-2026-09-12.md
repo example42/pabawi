@@ -28,7 +28,7 @@ Distributed execution ownership, session routing and HA remain separately scoped
 | A18 | I10 | Implemented but awaiting validation | Assessment A18 record: component semantic baseline, assembled authorization, historical migrations, fake-provider browser flows and whole-tree secret gates. Existing 163 component diagnostics, component lint and remote CI evidence remain outstanding. |
 | A19 | D01-D10 | Completed with evidence | Commit 6b0d6e0 and assessment A19 record: documentation contracts check routes, configuration, schema and architecture. Explicit schema omissions remain documented, not silently treated as full OpenAPI coverage. |
 | A20 | S13/S14 | Completed with evidence | Commit f4798d3 and assessment A20 record: bounded authentication/MCP work, shared diagnostic redaction and retention policy with regression coverage. |
-| A21 | I09/I11/D06 | Remaining implementation | Harden single-process topology, shutdown, provider wait boundaries and recovery. |
+| A21 | I09/I11/D06 | Remaining implementation | Topology enforcement committed as eca4f97. Runtime deadlines, standalone restart recovery and clean artifact replacement are locally validated in the A21 runtime record. Completing direct background ownership still depends on A22. |
 | A22 | I11 | Remaining implementation | Consolidate execution admission, attribution, status, cancellation and retry across direct and batch paths; use the existing shared diagnostics policy. |
 
 ## External evidence boundaries

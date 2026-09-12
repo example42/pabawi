@@ -242,6 +242,9 @@ describe.skipIf(dialect === 'postgres' && !databaseUrl)(`${dialect}: durable bat
       repository = new ExecutionRepository(database.getAdapter());
       service = new BatchExecutionService(database.getAdapter(), queue, repository, manager);
     }
+    const standalone = await Promise.all((['queued', 'running', 'success'] as const).map(status =>
+      repository.create({ type: 'command', action: 'uptime', targetNodes: ['one'], status,
+        userId: 'actor', executionTool: 'ssh', results: [] })));
     const result = await service.createBatch(request(), 'actor');
     await vi.waitFor(() => expect(manager.executeAction).toHaveBeenCalledTimes(1));
     service.stopAdmission();
@@ -254,6 +257,12 @@ describe.skipIf(dialect === 'postgres' && !databaseUrl)(`${dialect}: durable bat
     await database.initialize();
     repository = new ExecutionRepository(database.getAdapter());
     service = new BatchExecutionService(database.getAdapter(), new ExecutionQueue(1, 2), repository, manager);
+    expect(await repository.reconcileStandaloneExecutions()).toBe(2);
+    expect(await repository.reconcileStandaloneExecutions()).toBe(0);
+    const recovered = await Promise.all(standalone.map(id => repository.findById(id)));
+    expect(recovered.map(row => row?.status)).toEqual(['cancelled', 'interrupted', 'success']);
+    expect(recovered[1]).toMatchObject({ userId: 'actor', executionTool: 'ssh' });
+    expect(recovered[1]?.error).toContain('provider outcome is unknown');
     expect(await service.reconcileInterrupted()).toBe(2);
     const status = await service.getBatchStatus(result.batchId);
     expect(status.executions.map(row => row.status)).toEqual(['interrupted', 'cancelled']);
