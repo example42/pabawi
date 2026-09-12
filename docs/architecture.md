@@ -1,241 +1,153 @@
-# Pabawi Architecture
+# Pabawi architecture
 
-Pabawi is a web UI and REST API that wraps multiple infrastructure tools behind a single, consistent interface. The frontend is a Svelte 5 SPA. The backend is a Node.js/Express server with a plugin system that manages integrations, executes commands, aggregates data, and streams output in real time.
+Pabawi is a Svelte 5 SPA served by a Node.js/Express backend. The backend
+aggregates infrastructure data, dispatches provider actions and persists execution
+history. The supported deployment baseline is one backend process with SQLite or
+PostgreSQL. A shared database does not distribute queues, tickets or sessions.
 
-## Plugin System
+## Plugins and composition
 
-Every integration is a plugin. Plugins are registered with `IntegrationManager` at startup and fall into three roles:
+`backend/src/plugins/registry.ts` declares configuration resolution, constructors,
+types and priorities. `server.ts` iterates it and registers enabled plugins with
+`IntegrationManager`. Concrete plugins extend `BasePlugin`; some retain historical
+`Service` or `Integration` class names. Provider-specific APIs and CLI semantics
+stay in the integration directories.
 
-| Role | Interface | Examples |
-|---|---|---|
-| Execution tool | `ExecutionToolPlugin` | Bolt, Ansible, SSH |
-| Information source | `InformationSourcePlugin` | PuppetDB, Puppetserver, Hiera |
-| Both | Both interfaces | Bolt |
-| Provisioning tool | `ProvisioningToolPlugin` | Proxmox, AWS |
+| Integration | Constructor | Registry type | Priority |
+|---|---|---|---|
+| Bolt | `BoltPlugin` | both | 5 |
+| Ansible | `AnsiblePlugin` | both | 5 |
+| PuppetDB | `PuppetDBService` | information | 10 |
+| Puppetserver | `PuppetserverService` | information | 8 |
+| Hiera | `HieraPlugin` | information | 6 |
+| SSH | `SSHPlugin` | both | 50 |
+| Proxmox | `ProxmoxIntegration` | both | 7 |
+| AWS | `AWSPlugin` | both | 7 |
+| Azure | `AzurePlugin` | both | 7 |
+| Checkmk | `CheckmkPlugin` | information | 8 |
 
-All plugins extend `BasePlugin`, which handles initialization state, health checks, logging, and config validation. Concrete plugins implement two abstract methods: `performInitialization()` and `performHealthCheck()`.
+`InformationSourcePlugin` provides inventory, facts and node data.
+`ExecutionToolPlugin` exposes capabilities and executes actions. Provisioning
+uses execution-tool capabilities and provider-specific route methods. Console
+providers are registered separately through the console-provider interface.
+Higher source priorities win during merging. The table records registry values;
+SSH and Proxmox also accept priority settings in their provider configuration.
 
-```
-IntegrationPlugin (interface)
-├── ExecutionToolPlugin      → executeAction(), listCapabilities()
-├── InformationSourcePlugin  → getInventory(), getNodeFacts(), getNodeData()
-└── ProvisioningToolPlugin   → provision(), deprovision()
+`BasePlugin` owns initialization state and health checks through
+`performInitialization()` and `performHealthCheck()`. Failed initialization is
+logged; other integrations continue. `IntegrationManager` defaults to five-minute
+health checks, one-minute retries after failures and a ten-minute health cache.
+Checkmk additionally caches its REST health probe for five minutes by default.
 
-BasePlugin (abstract class, implements IntegrationPlugin)
-├── BoltPlugin           (execution + information, priority: 10)
-├── PuppetDBService      (information, priority: 10)
-├── PuppetserverService  (information, priority: 20)
-├── HieraService         (information, priority: 6)
-├── AnsibleService       (execution, priority: 8)
-├── SSHService           (execution, priority: 50)
-├── ProxmoxService       (provisioning, priority: 10)
-└── AWSService           (provisioning, priority: 10)
-```
+## Configuration and startup
 
-## Configuration Flow
+`ConfigService` loads and validates server/integration environment settings;
+SSH uses `integrations/ssh/config.ts`. Source development loads `.env` from the
+backend working directory; deployed processes receive their environment from the
+container or service manager. Authentication settings such as registration policy
+and default roles are database-backed. See [configuration](configuration.md).
 
-All configuration comes from environment variables. There are no database-stored config overrides.
+Startup creates shared services in `DIContainer`, initializes the database and
+migrations, registers plugins, starts health scheduling and mounts routes.
+`mountInfrastructureRoutes` is the production assembly also exercised by the
+route authorization tests. Other factories mount authentication, RBAC management,
+monitoring, journal, diagnostics and console routes. MCP is optional at `/mcp`.
+Factory signatures vary: some receive explicit services plus a container.
 
-```
-backend/.env → ConfigService (Zod validation) → DIContainer → Route factories / Plugins
-```
+## Request and execution boundaries
 
-`ConfigService` is the only place `process.env` is read. Every other file resolves it from the DI container or receives it as a constructor argument. Secrets (`JWT_SECRET` required, `PABAWI_LIFECYCLE_TOKEN` optional) are accessed via `configService.getJwtSecret()` and `configService.getLifecycleToken()`.
-
-## Startup Sequence
-
-```
-server.ts
-  │
-  ├── ConfigService.load()           parse + validate all env vars
-  ├── DIContainer.register()         config, logger, expertMode
-  ├── DatabaseService.initialize()   run migrations (SQLite)
-  │
-  ├── pluginRegistry loop            iterate plugins/registry.ts entries
-  │     ├── entry.resolveConfig()    skip if not configured
-  │     └── entry.create()           instantiate + register with IntegrationManager
-  │
-  ├── IntegrationManager.initializePlugins()   parallel init, errors logged
-  ├── IntegrationManager.startHealthCheckScheduler()   runs every 60s
-  │
-  ├── MCP server (if MCP_ENABLED)    provision service user, register tools, mount /mcp
-  │
-  └── Route factories mounted        createXxxRouter(container) for each domain
-```
-
-Plugin init failures don't crash the server. The failed plugin is marked unhealthy and other integrations continue working.
-
-## Data Flows
-
-### Inventory request
-
-```
-GET /api/inventory
-  │
-  ├── IntegrationManager.getLinkedInventory()
-  │     │
-  │     ├── query all InformationSourcePlugins in parallel
-  │     │     ├── bolt.getInventory()
-  │     │     ├── puppetdb.getInventory()
-  │     │     └── puppetserver.getInventory()
-  │     │
-  │     ├── deduplicate by node ID (higher priority source wins)
-  │     └── NodeLinkingService.linkNodes()
-  │           match on certname → hostname → IP
-  │           build LinkedNode with sources[] array
-  │
-  └── JSON response: linked nodes with source metadata
+```mermaid
+flowchart TD
+  UI[Svelte SPA] --> Auth[Authentication and RBAC]
+  Auth --> Reads[Inventory and facts source scope]
+  Reads --> IM[IntegrationManager]
+  IM --> Providers[Enabled permitted providers]
+  Auth --> Batch[POST /api/executions/batch]
+  Batch --> Store[Atomic parent and child records]
+  Store --> Queue[Process-local batch queue]
+  Queue --> IM
+  Auth --> Direct[POST /api/nodes/:id/command]
+  Direct --> Whitelist[Command validation]
+  Whitelist --> IM
+  IM --> Output[Execution history and SSE output]
 ```
 
-### Command execution
+Inventory (`GET /api/inventory`) and facts (`GET /api/nodes/:id/facts`) resolve
+source permissions before querying providers. Scoped results cannot populate or
+consume the unrestricted inventory cache. Node linking correlates source identities.
+Caching varies by provider and request path; Checkmk monitoring reads are live.
 
-```
-POST /api/executions
-  │
-  ├── CommandWhitelistService.validate()    reject if not whitelisted
-  ├── ExecutionQueue.enqueue()              enforce concurrency limit
-  │
-  ├── IntegrationManager.executeAction(toolName, action)
-  │     └── tool.executeAction(action)     Bolt/Ansible/SSH
-  │
-  ├── StreamingExecutionManager            SSE real-time output
-  ├── ExecutionRepository.create()         persist result to SQLite
-  │
-  └── JSON response: execution result
-```
+Batch admission commits records before dispatch and returns IDs asynchronously.
+Queued cancellation prevents execution. Dispatched cancellation records intent;
+plugins have no general abort contract. Startup/shutdown cancel undispatched batch
+work and mark uncertain dispatched work interrupted without replay. Direct command
+and multi-node Puppet routes do not share batch queue admission. The configured
+batch concurrency limit is not a global execution limit.
 
-### Facts request
+Mutation clients default to no transport retries. Batch and multi-node Puppet
+admission support durable user/route-scoped `Idempotency-Key` claims. Other mutation
+routes do not have that durable contract. See [API semantics](api.md).
 
-```
-GET /api/inventory/:nodeId/facts
-  │
-  ├── query all InformationSourcePlugins in parallel
-  │     ├── bolt.getNodeFacts(nodeId)
-  │     ├── puppetdb.getNodeFacts(nodeId)
-  │     └── puppetserver.getNodeFacts(nodeId)
-  │
-  └── JSON response: { bolt: {...}, puppetdb: {...}, puppetserver: {...} }
-```
+SSE uses `POST /api/executions/:id/stream-ticket` with an access JWT, followed by
+`GET /api/executions/:id/stream?ticket=...`. Tickets are single-use, expire after
+30 seconds and only authenticate that execution's GET stream. A `complete` event
+carries terminal status; it does not imply success. Long-lived streams revalidate
+credentials. Ticket storage and output buffers are process-local.
 
-### Health check
+## Console and authentication
 
-```
-Scheduler (every 60s)
-  └── plugin.healthCheck() for each plugin → cached 5 min
+`ConsoleSessionManager` reserves per-user capacity and owns durable session state.
+`ConsoleConnectionBroker` holds single-use upstream material only in memory.
+`ConsoleWebSocketProxy` claims a ticket and relays frames to the provider; session
+termination closes both ends and releases provider state. Restart invalidates
+process-local material. Fake-upstream lifecycle tests pass; actual Proxmox console
+compatibility remains unverified. See [console access](api.md#console-vnc--terminal).
 
-GET /api/integrations/status
-  └── return cached results (or fresh if cache expired)
-```
+REST authentication is mandatory except the explicitly public setup and login
+flows in [the API guide](api.md#authentication). Generic inventory lifecycle
+requests additionally accept a machine credential mapped to `lifecycle-service`.
+Personal MCP JWTs use the caller's permissions; only the MCP static credential
+uses `mcp-service`. Account and RBAC revisions enforce revocation across database
+connections. See [RBAC](permissions-rbac.md), [MCP](mcp.md) and
+[Entra ID](integrations/entra-id.md).
 
-## Backend Directory Layout
+Diagnostics include raw provider output and execution context. Redaction is not
+a guarantee that arbitrary command output or support exports contain no secrets;
+treat them as sensitive operator data.
 
-```
-backend/src/
-├── server.ts                      Express app, route factory wiring, plugin registry loop
-├── container/                     DIContainer — typed service registry (logger, config, expertMode)
-├── plugins/                       Declarative plugin registry (PluginRegistryEntry[])
-├── config/                        ConfigService — Zod schemas for all env vars
-├── integrations/
-│   ├── BasePlugin.ts
-│   ├── IntegrationManager.ts
-│   ├── NodeLinkingService.ts
-│   ├── types.ts
-│   ├── bolt/
-│   ├── puppetdb/
-│   ├── puppetserver/
-│   ├── hiera/
-│   ├── ansible/
-│   ├── ssh/
-│   ├── proxmox/
-│   ├── aws/
-│   └── azure/
-├── services/
-│   ├── ExecutionQueue.ts           concurrency limit, FIFO
-│   ├── StreamingExecutionManager.ts  SSE real-time output
-│   ├── CommandWhitelistService.ts  security: allowed commands
-│   ├── DatabaseService.ts          SQLite, migrations
-│   ├── AuthenticationService.ts    JWT auth
-│   ├── EntraIdService.ts           Azure Entra ID SSO (OIDC, PKCE, user provisioning)
-│   ├── BatchExecutionService.ts    multi-node execution
-│   ├── UserService.ts
-│   ├── RoleService.ts
-│   ├── PermissionService.ts
-│   └── GroupService.ts
-├── routes/                         Express route factories (all wrapped in asyncHandler)
-├── middleware/                     JWT auth, RBAC, error handler, rate limit, security headers
-├── database/
-│   ├── DatabaseService.ts
-│   ├── ExecutionRepository.ts
-│   └── migrations/*.sql            schema-first, sequential migration files
-├── types/                          Shared type declarations (express.d.ts, mcp-sdk.d.ts)
-├── errors/                         typed error classes
-└── validation/                     Zod schemas for request bodies
-```
+## Code layout
 
-## Frontend Directory Layout
-
-```
-frontend/src/
-├── App.svelte                      router init, auth guard, setup check
-├── pages/                          one component per route
-├── components/                     shared UI components
-└── lib/
-    ├── router.svelte.ts            client-side router (Svelte 5 runes)
-    ├── auth.svelte.ts              JWT auth state
-    ├── entraIdAuth.svelte.ts       Entra ID SSO state (provider discovery, callback handling)
-    ├── api.ts                      HTTP infrastructure (get, post, put, del, error handling)
-    ├── proxmoxApi.ts               Proxmox provisioning API functions
-    ├── awsApi.ts                   AWS EC2 API functions
-    ├── azureApi.ts                 Azure VM API functions
-    ├── executionStream.svelte.ts   SSE client for real-time output
-    ├── expertMode.svelte.ts        debug info toggle
-    ├── integrationColors.svelte.ts per-integration color constants
-    └── toast.svelte.ts             notification system
-```
-
-The frontend uses Svelte 5 runes (`$state()`, `$effect()`, `$derived()`) throughout. Module-level rune state in `lib/*.svelte.ts` persists across component mounts.
-
-## Database
-
-SQLite by default, with PostgreSQL as an alternative backend (`DB_TYPE`/`DATABASE_URL` — see [configuration.md](configuration.md#database)). Both are reached through a single `DatabaseAdapter` interface (`SQLiteAdapter` / `PostgresAdapter`, selected by `AdapterFactory`); `DatabaseService` is a shared singleton — never create connections in individual files. Application SQL is written with `?` placeholders; `PostgresAdapter` rewrites them to `$n` at query time, so services are dialect-agnostic. Genuine dialect differences (e.g. `LIKE` vs `ILIKE`) branch on `adapter.getDialect()`.
-
-Schema is managed by sequential migration files in `database/migrations/`. A migration is shared (`NNN_name.sql`) or dialect-specific (`NNN_name.sqlite.sql` / `NNN_name.postgres.sql`); when both exist for an ID, the dialect-specific file wins.
-
-| Migration | Content |
+| Path under `backend/src/` | Responsibility |
 |---|---|
-| 000_initial.sql | Execution history, base schema |
-| 001_rbac.sql | Users, roles, permissions, groups |
+| `server.ts`, `container/`, `plugins/` | Composition and service/plugin ownership |
+| `config/`, `integrations/ssh/config.ts` | Configuration parsing |
+| `integrations/` | Plugins, provider services and `NodeLinkingService` |
+| `routes/`, `middleware/` | HTTP contracts, authentication and authorization |
+| `validation/CommandWhitelistService.ts` | Command policy |
+| `services/` | Execution, authentication, RBAC, console and diagnostics services |
+| `services/journal/` | Journal collection and querying |
+| `database/` | DatabaseService, repositories, adapters and migrations |
+| `mcp/` | Session ownership, tool authorization and output summarization |
 
-## Security Model
-
-- **Command whitelisting** — `CommandWhitelistService` validates every command before execution. Set `COMMAND_WHITELIST_ALLOW_ALL=false` in production.
-- **JWT authentication** — all API routes behind auth middleware when `AUTH_ENABLED=true`.
-- **Azure Entra ID SSO** — optional federated authentication via OpenID Connect (OAuth 2.0 Authorization Code + PKCE). Coexists with local auth. See [integrations/entra-id.md](integrations/entra-id.md).
-- **RBAC** — role-based access control via `UserService`, `RoleService`, `PermissionService`. See [permissions-rbac.md](./permissions-rbac.md).
-- **Rate limiting** — applied at middleware level.
-- **Security headers** — helmet middleware.
-- **Secret obfuscation** — expert mode logs redact sensitive values.
-
-## Caching
-
-| Data | TTL | Location |
-|---|---|---|
-| Inventory | 30 s | Per-plugin service |
-| Node facts | 5 min | Per-plugin service |
-| Health checks | 5 min | IntegrationManager |
-
-## Related Docs
-
-- [configuration.md](./configuration.md) — all env vars
-- [api.md](./api.md) — REST API reference
-- [permissions-rbac.md](./permissions-rbac.md) — RBAC model
-- [integrations/](./integrations/) — per-plugin setup guides
-
+The frontend uses Svelte 5 runes. `pages/` holds route views, `components/` shared
+UI, and `lib/*.svelte.ts` module-level reactive state. `lib/api.ts` owns transport
+and auth replay; `lib/executionStream.svelte.ts` owns SSE and polling fallback.
+`npm run check:components` compares Svelte semantic errors against the recorded
+backlog. Component lint coverage remains separate work.
 
 ## Database transaction ownership
 
-`DatabaseAdapter.withTransaction(callback)` owns a connection for the callback's async context, commits on success and rolls back on failure. Service calls inside the callback use that connection automatically. Nested transactions and database work inherited from a completed callback are rejected. Await all database work before returning from the callback.
+`DatabaseAdapter.withTransaction(callback)` owns a connection for the callback's
+async context. It commits on success and rolls back on failure. Nested transactions
+and inherited database work after the callback ends are rejected. Await all work
+before returning. Application SQL uses `?` placeholders; PostgreSQL rewrites them.
 
-SQLite serializes the whole transaction and ordinary queries on its connection, so unrelated requests cannot accidentally join a transaction. PostgreSQL pins a separate pooled client to each transaction and allows unrelated requests to use other clients. `withExclusiveConnection(callback)` excludes unrelated work on that adapter for connection maintenance. The migration runner holds this reservation across schema inspection, each migration transaction, and SQLite foreign-key toggling and verification. Only one migration process should run against an installation; this reservation does not coordinate separate processes or adapters.
+SQLite serializes transactions and ordinary queries on its adapter connection.
+PostgreSQL pins a pooled client per transaction. `withExclusiveConnection(callback)`
+reserves an adapter for maintenance; migrations hold it across inspection,
+transactions and SQLite foreign-key restoration. This does not coordinate separate
+adapters or processes. Run only one migration process per installation.
 
-Migration callers no longer use unscoped `beginTransaction`, `commit` or `rollback` methods. This storage boundary does not make process-local execution queues or sessions distributed.
+Schema changes live in `database/migrations/`, with dialect-specific files where
+needed. Use `DatabaseService` rather than creating ad hoc connections. See
+[upgrade and recovery](upgrading.md) and the [deployment topology](deployment/kubernetes.md).

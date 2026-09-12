@@ -7,10 +7,22 @@ Run examples from the repository root. See the
 [chart guide](../../charts/pabawi/README.md) for bootstrap ownership, migration
 prerequisites, maintenance windows and credential rotation.
 
+For a fresh installation, put an independently generated bootstrap token in a
+restricted values file (mode 0600), supplied below as `bootstrap-values.yaml`:
+
+```yaml
+secretEnv:
+  PABAWI_BOOTSTRAP_TOKEN: "<independent-random-token>"
+```
+
+Generate the value with `openssl rand -hex 32`. Keep first-start ingress private,
+claim setup, then remove that value and upgrade to roll out its removal. Existing
+installations can omit the bootstrap file. The placeholder is not a usable secret.
+
 ```bash
 # SQLite, single replica
 helm dependency build ./charts/pabawi
-helm install pabawi ./charts/pabawi \
+helm install pabawi ./charts/pabawi -f bootstrap-values.yaml \
   --set secrets.jwtSecret="$(openssl rand -base64 48)"
 ```
 
@@ -21,7 +33,7 @@ For PostgreSQL-backed deployments, use an existing Secret containing
 kubectl create secret generic pabawi-db \
   --from-literal=DATABASE_URL='postgres://pabawi:password@postgres.example:5432/pabawi'
 
-helm install pabawi ./charts/pabawi \
+helm install pabawi ./charts/pabawi -f bootstrap-values.yaml \
   --set database.type=postgres \
   --set database.postgres.existingSecret=pabawi-db \
   --set replicaCount=1 \
@@ -37,7 +49,7 @@ helm dependency build ./charts/pabawi
 
 PG_PASSWORD="$(openssl rand -base64 24)"
 
-helm install pabawi ./charts/pabawi \
+helm install pabawi ./charts/pabawi -f bootstrap-values.yaml \
   --set database.type=postgres \
   --set postgresql.enabled=true \
   --set postgresql.auth.password="$PG_PASSWORD" \
@@ -97,6 +109,11 @@ data:
 
 ## Secrets
 
+For initial setup with raw manifests, create a mode-0600 `bootstrap-token` file
+containing an independently generated token without a trailing newline. The
+commands below load it into `pabawi-secrets`. Remove that key and restart the
+application after enrollment. Existing installations omit this file/key.
+
 ```bash
 # SSL certs (for PuppetDB/Puppetserver)
 kubectl create secret generic pabawi-certs \
@@ -111,6 +128,7 @@ kubectl create secret generic pabawi-ssh \
 # Sensitive env vars
 kubectl create secret generic pabawi-secrets \
   --from-literal=JWT_SECRET='<32+ chars of random entropy>' \
+  --from-file=PABAWI_BOOTSTRAP_TOKEN=./bootstrap-token \
   --from-literal=PUPPETDB_ENABLED=true \
   --from-literal=PUPPETDB_SERVER_URL=https://puppetdb.example.com \
   --from-literal=COMMAND_WHITELIST='["uptime","df -h","free -m"]'
@@ -144,6 +162,7 @@ data:
 ```bash
 kubectl create secret generic pabawi-secrets \
   --from-literal=JWT_SECRET='<32+ chars of random entropy>' \
+  --from-file=PABAWI_BOOTSTRAP_TOKEN=./bootstrap-token \
   --from-literal=DATABASE_URL='postgres://pabawi:<password>@postgres.example.svc.cluster.local:5432/pabawi' \
   --from-literal=PUPPETDB_ENABLED=true \
   --from-literal=PUPPETDB_SERVER_URL=https://puppetdb.example.com \

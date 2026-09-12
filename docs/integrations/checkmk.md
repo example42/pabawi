@@ -1,6 +1,6 @@
 # Checkmk Integration
 
-Pabawi connects to Checkmk to provide live monitoring data: host inventory, service status, and state-change events. All data is fetched live on each request — no caching.
+Pabawi connects to Checkmk to provide live monitoring data: host inventory, service status, and state-change events. Inventory and monitoring data are fetched live; health probes are cached.
 
 ## Prerequisites
 
@@ -30,10 +30,10 @@ CHECKMK_PASSWORD=myautomationsecret
 | Variable | Required | Default | Description |
 |---|---|---|---|
 | `CHECKMK_ENABLED` | No | `false` | Set to exactly `"true"` to enable |
-| `CHECKMK_SERVER_URL` | When enabled | — | Base URL of the Checkmk server (e.g. `https://checkmk.example.com`). Must start with `http://` or `https://`. |
-| `CHECKMK_SITE` | When enabled | — | Checkmk site name (appears in the URL path) |
-| `CHECKMK_USERNAME` | When enabled | — | Automation user name |
-| `CHECKMK_PASSWORD` | When enabled | — | Automation user secret/password |
+| `CHECKMK_SERVER_URL` | When enabled | unset | Base URL of the Checkmk server (e.g. `https://checkmk.example.com`). Must start with `http://` or `https://`. |
+| `CHECKMK_SITE` | Unless URL includes site/API path | unset | Checkmk site name |
+| `CHECKMK_USERNAME` | When enabled | unset | Automation user name |
+| `CHECKMK_PASSWORD` | When enabled | unset | Automation user secret/password |
 | `CHECKMK_SSL_VERIFY` | No | `true` | Set to `"false"` to skip TLS certificate verification (for self-signed certs) |
 
 ## What It Provides
@@ -42,7 +42,7 @@ CHECKMK_PASSWORD=myautomationsecret
 |---|---|
 | **Inventory** | Hosts from Checkmk (priority 8), merged into unified inventory |
 | **Service monitoring** | Live status of all services on a node (OK, WARN, CRIT, UNKNOWN) |
-| **State-change events** | Historical events from the Event Console, shown in the Monitor tab and node journal |
+| **State-change events** | Livestatus log history with a reduced-fidelity REST fallback |
 | **Acknowledge / downtime** | Operators can acknowledge service problems and schedule downtime windows from the Monitor page (requires `checkmk:write`) |
 | **Node linking** | Checkmk hosts are linked to existing Pabawi nodes by hostname |
 
@@ -77,13 +77,33 @@ Services are displayed grouped by state: CRIT first, then WARN, UNKNOWN, and OK.
 
 ### State-Change Events (Journal)
 
-Checkmk state-change events appear in the node journal timeline alongside events from other sources. Events are fetched from:
+History uses the Livestatus `log` table with `class=1` alerts. Per-node
+queries request the last seven days and at most 500 rows; the HTTP `limit`
+parameter trims that result and cannot recover rows beyond the upstream cap.
 
-```
-GET /{site}/check_mk/api/1.0/domain-types/historical_event/collections/all
+```bash
+CHECKMK_LIVESTATUS_HOST=checkmk.example.com
+CHECKMK_LIVESTATUS_PORT=6557
+CHECKMK_LIVESTATUS_TLS=true
+CHECKMK_LIVESTATUS_TIMEOUT_MS=5000
+CHECKMK_HEALTHCHECK_INTERVAL_MS=300000
 ```
 
-Events are filtered by hostname, limited to the last 7 days and 500 entries maximum.
+Enable a reachable Livestatus TCP or TLS listener on the Checkmk side first.
+Pabawi sends raw LQL, with no REST bearer credential or client certificate on
+this connection. Restrict the listener to the Pabawi host using network access
+controls or a protected tunnel. `CHECKMK_LIVESTATUS_TLS=true` requires a TLS
+listener; plaintext is the default when the host is set without that flag.
+`CHECKMK_SSL_VERIFY` controls certificate verification on both REST and TLS
+Livestatus connections. There is no separate Livestatus CA/client-key setting.
+
+If Livestatus is absent or fails, per-node history derives at most the latest
+transition per service from REST `last_state`, `state` and `last_state_change`.
+Global fallback reports currently failing services as a snapshot. Neither
+fallback is complete history. REST health determines plugin health, so a healthy
+integration does not establish Livestatus reachability. Health probes are cached
+for `CHECKMK_HEALTHCHECK_INTERVAL_MS`; check server logs for Livestatus degradation.
+See [the transport decision](../adr/0001-checkmk-events-source.md).
 
 ## Authentication
 
@@ -93,7 +113,7 @@ Checkmk uses Bearer authentication with the format:
 Authorization: Bearer {username} {password}
 ```
 
-The automation user must have sufficient permissions to read hosts, services, and events via the REST API. In Checkmk, this typically means the user needs the "Can use the REST API" permission and read access to the relevant hosts/services.
+The automation user must have sufficient permissions to read hosts and services via the REST API. In Checkmk, this typically means the user needs the "Can use the REST API" permission and read access to the relevant hosts/services.
 
 ### Creating an Automation User
 
@@ -123,8 +143,8 @@ The Checkmk integration exposes these API endpoints:
 | GET | `/api/nodes/:nodeId/services` | `checkmk:read` | Live service monitoring status |
 | GET | `/api/nodes/:nodeId/monitoring-events` | `checkmk:read` | State-change events (supports `?limit=N`, default 200, max 1000) |
 | GET | `/api/monitoring/overview` | `checkmk:read` | Global problem/host summary for the Monitor and Home pages |
-| POST | `/api/monitoring/acknowledge` | `checkmk:write` | Acknowledge a service problem |
-| POST | `/api/monitoring/downtime` | `checkmk:write` | Schedule a downtime window for a service |
+| POST | `/api/monitoring/acknowledge` | `checkmk:read` + `checkmk:write` | Acknowledge a service problem |
+| POST | `/api/monitoring/downtime` | `checkmk:read` + `checkmk:write` | Schedule a downtime window for a service |
 
 All endpoints require JWT authentication. The `checkmk:read` permission is held
 by the Viewer, Operator, Administrator, and Provisioner roles. The
@@ -151,8 +171,8 @@ In the problem list, services are visually distinguished:
 
 - **Acknowledged** services are dimmed with a `✓` marker.
 - **In-downtime** services use a blue-grey tint with a `⏸ DT` badge (a distinct
-  treatment from acknowledgement). A service in downtime — whether through a
-  service downtime or an inherited host downtime — is detected via the
+  treatment from acknowledgement). A service in downtime (whether through a
+  service downtime or an inherited host downtime) is detected via the
   `scheduled_downtime_depth` and `host_scheduled_downtime_depth` columns.
 - A **Hide downtime** toggle removes in-downtime services from the list.
 
@@ -180,4 +200,4 @@ The integration degrades gracefully:
 | "Connection refused" | Verify `CHECKMK_SERVER_URL` is reachable. Test with `curl`. Check firewall rules. |
 | Monitor tab not showing | The node must be linked to a Checkmk host (same hostname). Check that the integration is healthy in the Status Dashboard. |
 | Empty service list | Verify the hostname in Pabawi matches the hostname in Checkmk exactly |
-| Events not appearing in journal | Events are fetched live — check that the Event Console has entries for the host in the last 7 days |
+| Events not appearing in journal | Events are fetched live: verify Livestatus connectivity and log entries for the host in the last seven days; REST fallback provides only recent transition snapshots |

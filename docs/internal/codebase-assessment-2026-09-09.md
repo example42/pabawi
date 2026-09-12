@@ -643,6 +643,56 @@ the backend suite. Helm installation is still only rendered and linted, not
 installed, in CI. The new CI jobs are verified by their local equivalents; they
 have not yet run on a GitHub runner. A19 is the next action.
 
+**A19 / D01-D10, 2026-09-12: documentation corrections and drift gates implemented.**
+Public guidance now preserves failed databases, describes mandatory access-JWT
+authentication and its explicit exchanges/machine-credential exceptions, separates
+PuppetDB upstream credentials, and explains Checkmk Livestatus history and REST
+fallback fidelity. `CHECKMK_SSL_VERIFY` applies to REST and TLS Livestatus; REST
+health alone does not establish history connectivity. Configuration tables cover
+both ConfigService and the SSH parser, with defaults, units/conditions and secret
+classification. Azure, Livestatus and console environment examples are included.
+
+Architecture and contributor guidance now name actual registry constructors and
+priorities, service paths, execution entry points, console ownership and the
+single-process baseline. The API guide corrects nonexistent provider, package and
+RBAC assignment paths. Deployment examples use consistent working directories,
+state Compose's all-interface defaults, include bootstrap ownership, and explain
+that a pre-upgrade hook does not stop the old application.
+
+OpenAPI is version 1.5.0 with explicit public exchanges, bootstrap header security,
+SSO/browser binding, Checkmk routes, lifecycle credentials and execution stream
+issuance/redemption. It no longer advertises nonexistent endpoints. The new
+[coverage inventory](../api-contract-coverage.md) accounts for all 188 statically
+discovered REST method/path pairs: 123 specified and 65 intentional omissions,
+including aliases and remaining provider/console/diagnostic payload schemas.
+This is not complete client-generation or response-schema conformance coverage.
+The six documentation checks fail on unknown/stale routes, missing variables,
+version drift, dangling references, path-parameter errors and credential-contract
+drift. CI invokes them. Dynamic mounts need an inventory-reader extension; MCP,
+WebSocket upgrades and SPA responses are explicitly outside the REST inventory.
+
+A19 validation: all 383 focused backend tests passed on Node 24.21.0, covering
+assembled authorization and SSE tickets, bootstrap, local auth/refresh, SSO,
+Checkmk routes/fallback/TLS and real-file migration recovery. All six documentation
+checks and six chart regressions passed. Three deliberate documentation mutations
+(nonexistent route, omitted variable and incorrect version) each failed the gate.
+The documented SQLite `.backup` command retained committed WAL account, role,
+group and federation records; copying the live database alone omitted them.
+Both documented/repository Compose configurations validated using synthetic
+credentials, and SQLite/external-PostgreSQL chart configurations rendered locally.
+Thirty public/contributor Markdown files had no missing relative file targets.
+Workspace lint, a separate JavaScript lint check for the new scripts and diff
+checks passed. The repository TypeScript ESLint configuration does not include
+standalone `.mjs` scripts, so those used ESLint's JavaScript recommended rules.
+Tracked-tree and new-file secret scans passed without baseline changes; ClamAV
+reported zero infected files in the isolated downloaded scanner environment.
+
+Application code and dependency locks are unchanged. Full backend/frontend suites,
+builds, live provider/browser workflows, PostgreSQL runtime, image startup and
+cluster installation were not repeated for this documentation tranche. Existing
+A10 release gates and A15 provider-compatibility limits remain; the new CI step
+has not run remotely. A20 is the next action.
+
 ## Executive assessment
 
 The principal risk is inconsistent enforcement at trust boundaries. Authentication and RBAC infrastructure exist, but several infrastructure-changing routes enforce authentication without authorization. AWS, Azure, Proxmox and Puppetserver handlers can therefore exercise server-held credentials on behalf of users who lack the corresponding permissions. Hiera data and execution output have related read-access gaps. This is especially serious where self-registration is enabled.

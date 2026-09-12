@@ -12,14 +12,23 @@ docker run -d \
   --name pabawi \
   --user "$(id -u):1001" \
   -p 127.0.0.1:3000:3000 \
-  --platform "amd64" \
   -v "$(pwd)/bolt-project:/opt/pabawi/bolt-project:ro" \
   -v "$(pwd)/data:/opt/pabawi/data" \
-  --env-file ./env \
+  --env-file .env \
   example42/pabawi:latest
 ```
 
-`--user "$(id -u):1001"` — your user must be able to read all mounted files.
+`--user "$(id -u):1001"`: your user must be able to read all mounted files.
+
+Run build and repository Compose examples from the repository root. Standalone
+`docker run` examples assume `.env`, `data/` and `bolt-project/` in the current
+working directory. Set `HOST=0.0.0.0` and `PORT=3000` inside the container.
+
+The repository Compose file publishes application and PostgreSQL ports on all
+host interfaces by default. For private first start, edit its mappings to
+`127.0.0.1:3000:3000` and `127.0.0.1:5432:5432` before starting services. The
+standalone example and the Compose example below already bind to loopback.
+See [Docker port binding](https://docs.docker.com/reference/compose-file/services/#ports).
 
 ## Building the Image
 
@@ -84,7 +93,7 @@ service. It stays off by default; enable it with the `postgres` profile:
 docker compose --profile postgres up
 ```
 
-Then point the app at it in `.env`:
+Before starting the profile, point the app at it in `.env`:
 
 ```bash
 DB_TYPE=postgres

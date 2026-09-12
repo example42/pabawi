@@ -184,7 +184,7 @@ Key configuration areas:
 | Area | Variables |
 |---|---|
 | Core | `PORT`, `HOST`, `LOG_LEVEL` |
-| Auth | `JWT_SECRET`, `AUTH_ENABLED` |
+| Auth | `JWT_SECRET`, `PABAWI_BOOTSTRAP_TOKEN` |
 | Bolt | `BOLT_*` |
 | PuppetDB / Puppetserver | `PUPPETDB_*`, `PUPPETSERVER_*` |
 | Hiera | `HIERA_*` |

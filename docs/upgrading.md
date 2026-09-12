@@ -6,9 +6,7 @@ see the main [README](../README.md#installation).
 ## Before You Upgrade
 
 1. **Read the [CHANGELOG](../CHANGELOG.md)** for the target version. Look for
-   sections labelled "Security — breaking for operators" or "Action required
-   before upgrade" — these require configuration changes before starting the
-   new version.
+   security and required-action sections before starting the new version.
 2. **Back up your database consistently.** For SQLite, use the online backup
    command below, or stop every writer cleanly before copying the database.
    Copying only a live `.db` file can omit committed data still in its WAL.
@@ -25,7 +23,7 @@ see the main [README](../README.md#installation).
 3. **Back up your `.env` file.** Some releases add required variables or change
    defaults.
 
-Database migrations run automatically on startup. They are forward-only — there
+Database migrations run automatically on startup. They are forward-only: there
 is no built-in rollback. The backup is your rollback path.
 
 ## Migration 016 convergence and migration integrity
@@ -206,8 +204,8 @@ services:
 
 ```bash
 # 1. Update the chart (if using a local copy)
-cd charts/pabawi
-git pull   # or copy the updated chart
+cd /path/to/pabawi
+# Use the clean release checkout described above
 
 # 2. Review values changes
 helm diff upgrade pabawi ./charts/pabawi -f my-values.yaml
@@ -223,12 +221,13 @@ kubectl rollout status deployment/pabawi
 kubectl logs -l app.kubernetes.io/name=pabawi -f
 ```
 
-If the chart includes a database migration Job, it runs before the new
-Deployment pods start. Monitor the Job:
+The external PostgreSQL migration hook runs before install/upgrade. Before an
+upgrade, stop the existing application and follow the [maintenance procedure](../charts/pabawi/README.md).
+The pre-upgrade hook does not stop the old deployment for you. See [Helm hook timing](https://helm.sh/docs/topics/charts_hooks/). Monitor the Job:
 
 ```bash
 kubectl get jobs -l app.kubernetes.io/component=migration
-kubectl logs job/pabawi-migrate
+kubectl logs -l app.kubernetes.io/component=migration
 ```
 
 ### Rollback
@@ -271,7 +270,7 @@ If switching from SQLite to PostgreSQL during this upgrade:
 
 1. Set `DB_TYPE=postgres` and `DATABASE_URL` in `.env`.
 2. The new schema is created automatically on first startup. There is no
-   automated SQLite-to-PostgreSQL data migration — export and re-import
+   automated SQLite-to-PostgreSQL data migration: export and re-import
    manually if you need to preserve execution history or user accounts.
 
 ### Upgrading to 1.4.0
