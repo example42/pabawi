@@ -83,11 +83,11 @@ test('caller annotations cannot disable managed checksums; external rotation mar
   assert.equal(external.deployment.spec.template.spec.containers[0].envFrom[1].secretRef.name, 'external-app');
 });
 
-test('SQLite always stops the old writer before replacing it', () => {
+test('every database stops the old application before replacing it', () => {
   for (const values of [{}, { strategy: { type: 'RollingUpdate', rollingUpdate: { maxSurge: 5 } } }]) {
     assert.deepEqual(render(values).deployment.spec.strategy, { type: 'Recreate' });
   }
-  assert.equal(render({ database: postgres }).deployment.spec.strategy.type, 'RollingUpdate');
+  assert.deepEqual(render({ database: postgres }).deployment.spec.strategy, { type: 'Recreate' });
   assert.deepEqual(render({ database: postgres, strategy: { type: 'Recreate' } }).deployment.spec.strategy, { type: 'Recreate' });
 });
 
@@ -110,4 +110,17 @@ test('external PostgreSQL migration account exists before the Job and survives u
   assert.equal(external.resources.find((resource) => resource.kind === 'Job').spec.template.spec.serviceAccountName, 'preexisting-account');
   assert.equal(render().resources.filter((resource) => resource.kind === 'Job').length, 0);
   assert.equal(render({ database: postgres, migrations: { enabled: false } }).resources.filter((resource) => resource.kind === 'Job').length, 0);
+});
+
+test('every database rejects multiple replicas and autoscaling', () => {
+  for (const type of ['sqlite', 'postgres']) {
+    for (const values of [{ replicaCount: 2 }, { autoscaling: { enabled: true } }]) {
+      const result = spawnSync('helm', ['template', 'topology-test', chart, '-f', '-'], {
+        input: JSON.stringify({ secrets: { jwtSecret }, database: { ...postgres, type }, ...values }),
+        encoding: 'utf8',
+      });
+      assert.notEqual(result.status, 0);
+      assert.match(result.stderr, /exactly one application replica|does not support autoscaling/);
+    }
+  }
 });

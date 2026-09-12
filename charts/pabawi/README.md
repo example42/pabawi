@@ -62,13 +62,11 @@ helm install pabawi ./charts/pabawi \
 
 The supported application baseline is one process. PostgreSQL does not distribute
 execution queues, concurrency limits, stream tickets, MCP transports or console
-sessions. Multiple replicas and HPA remain unverified for those protocols; sticky
-routing does not establish failover or recovery. SQLite rejects multiple replicas
-and HPA at render time. Bundled PostgreSQL also rejects those configurations.
-
-For external PostgreSQL, use `replicaCount: 1` and `strategy.type: Recreate` to
-avoid application overlap. `strategy` applies only to PostgreSQL. Recreate causes
-downtime and does not establish safe cancellation or recovery of running work.
+sessions. The chart rejects multiple replicas and HPA for every database type
+and always uses `Recreate` to prevent application overlap. Expect downtime during
+upgrades and rotation. PostgreSQL replication does not provide application HA.
+Distributed ownership, cancellation, aggregate capacity, session routing and
+node-failure recovery require a separately scoped design and validation.
 
 External PostgreSQL migrations run in a `pre-install,pre-upgrade` hook Job. With
 `serviceAccount.create: true`, a separate migration ServiceAccount is created by
@@ -131,8 +129,8 @@ are Ready, an old credential is rejected and the replacement credential works
 through the relevant API. Verify the effective command policy with an authorized
 request to `/api/config` and a harmless denied-command probe in a test inventory.
 Do not log credentials, print Secret data, or put real values on command lines.
-With a rolling PostgreSQL strategy, old pods can accept old credentials until
-they exit; use a maintenance window when immediate invalidation is required.
+Use a maintenance window: rotation stops the old application before its
+replacement starts, for both SQLite and PostgreSQL.
 
 Changing `JWT_SECRET` invalidates existing access and refresh JWTs in replacement
 processes and requires login again. Restarting closes process-local SSE, MCP and

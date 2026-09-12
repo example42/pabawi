@@ -37,7 +37,6 @@ helm install pabawi ./charts/pabawi -f bootstrap-values.yaml \
   --set database.type=postgres \
   --set database.postgres.existingSecret=pabawi-db \
   --set replicaCount=1 \
-  --set strategy.type=Recreate \
   --set secrets.jwtSecret="$(openssl rand -base64 48)"
 ```
 
