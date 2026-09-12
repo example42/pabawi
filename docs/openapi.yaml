@@ -2,7 +2,7 @@ openapi: 3.0.3
 info:
   title: Pabawi API
   description: |
-    REST API for Pabawi, an open source web frontend for managing classic infrastructure —
+    REST API for Pabawi, an open source web frontend for managing classic infrastructure ,
     physical servers, VMs, and the tools that run them.
 
     ## Integration Sources
@@ -20,7 +20,7 @@ info:
 
     ## Authentication
 
-    When `AUTH_ENABLED=true`, most endpoints require a JWT token in the
+    Protected endpoints require an access JWT token in the
     `Authorization: Bearer <token>` header. Obtain a token via `POST /api/auth/login`.
 
     ## Expert Mode
@@ -41,7 +41,7 @@ info:
     enabled sources. Subscribe to `/journal/global/stream` for a live SSE feed, or query
     `/journal/{nodeId}` for a node's history.
 
-  version: 1.2.0
+  version: 1.5.0
   contact:
     name: Pabawi Support
     url: https://pabawi.example42.com
@@ -97,7 +97,7 @@ tags:
   - name: Journal
     description: Cross-node event timeline (v1.1.0)
   - name: Auth
-    description: Authentication — login, logout, current user
+    description: Authentication , login, logout, current user
   - name: RBAC
     description: Users, roles, permissions, and groups
   - name: Setup
@@ -113,7 +113,7 @@ paths:
       summary: Health check
       description: Check if the API server is running and properly configured
       tags:
-        - System
+      - System
       responses:
         '200':
           description: Server is healthy
@@ -137,6 +137,7 @@ paths:
                         type: boolean
                       databaseInitialized:
                         type: boolean
+      security: []
 
   /config:
     get:
@@ -1123,50 +1124,56 @@ paths:
                     items:
                       type: string
 
-  /nodes/{id}:
-    get:
-      summary: Get node details
-      description: Retrieve detailed information about a specific node
+  /nodes/{id}/facts:
+    post:
+      summary: Gather facts from node
+      description: Trigger facts gathering for a specific node
       tags:
-        - Inventory
+      - Facts
       parameters:
-        - $ref: '#/components/parameters/NodeId'
+      - $ref: '#/components/parameters/NodeId'
+      - $ref: '#/components/parameters/ExpertModeHeader'
       responses:
         '200':
-          description: Node details retrieved successfully
+          description: Facts gathered successfully
           content:
             application/json:
               schema:
                 type: object
                 properties:
-                  node:
-                    $ref: '#/components/schemas/Node'
+                  facts:
+                    $ref: '#/components/schemas/Facts'
         '404':
           description: Node not found
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+        '503':
+          description: Node unreachable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
               example:
                 error:
-                  code: INVALID_NODE_ID
-                  message: Node 'example-node' not found in inventory
+                  code: NODE_UNREACHABLE
+                  message: Failed to connect to node
+                  details: Connection timeout
         '500':
           description: Server error
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
-
-  /nodes/{id}/facts:
-    post:
-      summary: Gather facts from node
+                $ref: '#/components/schemas/ErrorWithExpertMode'
+    get:
+      summary: Read node facts from permitted sources
       description: Trigger facts gathering for a specific node
       tags:
-        - Facts
+      - Facts
       parameters:
-        - $ref: '#/components/parameters/NodeId'
-        - $ref: '#/components/parameters/ExpertModeHeader'
+      - $ref: '#/components/parameters/NodeId'
+      - $ref: '#/components/parameters/ExpertModeHeader'
       responses:
         '200':
           description: Facts gathered successfully
@@ -1405,80 +1412,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorWithExpertMode'
 
-  /nodes/{id}/install-package:
-    post:
-      summary: Install package on node
-      description: |
-        Install a package on a target node using a configured package installation task.
-
-        Returns immediately with an execution ID. Use the executions endpoint to
-        retrieve results, or subscribe to the streaming endpoint for real-time output.
-      tags:
-        - Packages
-      parameters:
-        - $ref: '#/components/parameters/NodeId'
-        - $ref: '#/components/parameters/ExpertModeHeader'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-                - taskName
-                - packageName
-              properties:
-                taskName:
-                  type: string
-                  description: Name of the package installation task
-                  example: tp::install
-                packageName:
-                  type: string
-                  description: Name of the package to install
-                  example: nginx
-                ensure:
-                  type: string
-                  enum: [present, absent, latest]
-                  description: Desired package state
-                  default: present
-                version:
-                  type: string
-                  description: Specific package version (optional)
-                  example: 1.18.0
-                settings:
-                  type: object
-                  description: Additional package settings
-                  additionalProperties: true
-                expertMode:
-                  type: boolean
-                  description: Enable expert mode for detailed output
-                  default: false
-      responses:
-        '202':
-          description: Package installation started
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ExecutionStarted'
-        '400':
-          description: Invalid request
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-        '404':
-          description: Node not found
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-        '500':
-          description: Server error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorWithExpertMode'
-
   /tasks:
     get:
       summary: List available tasks
@@ -1540,43 +1473,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
-  /package-tasks:
-    get:
-      summary: Get available package installation tasks
-      description: Retrieve configured package installation tasks
-      tags:
-        - Packages
-      responses:
-        '200':
-          description: Package tasks retrieved successfully
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  tasks:
-                    type: array
-                    items:
-                      type: object
-                      properties:
-                        name:
-                          type: string
-                          example: tp::install
-                        label:
-                          type: string
-                          example: Tiny Puppet
-                        parameterMapping:
-                          type: object
-                          properties:
-                            packageName:
-                              type: string
-                            ensure:
-                              type: string
-                            version:
-                              type: string
-                            settings:
-                              type: string
-
   /executions:
     get:
       summary: List execution history
@@ -1584,52 +1480,64 @@ paths:
         Retrieve paginated list of executions with optional filtering.
         Includes summary statistics by status.
       tags:
-        - Executions
+      - Executions
       parameters:
-        - name: type
-          in: query
-          description: Filter by execution type
-          schema:
-            type: string
-            enum: [command, task, facts, puppet, package]
-        - name: status
-          in: query
-          description: Filter by execution status
-          schema:
-            type: string
-            enum: [running, success, failed, partial]
-        - name: targetNode
-          in: query
-          description: Filter by target node ID
-          schema:
-            type: string
-        - name: startDate
-          in: query
-          description: Filter by start date (ISO 8601)
-          schema:
-            type: string
-            format: date-time
-        - name: endDate
-          in: query
-          description: Filter by end date (ISO 8601)
-          schema:
-            type: string
-            format: date-time
-        - name: page
-          in: query
-          description: Page number (1-indexed)
-          schema:
-            type: integer
-            minimum: 1
-            default: 1
-        - name: pageSize
-          in: query
-          description: Number of items per page
-          schema:
-            type: integer
-            minimum: 1
-            maximum: 100
-            default: 50
+      - name: type
+        in: query
+        description: Filter by execution type
+        schema:
+          type: string
+          enum:
+          - command
+          - task
+          - facts
+          - puppet
+          - package
+      - name: status
+        in: query
+        description: Filter by execution status
+        schema:
+          type: string
+          enum:
+          - queued
+          - running
+          - success
+          - failed
+          - partial
+          - cancelled
+          - interrupted
+      - name: targetNode
+        in: query
+        description: Filter by target node ID
+        schema:
+          type: string
+      - name: startDate
+        in: query
+        description: Filter by start date (ISO 8601)
+        schema:
+          type: string
+          format: date-time
+      - name: endDate
+        in: query
+        description: Filter by end date (ISO 8601)
+        schema:
+          type: string
+          format: date-time
+      - name: page
+        in: query
+        description: Page number (1-indexed)
+        schema:
+          type: integer
+          minimum: 1
+          default: 1
+      - name: pageSize
+        in: query
+        description: Number of items per page
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 50
       responses:
         '200':
           description: Executions retrieved successfully
@@ -1733,15 +1641,22 @@ paths:
 
         The connection remains open until the execution completes or the client
         disconnects.
+
+        Use an access JWT or the single-use ticket query parameter. A complete event carries status success, failed, partial, cancelled or interrupted; completion is not a success signal. Reconnection needs a new ticket. Credentials and permissions revalidate during streaming.
       tags:
-        - Streaming
+      - Streaming
       parameters:
-        - name: id
-          in: path
-          required: true
-          description: Execution ID
-          schema:
-            type: string
+      - name: id
+        in: path
+        required: true
+        description: Execution ID
+        schema:
+          type: string
+      - name: ticket
+        in: query
+        schema:
+          type: string
+        description: Single-use ticket from POST /executions/{id}/stream-ticket; expires after 30 seconds.
       responses:
         '200':
           description: SSE stream established
@@ -1755,27 +1670,22 @@ paths:
                   value: |
                     event: start
                     data: {"executionId":"abc123","timestamp":"2024-01-01T00:00:00.000Z"}
-
                 command:
                   value: |
                     event: command
                     data: {"command":"bolt command run 'ls -la' --targets node1 --format json"}
-
                 stdout:
                   value: |
                     event: stdout
                     data: {"chunk":"total 48\ndrwxr-xr-x  12 user  staff   384 Jan  1 00:00 .\n"}
-
                 stderr:
                   value: |
                     event: stderr
                     data: {"chunk":"Warning: some warning message\n"}
-
                 complete:
                   value: |
                     event: complete
                     data: {"status":"success","results":[{"nodeId":"node1","status":"success","duration":1234}]}
-
         '404':
           description: Execution not found
           content:
@@ -1788,6 +1698,15 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+        '401':
+          description: Invalid or consumed credential
+        '403':
+          description: Missing executions:read
+        '429':
+          description: Stream connection limit reached
+      security:
+      - bearerAuth: []
+      - streamTicket: []
 
   /executions/{id}/re-execute:
     post:
@@ -2114,17 +2033,17 @@ paths:
       summary: Get Puppet run history for a node
       description: Return daily Puppet run counts grouped by status
       tags:
-        - Puppet
+      - Puppet
       parameters:
-        - $ref: '#/components/parameters/NodeId'
-        - name: days
-          in: query
-          description: Number of days to look back (1–365)
-          schema:
-            type: integer
-            minimum: 1
-            maximum: 365
-            default: 7
+      - $ref: '#/components/parameters/NodeId'
+      - name: days
+        in: query
+        description: Number of days to look back (1-365)
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 365
+          default: 7
       responses:
         '200':
           description: History retrieved successfully
@@ -2169,16 +2088,16 @@ paths:
       summary: Get aggregated Puppet run history
       description: Return daily Puppet run counts across all nodes
       tags:
-        - Puppet
+      - Puppet
       parameters:
-        - name: days
-          in: query
-          description: Number of days to look back (1–365)
-          schema:
-            type: integer
-            minimum: 1
-            maximum: 365
-            default: 7
+      - name: days
+        in: query
+        description: Number of days to look back (1-365)
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 365
+          default: 7
       responses:
         '200':
           description: History retrieved successfully
@@ -2295,322 +2214,6 @@ paths:
           description: Proxmox nodes retrieved successfully
         '503':
           description: Proxmox not configured
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-
-  /integrations/proxmox/vms:
-    get:
-      summary: List Proxmox VMs
-      description: Return all virtual machines across all Proxmox nodes
-      tags:
-        - Proxmox
-      responses:
-        '200':
-          description: VMs retrieved successfully
-        '503':
-          description: Proxmox not configured
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-    post:
-      summary: Create Proxmox VM
-      description: Provision a new virtual machine on Proxmox
-      tags:
-        - Proxmox
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-                - name
-              properties:
-                name:
-                  type: string
-                template:
-                  type: string
-                cores:
-                  type: integer
-                memory:
-                  type: integer
-                  description: Memory in MB
-                storage:
-                  type: string
-      responses:
-        '201':
-          description: VM created successfully
-        '400':
-          description: Invalid request
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-
-  /integrations/proxmox/containers:
-    get:
-      summary: List Proxmox LXC containers
-      description: Return all LXC containers across all Proxmox nodes
-      tags:
-        - Proxmox
-      responses:
-        '200':
-          description: Containers retrieved successfully
-    post:
-      summary: Create Proxmox LXC container
-      description: Provision a new LXC container on Proxmox
-      tags:
-        - Proxmox
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-                - name
-                - ostemplate
-              properties:
-                name:
-                  type: string
-                ostemplate:
-                  type: string
-                cores:
-                  type: integer
-                memory:
-                  type: integer
-                  description: Memory in MB
-      responses:
-        '201':
-          description: Container created successfully
-        '400':
-          description: Invalid request
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-
-  /integrations/proxmox/vms/{id}/action:
-    post:
-      summary: Proxmox VM lifecycle action
-      description: Execute a lifecycle action on a VM
-      tags:
-        - Proxmox
-      parameters:
-        - name: id
-          in: path
-          required: true
-          description: VM ID
-          schema:
-            type: string
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-                - action
-              properties:
-                action:
-                  type: string
-                  enum: [start, stop, shutdown, reboot]
-      responses:
-        '200':
-          description: Action executed successfully
-        '400':
-          description: Invalid action
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-
-  /integrations/proxmox/containers/{id}/action:
-    post:
-      summary: Proxmox container lifecycle action
-      description: Execute a lifecycle action on an LXC container
-      tags:
-        - Proxmox
-      parameters:
-        - name: id
-          in: path
-          required: true
-          description: Container ID
-          schema:
-            type: string
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-                - action
-              properties:
-                action:
-                  type: string
-                  enum: [start, stop, shutdown, reboot]
-      responses:
-        '200':
-          description: Action executed successfully
-
-  /integrations/proxmox/vms/{id}:
-    delete:
-      summary: Destroy Proxmox VM
-      description: Permanently delete a VM. Requires `ALLOW_DESTRUCTIVE_PROVISIONING=true`.
-      tags:
-        - Proxmox
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-      responses:
-        '200':
-          description: VM destroyed successfully
-        '403':
-          description: Destructive provisioning disabled
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-
-  /integrations/proxmox/containers/{id}:
-    delete:
-      summary: Destroy Proxmox container
-      description: Permanently delete an LXC container. Requires `ALLOW_DESTRUCTIVE_PROVISIONING=true`.
-      tags:
-        - Proxmox
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-      responses:
-        '200':
-          description: Container destroyed successfully
-        '403':
-          description: Destructive provisioning disabled
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-
-  /integrations/aws/instances:
-    get:
-      summary: List EC2 instances
-      description: Return all EC2 instances across configured regions
-      tags:
-        - AWS
-      responses:
-        '200':
-          description: Instances retrieved successfully
-        '503':
-          description: AWS not configured
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-    post:
-      summary: Launch EC2 instance
-      description: Launch a new EC2 instance
-      tags:
-        - AWS
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-                - imageId
-                - instanceType
-              properties:
-                imageId:
-                  type: string
-                  example: ami-0abcdef1234567890
-                instanceType:
-                  type: string
-                  example: t3.micro
-                keyName:
-                  type: string
-                securityGroupIds:
-                  type: array
-                  items:
-                    type: string
-                subnetId:
-                  type: string
-                tags:
-                  type: object
-                  additionalProperties:
-                    type: string
-      responses:
-        '201':
-          description: Instance launched successfully
-        '400':
-          description: Invalid request
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-
-  /integrations/aws/instances/{id}/action:
-    post:
-      summary: EC2 instance lifecycle action
-      description: Execute a lifecycle action (start/stop/reboot) on an EC2 instance
-      tags:
-        - AWS
-      parameters:
-        - name: id
-          in: path
-          required: true
-          description: Instance ID
-          schema:
-            type: string
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-                - action
-              properties:
-                action:
-                  type: string
-                  enum: [start, stop, reboot]
-      responses:
-        '200':
-          description: Action executed successfully
-        '400':
-          description: Invalid action
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-
-  /integrations/aws/instances/{id}:
-    delete:
-      summary: Terminate EC2 instance
-      description: Permanently terminate an EC2 instance. Requires `ALLOW_DESTRUCTIVE_PROVISIONING=true`.
-      tags:
-        - AWS
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-      responses:
-        '200':
-          description: Instance terminated successfully
-        '403':
-          description: Destructive provisioning disabled
           content:
             application/json:
               schema:
@@ -3249,7 +2852,7 @@ paths:
       summary: Login
       description: Authenticate with username and password to receive a JWT token
       tags:
-        - Auth
+      - Auth
       requestBody:
         required: true
         content:
@@ -3257,8 +2860,8 @@ paths:
             schema:
               type: object
               required:
-                - username
-                - password
+              - username
+              - password
               properties:
                 username:
                   type: string
@@ -3267,25 +2870,11 @@ paths:
                   format: password
       responses:
         '200':
-          description: Authentication successful
+          description: Access and refresh token pair with current user
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  token:
-                    type: string
-                  user:
-                    type: object
-                    properties:
-                      id:
-                        type: string
-                      username:
-                        type: string
-                      roles:
-                        type: array
-                        items:
-                          type: string
+                $ref: '#/components/schemas/AuthenticationResult'
         '401':
           description: Invalid credentials
           content:
@@ -3298,6 +2887,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+      security: []
 
   /auth/permissions:
     get:
@@ -3338,38 +2928,6 @@ paths:
       responses:
         '200':
           description: Logged out successfully
-
-  /auth/me:
-    get:
-      summary: Get current user
-      description: Return information about the currently authenticated user
-      tags:
-        - Auth
-      responses:
-        '200':
-          description: Current user retrieved
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  user:
-                    type: object
-                    properties:
-                      id:
-                        type: string
-                      username:
-                        type: string
-                      roles:
-                        type: array
-                        items:
-                          type: string
-        '401':
-          description: Not authenticated
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
 
   /users:
     post:
@@ -3490,54 +3048,22 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
-  /users/{id}/roles:
-    post:
-      summary: Assign role to user
-      tags:
-        - RBAC
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-                - roleId
-              properties:
-                roleId:
-                  type: string
-      responses:
-        '200':
-          description: Role assigned successfully
-        '404':
-          description: User or role not found
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-
   /users/{id}/roles/{roleId}:
     delete:
       summary: Remove role from user
       tags:
-        - RBAC
+      - RBAC
       parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-        - name: roleId
-          in: path
-          required: true
-          schema:
-            type: string
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: roleId
+        in: path
+        required: true
+        schema:
+          type: string
       responses:
         '204':
           description: Role removed successfully
@@ -3547,22 +3073,31 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-
-  /users/{id}/sessions:
-    delete:
-      summary: Revoke user sessions
-      description: Invalidate all active sessions for a user
+    post:
+      summary: Assign role to user
       tags:
-        - RBAC
+      - RBAC
       parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: roleId
+        in: path
+        required: true
+        schema:
+          type: string
       responses:
         '200':
-          description: Sessions revoked successfully
+          description: Role assigned successfully
+        '404':
+          description: User or role not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      description: Requires rbac:admin. The assignment target is carried in the path.
 
   /roles:
     post:
@@ -3662,28 +3197,40 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
-  /roles/{id}/permissions:
+  /roles/{id}/permissions/{permId}:
+    delete:
+      summary: Remove permission from role
+      tags:
+      - RBAC
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: permId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '204':
+          description: Permission removed successfully
     post:
       summary: Assign permission to role
       tags:
-        - RBAC
+      - RBAC
       parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-      requestBody:
+      - name: id
+        in: path
         required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-                - permissionId
-              properties:
-                permissionId:
-                  type: string
+        schema:
+          type: string
+      - name: permId
+        in: path
+        required: true
+        schema:
+          type: string
       responses:
         '200':
           description: Permission assigned successfully
@@ -3693,26 +3240,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-
-  /roles/{id}/permissions/{permId}:
-    delete:
-      summary: Remove permission from role
-      tags:
-        - RBAC
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-        - name: permId
-          in: path
-          required: true
-          schema:
-            type: string
-      responses:
-        '204':
-          description: Permission removed successfully
+      description: Requires rbac:admin. The assignment target is carried in the path.
 
   /permissions:
     post:
@@ -3832,58 +3360,6 @@ paths:
         '204':
           description: Group deleted successfully
 
-  /groups/{id}/users:
-    post:
-      summary: Add user to group
-      tags:
-        - RBAC
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-                - userId
-              properties:
-                userId:
-                  type: string
-      responses:
-        '200':
-          description: User added to group
-        '404':
-          description: Group or user not found
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-
-  /groups/{id}/users/{userId}:
-    delete:
-      summary: Remove user from group
-      tags:
-        - RBAC
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-        - name: userId
-          in: path
-          required: true
-          schema:
-            type: string
-      responses:
-        '204':
-          description: User removed from group
-
   /setup/status:
     get:
       summary: Get setup status
@@ -3909,23 +3385,32 @@ paths:
   /setup/initialize:
     post:
       summary: Claim initial administrator enrollment
-      description: Atomically create the initial administrator and save setup configuration. Requires the installation bootstrap token.
-      security: []
+      description: Atomically create the initial administrator and save setup configuration. Requires the
+        installation bootstrap token.
+      security:
+      - bootstrapToken: []
       tags:
-        - Setup
+      - Setup
       parameters:
-        - in: header
-          name: X-Pabawi-Bootstrap-Token
-          required: true
-          schema:
-            type: string
+      - in: header
+        name: X-Pabawi-Bootstrap-Token
+        required: true
+        schema:
+          type: string
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              required: [username, email, password, firstName, lastName, allowSelfRegistration, defaultNewUserRole]
+              required:
+              - username
+              - email
+              - password
+              - firstName
+              - lastName
+              - allowSelfRegistration
+              - defaultNewUserRole
               properties:
                 username:
                   type: string
@@ -3983,15 +3468,816 @@ paths:
                     type: number
                     description: Process uptime in seconds
 
-  /monitoring/journal:
+  /inventory/{id}:
     get:
-      summary: Get system journal
-      description: Return recent system-level journal entries (process events, startup, errors)
+      summary: Get node details
+      description: Retrieve detailed information about a specific node
       tags:
-        - Monitoring
+      - Inventory
+      parameters:
+      - $ref: '#/components/parameters/NodeId'
       responses:
         '200':
-          description: System journal retrieved successfully
+          description: Node details retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  node:
+                    $ref: '#/components/schemas/Node'
+        '404':
+          description: Node not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  code: INVALID_NODE_ID
+                  message: Node 'example-node' not found in inventory
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      summary: Generic provider lifecycle delete
+      description: Accepts an access JWT or the configured lifecycle-service bearer credential. Requires
+        provider:read plus the action-specific lifecycle/provision/destroy grant. Destructive actions require
+        ALLOW_DESTRUCTIVE_PROVISIONING. Azure DELETE returns 501.
+      tags:
+      - Inventory
+      responses:
+        '200':
+          description: Generic provider lifecycle delete
+          content:
+            application/json:
+              schema:
+                type: object
+        '401':
+          description: Missing, expired, revoked or wrong-purpose credential
+        '403':
+          description: Insufficient permissions
+      security:
+      - bearerAuth: []
+      - lifecycleBearer: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+
+  /packages/{id}/install-package:
+    post:
+      summary: Install package on node
+      description: |
+        Install a package on a target node using a configured package installation task.
+
+        Returns immediately with an execution ID. Use the executions endpoint to
+        retrieve results, or subscribe to the streaming endpoint for real-time output.
+      tags:
+      - Packages
+      parameters:
+      - $ref: '#/components/parameters/NodeId'
+      - $ref: '#/components/parameters/ExpertModeHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - taskName
+              - packageName
+              properties:
+                taskName:
+                  type: string
+                  description: Name of the package installation task
+                  example: tp::install
+                packageName:
+                  type: string
+                  description: Name of the package to install
+                  example: nginx
+                ensure:
+                  type: string
+                  enum:
+                  - present
+                  - absent
+                  - latest
+                  description: Desired package state
+                  default: present
+                version:
+                  type: string
+                  description: Specific package version (optional)
+                  example: 1.18.0
+                settings:
+                  type: object
+                  description: Additional package settings
+                  additionalProperties: true
+                expertMode:
+                  type: boolean
+                  description: Enable expert mode for detailed output
+                  default: false
+      responses:
+        '202':
+          description: Package installation started
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExecutionStarted'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Node not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorWithExpertMode'
+
+  /packages/package-tasks:
+    get:
+      summary: Get available package installation tasks
+      description: Retrieve configured package installation tasks
+      tags:
+      - Packages
+      responses:
+        '200':
+          description: Package tasks retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tasks:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        name:
+                          type: string
+                          example: tp::install
+                        label:
+                          type: string
+                          example: Tiny Puppet
+                        parameterMapping:
+                          type: object
+                          properties:
+                            packageName:
+                              type: string
+                            ensure:
+                              type: string
+                            version:
+                              type: string
+                            settings:
+                              type: string
+
+  /auth/refresh:
+    post:
+      summary: Rotate token pair
+      description: Accepts only a refresh token; revocation and account status are checked. Store both returned
+        tokens.
+      tags:
+      - Auth
+      responses:
+        '200':
+          description: Rotate token pair
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthenticationResult'
+        '400':
+          description: Invalid body
+        '401':
+          description: Invalid or revoked refresh token
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                refreshToken:
+                  type: string
+              required:
+              - refreshToken
+
+  /auth/providers:
+    get:
+      summary: Discover authentication methods
+      description: Public provider discovery.
+      tags:
+      - Auth
+      responses:
+        '200':
+          description: Discover authentication methods
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  local:
+                    type: boolean
+                  entraId:
+                    type: object
+      security: []
+
+  /auth/register:
+    post:
+      summary: Register a local account
+      description: Only succeeds when self-registration is enabled in setup policy.
+      tags:
+      - Auth
+      responses:
+        '201':
+          description: Register a local account
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user:
+                    type: object
+                required:
+                - user
+        '403':
+          description: Self-registration disabled
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                username:
+                  type: string
+                email:
+                  type: string
+                password:
+                  type: string
+                firstName:
+                  type: string
+                lastName:
+                  type: string
+              required:
+              - username
+              - email
+              - password
+              - firstName
+              - lastName
+
+  /auth/entra-id/login:
+    get:
+      summary: Begin Entra login
+      description: Sets HttpOnly SameSite=Lax browser binding cookie, Secure on HTTPS. Redirects to the
+        configured provider. Returns 404 when unavailable.
+      tags:
+      - Auth
+      responses:
+        '302':
+          description: Begin Entra login
+      security: []
+
+  /auth/entra-id/callback:
+    get:
+      summary: Complete provider callback
+      description: Requires code, state and the initiating browser cookie (__Host-pabawi-sso on HTTPS, pabawi-sso
+        otherwise). Single-use state; redirects to the frontend with a single-use final code. Identity collisions
+        fail.
+      tags:
+      - Auth
+      responses:
+        '302':
+          description: Complete provider callback
+        '400':
+          description: Invalid, expired, consumed or browser-unbound state/code
+        '401':
+          description: Provider authentication rejected
+        '403':
+          description: Identity collision or unavailable group claims
+        '404':
+          description: Entra unavailable
+      security: []
+      parameters:
+      - name: code
+        in: query
+        required: true
+        schema:
+          type: string
+      - name: state
+        in: query
+        required: true
+        schema:
+          type: string
+
+  /auth/entra-id/token:
+    post:
+      summary: Redeem final SSO code
+      description: Requires the initiating browser cookie. Exactly one redemption succeeds; clears the cookie.
+        The code is not an Entra access token.
+      tags:
+      - Auth
+      responses:
+        '200':
+          description: Redeem final SSO code
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthenticationResult'
+        '400':
+          description: Invalid, expired, consumed or browser-unbound state/code
+        '401':
+          description: Provider authentication rejected
+        '403':
+          description: Identity collision or unavailable group claims
+        '404':
+          description: Entra unavailable
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                code:
+                  type: string
+              required:
+              - code
+
+  /auth/entra-id/enroll:
+    post:
+      summary: Enroll a federated identity
+      description: Requires both rbac:admin and users:admin. Links an active local account to subject under
+        the configured tenant issuer; email cannot establish identity.
+      tags:
+      - Auth
+      responses:
+        '201':
+          description: Enroll a federated identity
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  userId:
+                    type: string
+                required:
+                - userId
+        '401':
+          description: Missing, expired, revoked or wrong-purpose credential
+        '403':
+          description: Insufficient permissions
+        '409':
+          description: Identity could not be enrolled
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                userId:
+                  type: string
+                subject:
+                  type: string
+              required:
+              - userId
+              - subject
+
+  /executions/{id}/stream-ticket:
+    post:
+      summary: Issue execution stream ticket
+      description: Requires executions:read and a valid access JWT. Single-use ticket expires in 30 seconds.
+        It only authenticates GET for this execution stream. No execution existence check is made at issuance.
+      tags:
+      - Streaming
+      responses:
+        '200':
+          description: Issue execution stream ticket
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ticket:
+                    type: string
+                required:
+                - ticket
+        '401':
+          description: Missing, expired, revoked or wrong-purpose credential
+        '403':
+          description: Insufficient permissions
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+
+  /nodes/{nodeId}/services:
+    get:
+      summary: Read Checkmk services
+      description: Requires checkmk:read. Normal response is an array; expert mode wraps it in services
+        or events plus _debug. History uses Livestatus with reduced-fidelity REST fallback. An empty result
+        is not a node existence check.
+      tags:
+      - Checkmk
+      responses:
+        '200':
+          description: Read Checkmk services
+          content:
+            application/json:
+              schema:
+                oneOf:
+                - type: array
+                  items:
+                    type: object
+                    properties:
+                      description:
+                        type: string
+                      state:
+                        type: integer
+                        enum:
+                        - 0
+                        - 1
+                        - 2
+                        - 3
+                      stateType:
+                        type: integer
+                        enum:
+                        - 0
+                        - 1
+                      pluginOutput:
+                        type: string
+                      lastCheck:
+                        type: number
+                      lastState:
+                        type: integer
+                        enum:
+                        - 0
+                        - 1
+                        - 2
+                        - 3
+                      lastStateChange:
+                        type: number
+                - type: object
+                  properties:
+                    services:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          description:
+                            type: string
+                          state:
+                            type: integer
+                            enum:
+                            - 0
+                            - 1
+                            - 2
+                            - 3
+                          stateType:
+                            type: integer
+                            enum:
+                            - 0
+                            - 1
+                          pluginOutput:
+                            type: string
+                          lastCheck:
+                            type: number
+                          lastState:
+                            type: integer
+                            enum:
+                            - 0
+                            - 1
+                            - 2
+                            - 3
+                          lastStateChange:
+                            type: number
+                    _debug:
+                      type: object
+        '401':
+          description: Missing, expired, revoked or wrong-purpose credential
+        '403':
+          description: Insufficient permissions
+        '400':
+          description: Invalid query
+        '502':
+          description: Upstream error
+        '503':
+          description: Checkmk not configured
+      parameters:
+      - name: nodeId
+        in: path
+        required: true
+        schema:
+          type: string
+
+  /nodes/{nodeId}/monitoring-events:
+    get:
+      summary: Read Checkmk monitoring-events
+      description: Requires checkmk:read. Normal response is an array; expert mode wraps it in services
+        or events plus _debug. History uses Livestatus with reduced-fidelity REST fallback. An empty result
+        is not a node existence check.
+      tags:
+      - Checkmk
+      responses:
+        '200':
+          description: Read Checkmk monitoring-events
+          content:
+            application/json:
+              schema:
+                oneOf:
+                - type: array
+                  items:
+                    $ref: '#/components/schemas/JournalEntry'
+                - type: object
+                  properties:
+                    events:
+                      type: array
+                      items:
+                        $ref: '#/components/schemas/JournalEntry'
+                    _debug:
+                      type: object
+        '401':
+          description: Missing, expired, revoked or wrong-purpose credential
+        '403':
+          description: Insufficient permissions
+        '400':
+          description: Invalid query
+        '502':
+          description: Upstream error
+        '503':
+          description: Checkmk not configured
+      parameters:
+      - name: nodeId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          default: 200
+          minimum: 1
+          maximum: 1000
+
+  /monitoring/overview:
+    get:
+      summary: Read Checkmk overview
+      description: Requires checkmk:read. REST fallback events are a failing-services snapshot.
+      tags:
+      - Checkmk
+      responses:
+        '200':
+          description: Read Checkmk overview
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  serviceProblems:
+                    type: array
+                    items:
+                      type: object
+                  events:
+                    type: array
+                    items:
+                      type: object
+                  hostSummary:
+                    type: array
+                    items:
+                      type: object
+                  hostStateSummary:
+                    type: object
+        '401':
+          description: Missing, expired, revoked or wrong-purpose credential
+        '403':
+          description: Insufficient permissions
+      parameters:
+      - name: hours
+        in: query
+        schema:
+          type: integer
+          default: 4
+          minimum: 1
+          maximum: 168
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          default: 100
+          minimum: 1
+          maximum: 500
+
+  /monitoring/acknowledge:
+    post:
+      summary: Submit Checkmk acknowledge
+      description: Requires checkmk:read and checkmk:write through the production mount chain. Successful
+        actions are audited. Downtime end must follow start and the window cannot exceed seven days.
+      tags:
+      - Checkmk
+      responses:
+        '200':
+          description: Submit Checkmk acknowledge
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+        '401':
+          description: Missing, expired, revoked or wrong-purpose credential
+        '403':
+          description: Insufficient permissions
+        '400':
+          description: Invalid body
+        '502':
+          description: Upstream rejected action
+        '503':
+          description: Checkmk not configured
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                hostname:
+                  type: string
+                  minLength: 1
+                  maxLength: 255
+                serviceDescription:
+                  type: string
+                  minLength: 1
+                  maxLength: 512
+                comment:
+                  type: string
+                  minLength: 1
+                  maxLength: 1000
+                sticky:
+                  type: boolean
+                  default: true
+                persistent:
+                  type: boolean
+                  default: false
+                notify:
+                  type: boolean
+                  default: true
+              required:
+              - hostname
+              - serviceDescription
+              - comment
+              additionalProperties: false
+
+  /monitoring/downtime:
+    post:
+      summary: Submit Checkmk downtime
+      description: Requires checkmk:read and checkmk:write through the production mount chain. Successful
+        actions are audited. Downtime end must follow start and the window cannot exceed seven days.
+      tags:
+      - Checkmk
+      responses:
+        '200':
+          description: Submit Checkmk downtime
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+        '401':
+          description: Missing, expired, revoked or wrong-purpose credential
+        '403':
+          description: Insufficient permissions
+        '400':
+          description: Invalid body
+        '502':
+          description: Upstream rejected action
+        '503':
+          description: Checkmk not configured
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                hostname:
+                  type: string
+                  minLength: 1
+                  maxLength: 255
+                serviceDescription:
+                  type: string
+                  minLength: 1
+                  maxLength: 512
+                comment:
+                  type: string
+                  minLength: 1
+                  maxLength: 1000
+                startTime:
+                  type: string
+                  format: date-time
+                endTime:
+                  type: string
+                  format: date-time
+              required:
+              - hostname
+              - serviceDescription
+              - comment
+              - startTime
+              - endTime
+              additionalProperties: false
+
+  /inventory/{id}/lifecycle-actions:
+    get:
+      summary: Generic provider lifecycle get
+      description: Accepts an access JWT or the configured lifecycle-service bearer credential. Requires
+        provider:read plus the action-specific lifecycle/provision/destroy grant. Destructive actions require
+        ALLOW_DESTRUCTIVE_PROVISIONING. Azure DELETE returns 501.
+      tags:
+      - Inventory
+      responses:
+        '200':
+          description: Generic provider lifecycle get
+          content:
+            application/json:
+              schema:
+                type: object
+        '401':
+          description: Missing, expired, revoked or wrong-purpose credential
+        '403':
+          description: Insufficient permissions
+      security:
+      - bearerAuth: []
+      - lifecycleBearer: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+
+  /inventory/{id}/action:
+    post:
+      summary: Generic provider lifecycle post
+      description: Accepts an access JWT or the configured lifecycle-service bearer credential. Requires
+        provider:read plus the action-specific lifecycle/provision/destroy grant. Destructive actions require
+        ALLOW_DESTRUCTIVE_PROVISIONING. Azure DELETE returns 501.
+      tags:
+      - Inventory
+      responses:
+        '200':
+          description: Generic provider lifecycle post
+          content:
+            application/json:
+              schema:
+                type: object
+        '401':
+          description: Missing, expired, revoked or wrong-purpose credential
+        '403':
+          description: Insufficient permissions
+      security:
+      - bearerAuth: []
+      - lifecycleBearer: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                action:
+                  type: string
+                parameters:
+                  type: object
+              required:
+              - action
+
 
 components:
   parameters:
@@ -4194,7 +4480,7 @@ components:
           additionalProperties: true
         status:
           type: string
-          enum: [running, success, failed, partial]
+          enum: [queued, running, success, failed, partial, cancelled, interrupted]
         startedAt:
           type: string
           format: date-time
@@ -4550,14 +4836,43 @@ components:
         powerState: running
         osType: Linux
 
+    AuthenticationResult:
+      type: object
+      properties:
+        token:
+          type: string
+          description: Access JWT with validated purpose and account version
+        refreshToken:
+          type: string
+          description: Rotating refresh JWT, accepted only by the refresh exchange
+        user:
+          type: object
+          description: User DTO, excludes password hash
+      required:
+      - token
+      - refreshToken
+      - user
+
   securitySchemes:
     bearerAuth:
       type: http
       scheme: bearer
       bearerFormat: JWT
-      description: |
-        JWT token obtained via `POST /api/auth/login`.
-        Required on all endpoints when `AUTH_ENABLED=true`.
+      description: Access JWT from local login, refresh or SSO. Required by default. Refresh JWTs cannot authenticate REST requests.
+    streamTicket:
+      type: apiKey
+      in: query
+      name: ticket
+      description: Single-use execution-bound GET stream credential; 30-second lifetime.
+    bootstrapToken:
+      type: apiKey
+      in: header
+      name: X-Pabawi-Bootstrap-Token
+      description: Installation ownership secret for initial enrollment.
+    lifecycleBearer:
+      type: http
+      scheme: bearer
+      description: Configured machine credential, mapped to lifecycle-service and accepted only under /api/inventory.
 
 security:
   - bearerAuth: []

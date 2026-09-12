@@ -4,7 +4,7 @@ Pabawi uses Role-Based Access Control (RBAC) on authenticated API routes. Users 
 
 ## Authentication Methods
 
-Pabawi supports two authentication methods that can work simultaneously:
+Pabawi supports two interactive login methods that can work simultaneously:
 
 - **Local authentication** — username/password login, always available
 - **Azure Entra ID SSO** — federated login via OpenID Connect (optional, see [integrations/entra-id.md](./integrations/entra-id.md))
@@ -13,7 +13,9 @@ Both methods issue identical Pabawi JWT tokens. The RBAC middleware makes no dis
 
 ### Token purpose and revocation
 
-REST and SSE authentication require an access token. MCP accepts an access token
+Protected REST and SSE routes require an access token. Generic inventory lifecycle
+routes also accept the scoped [lifecycle machine credential](configuration.md#lifecycle-machine-credential).
+MCP accepts an access token
 or its configured static credential. Refresh tokens are accepted only by the
 refresh exchange. Access tokens require an explicit `type: access`, user ID,
 username, roles array, token ID, issued/expiry times and an opaque session version.

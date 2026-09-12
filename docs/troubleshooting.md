@@ -207,7 +207,7 @@ color: false
 | Problem | Fix |
 |---|---|
 | "Database locked" | On SQLite (`DB_TYPE=sqlite`) only one process may write. Kill duplicate instances, or switch to PostgreSQL |
-| "Migration failed" | Check backend logs. On SQLite, delete `pabawi.db` to start fresh (loses all data) |
+| "Migration failed" | Preserve the failed database and logs. Stop writers and follow [backup and recovery](upgrading.md#before-you-upgrade); restore a verified backup to a separate location before retrying. Never clear migration history to bypass a failure. |
 | Database file not found on startup | Ensure `DATABASE_PATH` directory exists and is writable. Docker: check volume mount |
 | Execution history missing after restart | Expected if using in-memory SQLite (`DATABASE_PATH=:memory:`) |
 | "DATABASE_URL is required when DB_TYPE is 'postgres'" | Set `DATABASE_URL`, or set `DB_TYPE=sqlite` |
@@ -240,10 +240,10 @@ color: false
 
 | Problem | Fix |
 |---|---|
-| Login returns 401 | Wrong username or password. Admin token: check `backend/.env` for `JWT_SECRET` setup and use the setup API to reset |
+| Login returns 401 | Check credentials and account status. Initial setup cannot reset an existing administrator; follow the documented account recovery procedure |
 | 403 on an API endpoint | User's role lacks required permission. See [permissions-rbac.md](./permissions-rbac.md) |
 | "JWT malformed" | Token expired or tampered. Log out and log in again |
-| Auth not required (no login prompt) | `AUTH_ENABLED` is not set to `true` |
+| No login prompt | Check whether a valid session is already stored. REST authentication is mandatory; test an API call without Authorization to verify rejection. |
 
 ---
 
@@ -259,13 +259,13 @@ Yes. Point `BOLT_PROJECT_PATH` at your existing project directory.
 One project per instance. Run multiple Pabawi instances on different ports with different `BOLT_PROJECT_PATH` values.
 
 **Why is an execution stuck in "running"?**
-The server was probably restarted mid-execution — execution state is not persisted across restarts. Check execution history for the last recorded output.
+For batch work, startup cancels undispatched children and marks uncertain dispatched work interrupted without replay. Direct execution paths have narrower recovery coverage. Check persisted history and provider state before resubmitting.
 
 **Can I cancel a running execution?**
-Currently no. The underlying Bolt process will complete (or timeout). Plan for this when setting `BOLT_EXECUTION_TIMEOUT`.
+Queued batch cancellation prevents dispatch. Cancellation after dispatch records the request but does not guarantee provider termination; wait for the actual outcome. See [cancellation semantics](api.md).
 
 **Are SSH credentials stored in the database?**
-No. Credentials live in your Bolt inventory config or SSH key files. Pabawi's database stores only execution history.
+SSH connection credentials come from integration configuration and key files. The database also stores accounts, grants, session metadata and execution output; treat it and its backups as sensitive.
 
 **How do I enable auth?**
-Set `AUTH_ENABLED=true` and `JWT_SECRET=<strong-random-value>` in `.env`. See [permissions-rbac.md](./permissions-rbac.md).
+Configure a strong `JWT_SECRET` in `.env`. Authentication is mandatory and has no environment switch. See [permissions-rbac.md](./permissions-rbac.md).

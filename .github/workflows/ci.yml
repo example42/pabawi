@@ -28,6 +28,9 @@ jobs:
       - name: Verify install-script policy
         run: node --test scripts/supply-chain/install-approved.test.mjs
 
+      - name: Check documentation contracts
+        run: node --test scripts/documentation/contracts.test.mjs
+
       - name: Run ESLint
         run: npm run lint
 

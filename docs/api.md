@@ -1,6 +1,6 @@
 # API Reference
 
-All endpoints return JSON. Base URL: `http://<host>:<port>` (default `http://localhost:3000`).
+Most endpoints return JSON; streaming endpoints return SSE and SSO navigation returns redirects. Base URL: `http://<host>:<port>` (default `http://localhost:3000`).
 
 ## Authentication
 
@@ -13,6 +13,18 @@ substitute for caller authentication.
 caller's current effective grants as `{"permissions":[{"resource":"aws","action":"read"}]}`.
 The response is not cached. It does not accept a target user ID.
 See [permissions and RBAC](permissions-rbac.md) for route policies.
+
+Public REST exceptions are `GET /api/health`, `GET /api/setup/status`,
+`GET /api/auth/providers`, and the login, registration and refresh exchanges.
+Registration is conditional on the stored self-registration setting. Initial
+setup requires `X-Pabawi-Bootstrap-Token`. Entra login/callback/token exchanges use
+browser-bound OAuth state and single-use codes; enrollment requires an access
+JWT plus `rbac:admin` and `users:admin`. Refresh tokens work only at the refresh
+exchange. Generic inventory lifecycle requests also accept the scoped machine
+credential described below. `/mcp` has its own [authentication policy](mcp.md).
+
+The [OpenAPI contract](openapi.yaml) describes the REST subset tracked by
+[contract coverage](api-contract-coverage.md), including intentional omissions.
 
 ## Common Headers
 
@@ -48,7 +60,7 @@ Common error codes: `COMMAND_NOT_WHITELISTED`, `INTEGRATION_NOT_AVAILABLE`, `NOD
 | `type` | Filter by type | Executions |
 | `sources` | Comma-separated source names | Inventory |
 | `sortBy` / `sortOrder` | Sort field and direction (`asc`/`desc`) | Inventory |
-| `days` | Days to look back (1–365, default 7) | Puppet run history |
+| `days` | Days to look back (1-365, default 7) | Puppet run history |
 | `refresh` | `true` to bypass cache | Integration status |
 
 ---
@@ -83,7 +95,7 @@ receive `executionTimeout` only.
 |---|---|---|
 | `GET` | `/api/inventory` | All nodes from all enabled sources, linked |
 | `GET` | `/api/inventory/sources` | Available inventory sources |
-| `GET` | `/api/nodes/:id` | Node details |
+| `GET` | `/api/inventory/:id` | Node details |
 
 **`GET /api/inventory` query params:**
 
@@ -129,8 +141,8 @@ An action the provider does not advertise is rejected with `UNSUPPORTED_ACTION`
 }
 ```
 
-**Credentials.** Either a user JWT, or — when `PABAWI_LIFECYCLE_TOKEN` is
-configured — that token, in the same `Authorization: Bearer` header:
+**Credentials.** Either a user JWT, or: when `PABAWI_LIFECYCLE_TOKEN` is
+configured: that token, in the same `Authorization: Bearer` header:
 
 ```bash
 curl -X POST https://pabawi.example.com/api/inventory/aws:eu-west-1:i-0abc/action \
@@ -262,8 +274,8 @@ Query param: `days` (default 7, max 365).
 
 | Method | Endpoint | Description |
 |---|---|---|
-| `GET` | `/api/package-tasks` | List configured package tasks |
-| `POST` | `/api/nodes/:id/install-package` | Install package on node |
+| `GET` | `/api/packages/package-tasks` | List configured package tasks |
+| `POST` | `/api/packages/:id/install-package` | Install package on node |
 
 **Request body:**
 
@@ -301,7 +313,7 @@ Query param: `days` (default 7, max 365).
 **Authorization:** the command-executing / mutating routes
 (`/batch`, `/:id/re-execute`, `/:id/cancel`, `/batch/:batchId/cancel`) require
 the `bolt:execute` permission. Command-type requests are validated against the
-[command whitelist](configuration.md#command-whitelist) — shell metacharacters
+[command whitelist](configuration.md#command-whitelist): shell metacharacters
 are always rejected. The read-only `GET` routes require authentication only.
 
 ### Streaming execution output
@@ -453,7 +465,7 @@ Lint params: `severity` (comma-separated), `types` (comma-separated).
 
 ## PuppetDB
 
-All PuppetDB endpoints require `PUPPETDB_ENABLED=true`. Pass `X-Authentication-Token` for PE environments.
+All PuppetDB endpoints require `PUPPETDB_ENABLED=true`. Configure `PUPPETDB_TOKEN` on the backend for PE environments; the backend sends it upstream as `X-Authentication`. Callers still send a Pabawi access JWT.
 
 ### Nodes
 
@@ -537,30 +549,34 @@ Require `PROXMOX_ENABLED=true`, `AWS_ENABLED=true`, or `AZURE_ENABLED=true`. Des
 
 ### Proxmox
 
+All routes require `proxmox:read`; mutations additionally require `provision`,
+`lifecycle` or `destroy` on that resource.
+
 | Method | Endpoint | Description |
 |---|---|---|
-| `GET` | `/api/integrations/proxmox/nodes` | List Proxmox nodes |
-| `GET` | `/api/integrations/proxmox/vms` | List VMs |
-| `GET` | `/api/integrations/proxmox/containers` | List LXC containers |
-| `POST` | `/api/integrations/proxmox/vms` | Create VM |
-| `POST` | `/api/integrations/proxmox/containers` | Create LXC container |
-| `POST` | `/api/integrations/proxmox/vms/:id/action` | VM lifecycle action |
-| `POST` | `/api/integrations/proxmox/containers/:id/action` | Container lifecycle action |
-| `DELETE` | `/api/integrations/proxmox/vms/:id` | Destroy VM *(destructive)* |
-| `DELETE` | `/api/integrations/proxmox/containers/:id` | Destroy container *(destructive)* |
+| `GET` | `/api/integrations/proxmox/nodes` | Cluster nodes |
+| `GET` | `/api/integrations/proxmox/nextid` | Next guest ID |
+| `POST` | `/api/integrations/proxmox/provision/vm` | Create VM; body includes vmid, name, node |
+| `POST` | `/api/integrations/proxmox/provision/lxc` | Create LXC; body includes vmid, hostname, node, ostemplate |
+| `POST` | `/api/integrations/proxmox/action` | Body contains nodeId and action |
+| `DELETE` | `/api/integrations/proxmox/provision/:vmid` | Destroy guest; query requires node; dispatches destroy_vm |
 
-Lifecycle actions: `start`, `stop`, `shutdown`, `reboot`.
+Use `/api/inventory?sources=proxmox` for guest inventory. Actions are `start`,
+`stop`, `shutdown`, `reboot`, `suspend`, `resume`, `snapshot`.
 
 ### AWS
 
+All routes require `aws:read`; provision requires `aws:provision`, ordinary
+lifecycle requires `aws:lifecycle`, and terminate requires `aws:destroy`.
+
 | Method | Endpoint | Description |
 |---|---|---|
-| `GET` | `/api/integrations/aws/instances` | List EC2 instances across regions |
-| `POST` | `/api/integrations/aws/instances` | Launch new instance |
-| `POST` | `/api/integrations/aws/instances/:id/action` | Instance lifecycle action |
-| `DELETE` | `/api/integrations/aws/instances/:id` | Terminate instance *(destructive)* |
+| `GET` | `/api/integrations/aws/inventory` | Inventory response under inventory |
+| `POST` | `/api/integrations/aws/provision` | Launch instance; body requires imageId, optional instanceType/region/name/network settings |
+| `POST` | `/api/integrations/aws/lifecycle` | Body contains instanceId, action, optional region |
 
-Lifecycle actions: `start`, `stop`, `reboot`.
+Actions are `start`, `stop`, `reboot`, `terminate`. Provision/lifecycle responses
+wrap the provider execution under `result`.
 
 ### Azure
 
@@ -617,7 +633,7 @@ Lifecycle actions: `start`, `stop`, `restart`, `deallocate`.
 
 ## Checkmk Monitoring
 
-Requires `CHECKMK_ENABLED=true`. All endpoints require JWT auth and the `monitoring:read` RBAC permission.
+Requires `CHECKMK_ENABLED=true`. All endpoints require JWT auth and the `checkmk:read` RBAC permission.
 
 | Method | Endpoint | Description |
 |---|---|---|
@@ -628,31 +644,20 @@ Requires `CHECKMK_ENABLED=true`. All endpoints require JWT auth and the `monitor
 
 | Param | Default | Description |
 |---|---|---|
-| `limit` | `200` | Max events to return (1–1000) |
+| `limit` | `200` | Max events to return (1-1000) |
 
-**Response (`GET /api/nodes/:nodeId/services`):**
+Normal responses are arrays. Service state is numeric (0 OK, 1 WARN, 2 CRIT,
+3 UNKNOWN); stateType is 0 soft or 1 hard. lastCheck and lastStateChange are
+Unix timestamps in seconds. Expert mode wraps the array in `services` or `events`
+and adds `_debug`. Empty arrays do not establish whether the host exists.
 
-```json
-{
-  "services": [
-    {
-      "description": "CPU load",
-      "state": "OK",
-      "stateType": "hard",
-      "pluginOutput": "OK - 15min load: 0.42",
-      "lastCheck": "2026-06-15T10:30:00Z"
-    }
-  ]
-}
-```
-
-**Error codes:**
-
-| HTTP | Code | Condition |
-|---|---|---|
-| 503 | `CHECKMK_NOT_CONFIGURED` | Plugin not enabled |
-| 404 | `NODE_NOT_FOUND` | Node not known to Checkmk |
-| 502 | *(upstream error)* | Checkmk API failure or timeout |
+History uses Livestatus when available, otherwise reduced-fidelity REST data.
+See [Checkmk transport and fallback](integrations/checkmk.md#state-change-events-journal).
+The overview is `GET /api/monitoring/overview`. Acknowledge and downtime use
+`POST /api/monitoring/acknowledge` and `POST /api/monitoring/downtime`; the production
+mount requires both `checkmk:read` and `checkmk:write`. Bodies and response shapes
+are in [OpenAPI](openapi.yaml). Missing configuration returns 503
+`CHECKMK_NOT_CONFIGURED`; upstream errors return 502 `UPSTREAM_ERROR`.
 
 ---
 
@@ -719,7 +724,7 @@ remains a single backend process.
 
 ## Journal
 
-Requires `AUTH_ENABLED=true` and the `journal:read` permission. Events are streamed via SSE.
+Requires an access JWT and the `journal:read` permission. Events are streamed via SSE.
 
 | Method | Endpoint | Description |
 |---|---|---|
@@ -748,7 +753,7 @@ Both stream endpoints return `text/event-stream`. Each event has `type` (`entry`
 
 ## RBAC
 
-Require `AUTH_ENABLED=true`. All endpoints require JWT auth and appropriate RBAC permissions.
+All endpoints require access JWT authentication and appropriate RBAC permissions.
 
 ### Users
 
@@ -759,10 +764,8 @@ Require `AUTH_ENABLED=true`. All endpoints require JWT auth and appropriate RBAC
 | `GET` | `/api/users/:id` | Get user |
 | `PUT` | `/api/users/:id` | Update user |
 | `DELETE` | `/api/users/:id` | Delete user |
-| `POST` | `/api/users/:id/roles` | Assign role to user |
+| `POST` | `/api/users/:id/roles/:roleId` | Assign role to user |
 | `DELETE` | `/api/users/:id/roles/:roleId` | Remove role from user |
-| `POST` | `/api/users/login` | Authenticate and get JWT |
-| `DELETE` | `/api/users/:id/sessions` | Revoke user sessions |
 
 ### Roles
 
@@ -773,7 +776,7 @@ Require `AUTH_ENABLED=true`. All endpoints require JWT auth and appropriate RBAC
 | `GET` | `/api/roles/:id` | Get role |
 | `PUT` | `/api/roles/:id` | Update role |
 | `DELETE` | `/api/roles/:id` | Delete role |
-| `POST` | `/api/roles/:id/permissions` | Assign permission to role |
+| `POST` | `/api/roles/:id/permissions/:permId` | Assign permission to role |
 | `DELETE` | `/api/roles/:id/permissions/:permId` | Remove permission from role |
 
 ### Permissions
@@ -792,8 +795,8 @@ Require `AUTH_ENABLED=true`. All endpoints require JWT auth and appropriate RBAC
 | `GET` | `/api/groups/:id` | Get group |
 | `PUT` | `/api/groups/:id` | Update group |
 | `DELETE` | `/api/groups/:id` | Delete group |
-| `POST` | `/api/groups/:id/users` | Add user to group |
-| `DELETE` | `/api/groups/:id/users/:userId` | Remove user from group |
+| `POST` | `/api/users/:id/groups/:groupId` | Add user to group |
+| `DELETE` | `/api/users/:id/groups/:groupId` | Remove user from group |
 
 ---
 
@@ -801,19 +804,23 @@ Require `AUTH_ENABLED=true`. All endpoints require JWT auth and appropriate RBAC
 
 | Method | Endpoint | Description |
 |---|---|---|
-| `POST` | `/api/auth/login` | Login (returns JWT) |
+| `POST` | `/api/auth/login` | Login, returns token, refreshToken and user |
+| `POST` | `/api/auth/refresh` | Rotate token pair using refreshToken in the body |
+| `POST` | `/api/auth/register` | Register when self-registration is enabled |
 | `POST` | `/api/auth/logout` | Logout (includes `entraIdLogoutUrl` for SSO sessions) |
-| `GET` | `/api/auth/me` | Current user info |
 | `GET` | `/api/auth/providers` | Available auth methods (public, no auth required) |
 
 ### Azure Entra ID SSO
 
-Available when `ENTRA_ID_ENABLED=true`. Returns 404 otherwise.
+Available when `ENTRA_ID_ENABLED=true`. Returns 404 otherwise. Callback and token
+redemption require the HttpOnly cookie set by login in the initiating browser.
+State and final codes are single-use. Enrollment requires both `rbac:admin` and
+`users:admin`; see [identity linking](integrations/entra-id.md).
 
 | Method | Endpoint | Description |
 |---|---|---|
 | `GET` | `/api/auth/entra-id/login` | Redirects (302) to Microsoft login |
-| `GET` | `/api/auth/entra-id/callback` | OAuth callback — exchanges code, redirects to frontend |
+| `GET` | `/api/auth/entra-id/callback` | OAuth callback: exchanges code, redirects to frontend |
 | `POST` | `/api/auth/entra-id/token` | Exchange single-use auth code for JWT pair |
 
 **`GET /api/auth/providers` response:**
@@ -862,7 +869,6 @@ Used internally by the frontend for expert mode log collection.
 | Method | Endpoint | Description |
 |---|---|---|
 | `GET` | `/api/setup/status` | Setup completion status |
-| `POST` | `/api/setup/complete` | Mark setup as complete |
 
 ---
 
@@ -871,13 +877,12 @@ Used internally by the frontend for expert mode log collection.
 | Method | Endpoint | Description |
 |---|---|---|
 | `GET` | `/api/monitoring/metrics` | Performance metrics (memory, CPU, uptime) |
-| `GET` | `/api/monitoring/journal` | System journal entries |
 
 ---
 
 ## MCP (Model Context Protocol)
 
-Requires `MCP_ENABLED=true`. The MCP endpoint does not require JWT authentication — it uses a dedicated `mcp-service` system user with read-only RBAC permissions.
+Requires `MCP_ENABLED=true`. The MCP endpoint does not require JWT authentication: it uses a dedicated `mcp-service` system user with read-only RBAC permissions.
 
 | Method | Endpoint | Description |
 |---|---|---|
