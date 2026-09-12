@@ -26,6 +26,7 @@ import { createMonitoringOverviewRouter } from "./routes/integrations/monitoring
 import { createMonitoringActionsRouter } from "./routes/integrations/monitoringActions";
 import monitoringRouter from "./routes/monitoring";
 import { StreamingExecutionManager } from "./services/StreamingExecutionManager";
+import { ShutdownCoordinator } from "./services/ShutdownCoordinator";
 import { ExecutionQueue } from "./services/ExecutionQueue";
 import { BatchExecutionService } from "./services/BatchExecutionService";
 import { RequestIdempotencyService } from "./services/RequestIdempotencyService";
@@ -224,6 +225,7 @@ async function startServer(): Promise<Express> {
     const executionRepository = new ExecutionRepository(
       databaseService.getAdapter(),
     );
+    await executionRepository.reconcileStandaloneExecutions();
 
     // Initialize Bolt command whitelist service (applies only to POST /api/nodes/:id/command)
     const commandWhitelistService = new BoltCommandWhitelistService(
@@ -511,6 +513,7 @@ async function startServer(): Promise<Express> {
     // Security middleware - must be first
     app.use(helmetMiddleware);
     app.use(additionalSecurityHeaders);
+    app.use((req, res, next) => { shutdown.middleware(req, res, next); });
 
     // Middleware
     app.use(
@@ -908,6 +911,19 @@ async function startServer(): Promise<Express> {
     // Global error handling middleware with expert mode support
     app.use(errorHandler);
 
+    // Graceful restart: terminate all pre-existing sessions for each registered console provider (Req 2.6)
+    const consoleProviders = integrationManager.getAllConsoleProviders();
+    for (const cp of consoleProviders) {
+      await consoleSessionManager.terminateAllForProvider(cp.name);
+    }
+    if (consoleProviders.length > 0) {
+      logger.info("Terminated stale console sessions from previous run", {
+        component: "Server",
+        operation: "initializeConsole",
+        metadata: { providerCount: consoleProviders.length },
+      });
+    }
+
     // Start server
     const server = app.listen(config.port, config.host, () => {
       logger.info(`Backend server running on ${config.host}:${String(config.port)}`, {
@@ -933,19 +949,6 @@ async function startServer(): Promise<Express> {
       operation: "initializeConsole",
     });
 
-    // Graceful restart: terminate all pre-existing sessions for each registered console provider (Req 2.6)
-    const consoleProviders = integrationManager.getAllConsoleProviders();
-    for (const cp of consoleProviders) {
-      await consoleSessionManager.terminateAllForProvider(cp.name);
-    }
-    if (consoleProviders.length > 0) {
-      logger.info("Terminated stale console sessions from previous run", {
-        component: "Server",
-        operation: "initializeConsole",
-        metadata: { providerCount: consoleProviders.length },
-      });
-    }
-
     // Session cleanup interval: expire idle sessions periodically
     const consoleCleanupInterval = setInterval(() => {
       consoleSessionManager.cleanupExpiredSessions().catch((err: unknown) => {
@@ -957,48 +960,35 @@ async function startServer(): Promise<Express> {
       });
     }, consoleConfig.sessionTimeoutMs);
 
-    // Graceful shutdown
-    process.on("SIGTERM", () => {
-      logger.info("SIGTERM received, shutting down gracefully...", {
-        component: "Server",
-        operation: "shutdown",
-      });
-      streamingManager.cleanup();
-      batchExecutionService.stopAdmission();
-      integrationManager.stopHealthCheckScheduler();
-      if (entraIdCleanupInterval) {
-        clearInterval(entraIdCleanupInterval);
-      }
-      clearInterval(consoleCleanupInterval);
-      // No console session outlives the process that owns its sockets, so both
-      // ends close before the HTTP server stops accepting.
-      const closedConsoles = consoleConnectionBroker.revokeAll("server_shutdown");
-      if (closedConsoles > 0) {
-        logger.info("Closed live console connections for shutdown", {
-          component: "Server",
-          operation: "shutdown",
-          metadata: { count: closedConsoles },
-        });
-      }
-      const mcpClosed = closeMcp?.() ?? Promise.resolve();
-      server.close(() => {
-        void mcpClosed
-          // The sockets closed above; their termination writes are still in
-          // flight and the database closes at the end of this chain.
-          .then(() => consoleWebSocketProxy.drain())
-          .then(() => Promise.all(
-            integrationManager.getAllConsoleProviders()
-              .map(provider => consoleSessionManager.terminateAllForProvider(provider.name)),
-          ))
-          .then(() => batchExecutionService.reconcileInterrupted()).then(() => databaseService.close()).then(() => {
-          logger.info("Server closed", {
-            component: "Server",
-            operation: "shutdown",
-          });
-          process.exit(0);
-        });
-      });
-    });
+    const shutdown = new ShutdownCoordinator(
+      () => {
+        streamingManager.cleanup();
+        batchExecutionService.stopAdmission();
+        integrationManager.stopHealthCheckScheduler();
+        if (entraIdCleanupInterval) clearInterval(entraIdCleanupInterval);
+        clearInterval(consoleCleanupInterval);
+        consoleConnectionBroker.revokeAll("server_shutdown");
+      },
+      async () => {
+        await Promise.all([
+          new Promise<void>((resolve, reject) => {
+            server.close(error => { if (error) reject(error); else resolve(); });
+          }),
+          closeMcp?.() ?? Promise.resolve(),
+          consoleWebSocketProxy.drain(),
+        ]);
+        await Promise.all(integrationManager.getAllConsoleProviders()
+          .map(provider => consoleSessionManager.terminateAllForProvider(provider.name)));
+        await batchExecutionService.reconcileInterrupted();
+      },
+      () => databaseService.close(),
+      logger,
+    );
+    const handleShutdown = (): void => {
+      void shutdown.shutdown().then(code => { process.exit(code); });
+    };
+    process.on("SIGTERM", handleShutdown);
+    process.on("SIGINT", handleShutdown);
 
     return app;
   } catch (error: unknown) {

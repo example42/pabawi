@@ -5,7 +5,7 @@
   "main": "dist/server.js",
   "scripts": {
     "dev": "tsx watch src/server.ts",
-    "build": "tsc && mkdir -p dist/database && cp -r src/database/migrations dist/database/",
+    "build": "node ../scripts/compilation/backend.mjs",
     "start": "node dist/server.js",
     "test": "vitest --run --passWithNoTests",
     "test:watch": "vitest",

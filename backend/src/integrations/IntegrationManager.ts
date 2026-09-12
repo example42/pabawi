@@ -19,6 +19,7 @@ import type {
 import type { ConsolePlugin, ConsoleTransport } from "./console/types";
 import type { Node, Facts, ExecutionResult } from "./bolt/types";
 import { NodeLinkingService, type LinkedNode } from "./NodeLinkingService";
+import { ProviderReadGuard } from "./ProviderReadGuard";
 import { LoggerService } from "../services/LoggerService";
 
 /**
@@ -135,6 +136,9 @@ export class IntegrationManager {
   // Health check scheduling
   private healthCheckCache = new Map<string, HealthCheckCacheEntry>();
   private healthCheckInterval?: NodeJS.Timeout;
+  private healthCheckGeneration = 0;
+  private healthCheckSchedulerRunning = false;
+  private readonly readGuard = new ProviderReadGuard();
   private healthCheckIntervalMs: number;
   private healthCheckRetryMs: number;
   private healthCheckCacheTTL: number;
@@ -642,55 +646,17 @@ export class IntegrationManager {
             return { nodes: [], groups: [] };
           }
 
-          // Fetch nodes and groups in parallel with per-source timeout.
-          // Checkmk inventories can be larger/slower, so allow a longer budget.
-          const SOURCE_TIMEOUT_MS = name === "checkmk" ? 60_000 : 15_000;
-          const timeoutErrorMessage = `Source '${name}' timed out after ${String(SOURCE_TIMEOUT_MS)}ms`;
-
-          this.logger.debug(`Calling getInventory() and getGroups() on source '${name}'`, {
-            component: "IntegrationManager",
-            operation: "getAggregatedInventory",
-            metadata: { sourceName: name },
-          });
-
-          let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
-          const timeoutPromise = new Promise<never>((_, reject) => {
-            timeoutHandle = setTimeout(
-              () => { reject(new Error(timeoutErrorMessage)); },
-              SOURCE_TIMEOUT_MS,
-            );
-          });
-          // Always attach a rejection handler to the timeout promise. If the
-          // work setup below throws synchronously (so the race is never built
-          // and the timer is never cleared), the timer can still fire later and
-          // would otherwise surface as an unhandled rejection that pollutes
-          // unrelated tests sharing the same worker.
-          timeoutPromise.catch(() => { /* handled: see clearTimeout below */ });
-
-          // Attach a no-op catch to the work promise so that, if the timeout
-          // wins the race and the work later rejects, the rejection is silently
-          // handled rather than surfacing as an unhandled promise rejection.
-          const workPromise = Promise.all([
-            source.getInventory(),
-            source.getGroups().catch((error: unknown) => {
-              const err = error instanceof Error ? error : new Error(String(error));
+          const timeoutMs = name === "checkmk" ? 60_000 : 15_000;
+          const [nodes, groups] = await Promise.all([
+            this.readGuard.run(name, timeoutMs, () => source.getInventory()),
+            this.readGuard.run(name, timeoutMs, () => source.getGroups()).catch((error: unknown) => {
               this.logger.error(`Failed to get groups from '${name}', continuing with nodes only`, {
-                component: "IntegrationManager",
-                operation: "getAggregatedInventory",
+                component: "IntegrationManager", operation: "getAggregatedInventory",
                 metadata: { sourceName: name },
-              }, err);
+              }, error instanceof Error ? error : new Error(String(error)));
               return [] as NodeGroup[];
             }),
           ]);
-          workPromise.catch(() => { /* handled: either consumed by race winner or logged above */ });
-
-          let nodes: Node[];
-          let groups: NodeGroup[];
-          try {
-            [nodes, groups] = await Promise.race([workPromise, timeoutPromise]);
-          } finally {
-            clearTimeout(timeoutHandle);
-          }
 
           this.logger.debug(`Source '${name}' returned ${String(nodes.length)} nodes and ${String(groups.length)} groups`, {
             component: "IntegrationManager",
@@ -943,24 +909,21 @@ export class IntegrationManager {
     const sources = [...this.informationSources.entries()]
       .filter(([name]) => allowedSources === undefined || allowedSources.includes(name));
 
-    // Get node from first available source
-    let node: Node | null = null;
-    for (const [, source] of sources) {
-      if (!source.isInitialized()) continue;
-
+    const nodes = await Promise.all(sources.map(async ([name, source]) => {
+      if (!source.isInitialized()) return null;
       try {
-        const inventory = await source.getInventory();
-        node = inventory.find((n) => n.id === nodeId) ?? null;
-        if (node) break;
+        const inventory = await this.readGuard.run(name, name === "checkmk" ? 60_000 : 15_000,
+          () => source.getInventory());
+        return inventory.find((entry) => entry.id === nodeId) ?? null;
       } catch (error) {
-        const err = error instanceof Error ? error : new Error(String(error));
-        this.logger.error(`Failed to get node from '${source.name}'`, {
-          component: "IntegrationManager",
-          operation: "getNodeData",
-          metadata: { sourceName: source.name, nodeId },
-        }, err);
+        this.logger.error(`Failed to get node from '${name}'`, {
+          component: "IntegrationManager", operation: "getNodeData",
+          metadata: { sourceName: name, nodeId },
+        }, error instanceof Error ? error : new Error(String(error)));
+        return null;
       }
-    }
+    }));
+    const node = nodes.find((entry) => entry !== null);
 
     if (!node) {
       throw new Error(`Node '${nodeId}' not found in any source`);
@@ -972,7 +935,8 @@ export class IntegrationManager {
         try {
           if (!source.isInitialized()) return;
 
-          const nodeFacts = await source.getNodeFacts(nodeId);
+          const nodeFacts = await this.readGuard.run(name, name === "checkmk" ? 60_000 : 15_000,
+            () => source.getNodeFacts(nodeId));
           facts[name] = nodeFacts;
         } catch (error) {
           const err = error instanceof Error ? error : new Error(String(error));
@@ -1035,7 +999,7 @@ export class IntegrationManager {
     const healthCheckPromises = Array.from(this.plugins.entries()).map(
       async ([name, registration]) => {
         try {
-          const status = await registration.plugin.healthCheck();
+          const status = await this.readGuard.run(name, 15_000, () => registration.plugin.healthCheck());
           healthStatuses.set(name, status);
 
                 this.healthCheckCache.set(name, {
@@ -1073,7 +1037,7 @@ export class IntegrationManager {
    * Subsequent calls to healthCheckAll(true) will return cached results if not expired.
    */
   startHealthCheckScheduler(): void {
-    if (this.healthCheckInterval) {
+    if (this.healthCheckSchedulerRunning) {
       this.logger.info("Health check scheduler already running", {
         component: "IntegrationManager",
         operation: "startHealthCheckScheduler",
@@ -1094,10 +1058,13 @@ export class IntegrationManager {
       }
     );
 
+    this.healthCheckSchedulerRunning = true;
+    const generation = ++this.healthCheckGeneration;
+
     // Run initial health check then schedule the next one
     // Use cache if results were already warmed during startup
     void this.healthCheckAll(this.healthCheckCache.size > 0).then((results) => {
-      this.scheduleNextHealthCheck(results);
+      this.scheduleNextHealthCheck(results, generation);
     });
 
     this.logger.info("Health check scheduler started", {
@@ -1112,7 +1079,8 @@ export class IntegrationManager {
    * Uses the shorter retry interval if any plugin is unhealthy,
    * otherwise uses the normal interval.
    */
-  private scheduleNextHealthCheck(lastResults: Map<string, HealthStatus>): void {
+  private scheduleNextHealthCheck(lastResults: Map<string, HealthStatus>, generation: number): void {
+    if (!this.healthCheckSchedulerRunning || generation !== this.healthCheckGeneration) return;
     const hasUnhealthy = Array.from(lastResults.values()).some((s) => !s.healthy);
     const delay = hasUnhealthy ? this.healthCheckRetryMs : this.healthCheckIntervalMs;
 
@@ -1132,7 +1100,7 @@ export class IntegrationManager {
 
     this.healthCheckInterval = setTimeout(() => {
       void this.healthCheckAll(false).then((results) => {
-        this.scheduleNextHealthCheck(results);
+        this.scheduleNextHealthCheck(results, generation);
       });
     }, delay);
   }
@@ -1141,6 +1109,8 @@ export class IntegrationManager {
    * Stop periodic health check scheduling
    */
   stopHealthCheckScheduler(): void {
+    this.healthCheckSchedulerRunning = false;
+    ++this.healthCheckGeneration;
     if (this.healthCheckInterval) {
       clearTimeout(this.healthCheckInterval);
       this.healthCheckInterval = undefined;
