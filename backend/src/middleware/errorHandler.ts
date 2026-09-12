@@ -64,7 +64,7 @@ export function errorHandler(
   const statusCode = getStatusCode(err);
 
   // Send error response
-  res.status(statusCode).json(errorResponse);
+  res.status(statusCode).json(errorService.sanitizeSensitiveData(errorResponse));
 }
 
 /**

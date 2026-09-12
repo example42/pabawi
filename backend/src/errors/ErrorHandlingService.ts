@@ -1,3 +1,4 @@
+import { redactDiagnostics } from '../shared/diagnosticRedaction';
 import { randomUUID } from "crypto";
 import { LoggerService } from "../services/LoggerService";
 
@@ -149,7 +150,7 @@ export class ErrorHandlingService {
       }
     }
 
-    return { error: errorResponse };
+    return { error: redactDiagnostics(errorResponse) };
   }
 
   /**
@@ -614,57 +615,6 @@ export class ErrorHandlingService {
    * @returns Sanitized data
    */
   public sanitizeSensitiveData(data: unknown): unknown {
-    if (typeof data === "string") {
-      // Redact common sensitive patterns
-      return data
-        .replace(/password[=:]\s*\S+/gi, "password=***")
-        .replace(/token[=:]\s*\S+/gi, "token=***")
-        .replace(/api[_-]?key[=:]\s*\S+/gi, "api_key=***")
-        .replace(/secret[=:]\s*\S+/gi, "secret=***");
-    }
-
-    if (typeof data === "object" && data !== null) {
-      const sanitized: Record<string, unknown> = {};
-      for (const [key, value] of Object.entries(data)) {
-        if (this.shouldObfuscateKey(key)) {
-          sanitized[key] = "***";
-        } else if (this.isSafeObject(value)) {
-          sanitized[key] = this.sanitizeSensitiveData(value);
-        } else {
-          sanitized[key] = value;
-        }
-      }
-      return sanitized;
-    }
-
-    return data;
-  }
-
-  private shouldObfuscateKey(key: string): boolean {
-    const lowerKey = key.toLowerCase();
-    const sensitivePatterns = [
-      "password",
-      "token",
-      "secret",
-      "apikey",
-      "api_key",
-      "privatekey",
-      "private_key",
-      "auth",
-      "credential",
-      "session",
-      "cookie",
-      "authorization",
-      "bearer",
-    ];
-    return sensitivePatterns.some((pattern) => lowerKey.includes(pattern));
-  }
-
-  private isSafeObject(value: unknown): value is Record<string, unknown> {
-    if (value === null || typeof value !== "object") {
-      return false;
-    }
-    const proto = Object.getPrototypeOf(value) as object | null;
-    return proto === Object.prototype || proto === null;
+    return redactDiagnostics(data);
   }
 }

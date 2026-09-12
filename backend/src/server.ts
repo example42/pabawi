@@ -40,6 +40,8 @@ import {
   helmetMiddleware,
   createRateLimitMiddleware,
   createAuthRateLimitMiddleware,
+  createSsoRateLimitMiddleware,
+  createRefreshRateLimitMiddleware,
   inputSanitizationMiddleware,
   additionalSecurityHeaders,
 } from "./middleware/securityMiddleware";
@@ -99,6 +101,7 @@ async function startServer(): Promise<Express> {
     });
     const configService = new ConfigService();
     const config = configService.getConfig();
+    installCrashHandlers(logger, configService.getCrashDumpDir());
 
     logger.info("Configuration loaded successfully", {
       component: "Server",
@@ -604,7 +607,7 @@ async function startServer(): Promise<Express> {
 
     // Authentication routes with stricter rate limiting
     const authRateLimitMiddleware = createAuthRateLimitMiddleware();
-    app.use("/api/auth", authRateLimitMiddleware, createAuthRouter(databaseService, container));
+    app.use("/api/auth", authRateLimitMiddleware, createRefreshRateLimitMiddleware(), createAuthRouter(databaseService, container));
 
     // Conditionally initialize Entra ID SSO authentication
     const entraIdConfig = configService.getEntraIdConfig();
@@ -638,6 +641,7 @@ async function startServer(): Promise<Express> {
 
         app.use(
           "/api/auth/entra-id",
+          createSsoRateLimitMiddleware(),
           createEntraIdAuthRouter(databaseService, container),
         );
 

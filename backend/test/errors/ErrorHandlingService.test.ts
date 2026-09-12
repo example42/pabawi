@@ -221,25 +221,25 @@ describe("ErrorHandlingService", () => {
     it("should redact password in strings", () => {
       const data = "password=secret123 other=data";  // pragma: allowlist secret
       const result = service.sanitizeSensitiveData(data);
-      expect(result).toBe("password=*** other=data");
+      expect(result).toBe("password=[REDACTED] other=data");
     });
 
     it("should redact token in strings", () => {
       const data = "token:abc123xyz";  // pragma: allowlist secret
       const result = service.sanitizeSensitiveData(data);
-      expect(result).toBe("token=***");
+      expect(result).toBe("token:[REDACTED]");
     });
 
     it("should redact api_key in strings", () => {
       const data = "api_key=12345";  // pragma: allowlist secret
       const result = service.sanitizeSensitiveData(data);
-      expect(result).toBe("api_key=***");
+      expect(result).toBe("api_key=[REDACTED]");
     });
 
     it("should redact secret in strings", () => {
       const data = "secret: mysecret";  // pragma: allowlist secret
       const result = service.sanitizeSensitiveData(data);
-      expect(result).toBe("secret=***");
+      expect(result).toBe("secret: [REDACTED]");
     });
 
     it("should redact sensitive keys in objects", () => {
@@ -254,9 +254,9 @@ describe("ErrorHandlingService", () => {
 
       expect(result).toEqual({
         username: "user",
-        password: "***",
-        apiKey: "***",
-        token: "***",
+        password: "[REDACTED]",
+        apiKey: "[REDACTED]",
+        token: "[REDACTED]",
       });
     });
 
@@ -276,10 +276,10 @@ describe("ErrorHandlingService", () => {
       expect(result).toEqual({
         user: {
           name: "John",
-          password: "***",
+          password: "[REDACTED]",
         },
         config: {
-          apiKey: "***",
+          apiKey: "[REDACTED]",
         },
       });
     });

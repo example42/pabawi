@@ -1,3 +1,4 @@
+import { redactDiagnostics } from '../shared/diagnosticRedaction';
 /**
  * LogBufferService
  *
@@ -56,7 +57,7 @@ export class LogBufferService {
    * Oldest entries are evicted when capacity is exceeded.
    */
   push(entry: LogEntry): void {
-    this.buffer.push(entry);
+    this.buffer.push(redactDiagnostics(entry, 8 * 1024));
     if (this.buffer.length > this.maxEntries) {
       this.buffer.shift();
     }

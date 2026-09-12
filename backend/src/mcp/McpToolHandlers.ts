@@ -1,3 +1,5 @@
+import { mcpWorkloadLimiter } from './McpWorkloadLimiter';
+import { redactText } from '../shared/diagnosticRedaction';
 /**
  * MCP Tool Handler Registrations
  *
@@ -43,7 +45,7 @@ function errorResult(message: string): {
   isError: true;
 } {
   return {
-    content: [{ type: 'text' as const, text: message }],
+    content: [{ type: 'text' as const, text: redactText(message) }],
     isError: true,
   };
 }
@@ -92,6 +94,8 @@ export function registerAllTools(server: McpServerInstance, deps: McpDependencie
     close: server.close.bind(server),
     registerTool: (name, config, handler) => {
       server.registerTool(name, config, async args => {
+        const release = mcpWorkloadLimiter.acquire(deps.principal.userId);
+        if (!release) return errorResult('MCP concurrent tool limit reached; retry after outstanding work finishes');
         try {
           const result = await handler(args);
           const denied = await checkPermission(deps, name);
@@ -102,6 +106,8 @@ export function registerAllTools(server: McpServerInstance, deps: McpDependencie
             metadata: { ...deps.principal, tool: name, allowed: false },
           });
           return errorResult('MCP authorization unavailable or session revoked');
+        } finally {
+          release();
         }
       });
     },

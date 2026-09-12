@@ -92,6 +92,12 @@ describe('Production MCP authentication and session boundary', () => {
     const req = request(`http://127.0.0.1:${String(harness.port)}`)[method]('/mcp').set(headers).auth(token, { type: 'bearer' });
     return session ? req.set('mcp-session-id', session) : req;
   }
+  it('applies the account request budget before session lookup and preserves other accounts', async () => {
+    for (let i = 0; i < 100; i++) await send(aliceToken, 'post', `missing-${i}`).send({}).expect(404);
+    await send(aliceToken, 'post', 'another').send({}).expect(429);
+    await send(bobToken, 'post', 'another').send({}).expect(404);
+  });
+
   async function open(token: string): Promise<string> {
     const response = await send(token).send(initialize).expect(200);
     const id = response.headers['mcp-session-id'] as string;

@@ -1,3 +1,4 @@
+import { readDiagnosticFile, retainedDiagnosticFiles } from "../utils/diagnosticFiles";
 /**
  * Crash Dumps Routes
  *
@@ -29,13 +30,12 @@ interface CrashDumpEntry {
 }
 
 function resolveDumpDir(configuredDir: string | undefined): string {
-  return configuredDir ?? process.env.PABAWI_CRASH_DUMP_DIR ?? path.join(process.cwd(), "crash-dumps");
+  return configuredDir ?? path.join(process.cwd(), "crash-dumps");
 }
 
 function extractMetadata(filePath: string): Partial<Pick<CrashDumpEntry, "pid" | "reason" | "errorMessage">> {
   try {
-    const raw = fs.readFileSync(filePath, "utf-8");
-    const data = JSON.parse(raw) as Record<string, unknown>;
+    const data = readDiagnosticFile(path.dirname(filePath), path.basename(filePath)) as Record<string, unknown>;
     const errorObj = data.error;
     let errorMessage: string | undefined;
     if (errorObj && typeof errorObj === "object") {
@@ -79,8 +79,7 @@ export function createCrashDumpsRouter(container: DIContainer): Router {
         return;
       }
 
-      const files = await fs.promises.readdir(dumpDir);
-      const jsonFiles = files.filter((f) => f.endsWith(".json"));
+      const jsonFiles = retainedDiagnosticFiles(dumpDir);
 
       const dumps: CrashDumpEntry[] = [];
 
@@ -113,7 +112,7 @@ export function createCrashDumpsRouter(container: DIContainer): Router {
    */
   router.get(
     "/:filename",
-    asyncHandler(async (req: Request, res: Response): Promise<void> => {
+    asyncHandler((req: Request, res: Response): void => {
       const parseResult = FilenameParamSchema.safeParse(req.params);
       if (!parseResult.success) {
         res.status(400).json({
@@ -134,7 +133,7 @@ export function createCrashDumpsRouter(container: DIContainer): Router {
         return;
       }
 
-      if (!fs.existsSync(resolved)) {
+      if (!retainedDiagnosticFiles(dumpDir).includes(filename)) {
         res.status(404).json({
           error: { code: "NOT_FOUND", message: "Crash dump not found" },
         });
@@ -147,15 +146,7 @@ export function createCrashDumpsRouter(container: DIContainer): Router {
         metadata: { filename },
       });
 
-      const content = await fs.promises.readFile(resolved, "utf-8");
-
-      // Return as JSON if valid, otherwise as text
-      try {
-        const parsed = JSON.parse(content) as unknown;
-        res.json({ filename, content: parsed });
-      } catch {
-        res.json({ filename, content, format: "text" });
-      }
+      res.json({ filename, content: readDiagnosticFile(dumpDir, filename) });
     }),
   );
 
@@ -186,7 +177,7 @@ export function createCrashDumpsRouter(container: DIContainer): Router {
         return;
       }
 
-      if (!fs.existsSync(resolved)) {
+      if (!retainedDiagnosticFiles(dumpDir).includes(filename)) {
         res.status(404).json({
           error: { code: "NOT_FOUND", message: "Crash dump not found" },
         });
@@ -201,8 +192,7 @@ export function createCrashDumpsRouter(container: DIContainer): Router {
 
       res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
       res.setHeader("Content-Type", "application/json");
-      const stream = fs.createReadStream(resolved);
-      stream.pipe(res);
+      res.send(JSON.stringify(readDiagnosticFile(dumpDir, filename)));
     }),
   );
 
@@ -233,7 +223,7 @@ export function createCrashDumpsRouter(container: DIContainer): Router {
         return;
       }
 
-      if (!fs.existsSync(resolved)) {
+      if (!retainedDiagnosticFiles(dumpDir).includes(filename)) {
         res.status(404).json({
           error: { code: "NOT_FOUND", message: "Crash dump not found" },
         });

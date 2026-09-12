@@ -1,3 +1,4 @@
+import { createRateLimitMiddleware, createMcpConcurrencyMiddleware } from '../middleware/securityMiddleware';
 import { randomUUID } from 'node:crypto';
 import { Router, type RequestHandler } from 'express';
 import { asyncHandler } from '../routes/asyncHandler';
@@ -49,7 +50,7 @@ export function createMcpRouter(
     });
   }
 
-  router.all('/', authenticate, asyncHandler(async (req, res) => {
+  router.all('/', authenticate, createRateLimitMiddleware(), createMcpConcurrencyMiddleware(), asyncHandler(async (req, res) => {
     if (!req.user || !req.mcpAuthMethod || !req.revalidateAuth) {
       res.status(401).json({ error: 'Authentication required' });
       return;

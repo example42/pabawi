@@ -444,3 +444,12 @@ When running Pabawi in a pod:
 
 - Tools like `reports_query`, `catalogs_get`, and `hiera_lookup` require their respective integrations to be enabled
 - If PuppetDB is not configured, PuppetDB-dependent tools will return "service not available"
+
+## Workload and diagnostic policy
+
+MCP requests are limited to 100 per account per minute. Open HTTP requests and
+provider tool work each have separate limits of four per account and 20 globally.
+Tool capacity remains occupied until provider work settles, even when its client
+disconnects. Account limits span JWT/static credentials and session IDs.
+See [diagnostic security and retention](diagnostics-security.md) for the complete
+budget, proxy-attribution and support-export policy.

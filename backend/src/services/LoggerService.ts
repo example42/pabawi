@@ -1,3 +1,4 @@
+import { redactDiagnostics, redactText } from '../shared/diagnosticRedaction';
 /**
  * Logger Service
  *
@@ -86,7 +87,7 @@ export class LoggerService {
       operation: context?.operation,
       metadata: context?.metadata,
     };
-    this.logBuffer.push(entry);
+    this.logBuffer.push(redactDiagnostics(entry));
   }
 
   /**
@@ -145,6 +146,8 @@ export class LoggerService {
     message: string,
     context?: LogContext
   ): string {
+    message = redactText(message);
+    context = redactDiagnostics(context);
     const timestamp = new Date().toISOString();
     const levelStr = level.toUpperCase().padEnd(5);
 
@@ -196,7 +199,7 @@ export class LoggerService {
 
     // Log error stack trace if provided
     if (error?.stack) {
-      console.error(error.stack);
+      console.error(redactText(error.stack));
     }
   }
 

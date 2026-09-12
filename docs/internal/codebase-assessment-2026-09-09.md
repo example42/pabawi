@@ -205,7 +205,6 @@ passed. Existing frontend accessibility and bundle warnings remain. Tests used
 disposable databases and local fake SSH/HTTP servers; no production infrastructure
 or real deployment was exercised. A10 is the next action.
 
-
 - **A10 / S10: build controls implemented; release remains blocked.** Development,
   CI and all image variants use Node 24.21.0 with digest-pinned container bases.
   Root-locked workspace installs preserve security overrides and dependency
@@ -237,7 +236,6 @@ workflow YAML parsing and `git diff --check` passed. The first lint attempt
 was killed with exit 137 under concurrent image/test load; the isolated rerun
 passed. Existing frontend build warnings remain. ClamAV completed the downloaded
 artifact scans with no infected files reported; advisory gates remain blocked.
-
 
 **A10 follow-up, 2026-09-11:** targeted npm updates now pass the high/critical audit
 threshold (eight moderate and two low findings remain). The Ubuntu image uses a
@@ -693,6 +691,49 @@ cluster installation were not repeated for this documentation tranche. Existing
 A10 release gates and A15 provider-compatibility limits remain; the new CI step
 has not run remotely. A20 is the next action.
 
+**A20 / S13 and S14, 2026-09-12: implemented and verified.** Credential-limiter
+exemptions now match method and router-relative path, so query text cannot exempt
+local login. Refresh has a separate IP budget; Entra exchanges have IP and global
+budgets before state allocation/provider work. MCP requests use account rate and
+open-request limits. Provider tools have separate account/global capacity held
+until their promises settle, including after transport disconnection. Existing
+session quotas remain account-scoped across JWT/static authentication.
+
+A shared pure redactor now covers API logs/previews, logger metadata and stacks,
+buffered/uploaded logs, expert diagnostics, error responses, crash JSON and browser
+support-copy output. It handles nested objects/arrays, serialized JSON, credential
+headers, URL userinfo/query credentials, JWTs and private keys before truncation.
+Opt-in cookie/storage exports contain names only. Native reports exclude environment
+variables and pass through the redactor before private file creation. Legacy crash
+views/downloads are sanitized; invalid JSON and symlinks are excluded. Crash files
+are capped at seven days, 20 files, 2 MiB each and 10 MiB combined. Text/traversal,
+request-record and log-upload bounds prevent unbounded diagnostic retention.
+
+The [diagnostic policy](../diagnostics-security.md) records exact limits and their
+scope. Express still distrusts forwarded headers: proxy clients share IP budgets
+before authentication, while authenticated limits distinguish accounts. Arbitrary
+unlabeled secrets cannot be reliably recognized in provider prose; existing raw
+files remain sensitive until retention or administrative removal. Browser bearer
+tokens remain in localStorage with the documented same-origin script threat;
+an HttpOnly refresh-cookie protocol requires separate CSRF/cross-origin work.
+
+A20 validation on Node 24.21.0: full backend suite passed 3,720 tests (56 skipped,
+one todo); full frontend suite passed 1,043 tests. The final 11 focused security
+tests additionally verify the aggregate file-size and global provider-capacity
+bounds. Production MCP-router tests prove account request budgets before session
+lookup. Canary tests cover API request/response/error logs, buffers, expert output,
+legacy HTTP view/download, opt-in browser clipboard output, and real child-process
+custom/native crash files with an injected environment canary. Limiter tests cover
+query bypass, forged forwarded IPs, separate SSO/refresh budgets and account/global
+concurrency release. No production credentials or infrastructure were used.
+
+Lint, both builds, all six documentation contracts, Markdown checks, tracked-tree
+and new-file secret scans, and diff checks passed. Component checking passes with
+163 existing errors and no new allowance; one baseline message changed only the
+order of its union members after importing the shared policy. Existing build
+accessibility/bundle warnings remain. Provider/Entra, PostgreSQL, container and
+cluster exercises were not repeated. A21 is the next action.
+
 ## Executive assessment
 
 The principal risk is inconsistent enforcement at trust boundaries. Authentication and RBAC infrastructure exist, but several infrastructure-changing routes enforce authentication without authorization. AWS, Azure, Proxmox and Puppetserver handlers can therefore exercise server-held credentials on behalf of users who lack the corresponding permissions. Hiera data and execution output have related read-access gaps. This is especially serious where self-registration is enabled.
@@ -876,6 +917,9 @@ The concurrency guard counts administrators after insertion and soft-deletes a d
 
 ### S13. P2: Rate-limit exclusions and session allocation permit avoidable abuse
 
+**Resolved by A20 on 2026-09-12 for the supported single-process topology.**
+The original finding follows; implementation and validation are recorded above.
+
 **Source-confirmed.** [securityMiddleware.ts](../../backend/src/middleware/securityMiddleware.ts) exempts any request whose `originalUrl` contains `/entra-id/` from the authentication limiter. Since `originalUrl` includes the query string, a local credential endpoint can match that exception through a query parameter. The account lockout pipeline remains an independent control, so this is not a claim that all brute-force defenses disappear.
 
 MCP requests in [server.ts](../../backend/src/server.ts), lines 1029-1078, omit the authenticated rate limiter. The global session limit is not a per-principal quota. Public Entra login creates database state and is exempted from the auth limiter. These paths need workload limits beyond guessing resistance.
@@ -885,6 +929,9 @@ MCP requests in [server.ts](../../backend/src/server.ts), lines 1029-1078, omit 
 **Acceptance:** adding `/entra-id/` in a login query cannot skip credential throttling. One caller cannot consume the whole MCP session pool or unbounded SSO state. Legitimate users behind the supported proxy topology remain usable.
 
 ### S14. P2: Diagnostic data requires a consistent secret policy
+
+**Resolved by A20 on 2026-09-12 within the documented diagnostic policy.**
+The original finding follows; remaining threat-model limits are recorded above.
 
 **Source-confirmed exposure paths, conditional on diagnostics and access.** [ApiLogger.ts](../../backend/src/integrations/ApiLogger.ts), lines 203-204 and 358-390, leaves response bodies/previews unsanitized and only shallowly sanitizes selected request object fields. [crashHandler.ts](../../backend/src/utils/crashHandler.ts), lines 108-111, writes a native process diagnostic report, without configuring environment-variable exclusion. [crashDumps.ts](../../backend/src/routes/crashDumps.ts) lists JSON files and returns their full content to callers with the separately mounted debug-admin permission.
 

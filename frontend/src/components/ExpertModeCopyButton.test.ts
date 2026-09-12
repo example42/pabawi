@@ -1134,3 +1134,28 @@ describe('ExpertModeCopyButton Component', () => {
     });
   });
 });
+
+describe('support export credential boundary', () => {
+  it('redacts nested data, URLs and opt-in browser storage before preview and clipboard truncation', async () => {
+    const canary = 'CANARY_SUPPORT_SECRET_12345';
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, { clipboard: { writeText } });
+    const storage = { pabawi_refresh_token: canary, settings: JSON.stringify({ nested: { client_secret: canary } }) };
+    Object.defineProperty(window, 'localStorage', { configurable: true, value: {
+      length: 2, key: (i: number) => Object.keys(storage)[i], getItem: (key: keyof typeof storage) => storage[key],
+    } });
+    Object.defineProperty(window, 'sessionStorage', { configurable: true, value: {
+      length: 1, key: () => 'access_token', getItem: () => canary,
+    } });
+    render(ExpertModeCopyButton, { props: {
+      data: { nested: [{ privateKey: canary }], url: `https://user:${canary}@host/?ticket=${canary}` },
+      frontendInfo: { url: `https://host/?code=${canary}`, cookies: { custom: canary } },
+      includeStorage: true, includeCookies: true, insideModal: true,
+    } });
+    await fireEvent.click(screen.getByText('Copy Debug Info'));
+    expect(writeText).toHaveBeenCalledOnce();
+    expect(writeText.mock.calls[0][0]).not.toContain(canary);
+    expect(writeText.mock.calls[0][0]).toContain('[REDACTED]');
+
+  });
+});

@@ -1,3 +1,4 @@
+import { redactDiagnostics, redactText } from '../shared/diagnosticRedaction';
 /**
  * API Logger
  *
@@ -134,10 +135,10 @@ export class ApiLogger {
       timestamp: new Date().toISOString(),
       integration: this.integration,
       method,
-      endpoint,
-      url,
+      endpoint: redactText(endpoint),
+      url: redactText(url),
       headers: this.sanitizeHeaders(options.headers ?? {}),
-      queryParams: options.queryParams,
+      queryParams: redactDiagnostics(options.queryParams),
       body: this.shouldLogBody() ? this.sanitizeBody(options.body) : undefined,
       authentication: options.authentication ?? { type: "none" },
     };
@@ -156,10 +157,10 @@ export class ApiLogger {
         metadata: {
           integration: this.integration,
           correlationId,
-          url,
+          url: redactText(url),
           hasBody: !!options.body,
           hasAuth: options.authentication?.type !== "none",
-          queryParams: options.queryParams,
+          queryParams: redactDiagnostics(options.queryParams),
         },
       });
     }
@@ -195,12 +196,12 @@ export class ApiLogger {
       timestamp: new Date().toISOString(),
       integration: this.integration,
       method,
-      endpoint,
-      url,
+      endpoint: redactText(endpoint),
+      url: redactText(url),
       status: response.status,
       statusText: response.statusText,
       headers: this.sanitizeHeaders(response.headers ?? {}),
-      body: this.shouldLogBody() ? response.body : undefined,
+      body: this.shouldLogBody() ? redactDiagnostics(response.body) : undefined,
       bodyPreview: this.createBodyPreview(response.body),
       duration,
       success: response.status >= 200 && response.status < 300,
@@ -283,14 +284,14 @@ export class ApiLogger {
       timestamp: new Date().toISOString(),
       integration: this.integration,
       method,
-      endpoint,
-      url,
+      endpoint: redactText(endpoint),
+      url: redactText(url),
       error: {
         message: error.message,
         type: error.type,
         category: error.category,
         statusCode: error.statusCode,
-        details: this.shouldLogBody() ? error.details : undefined,
+        details: this.shouldLogBody() ? redactDiagnostics(error.details) : undefined,
       },
       duration,
     };
@@ -327,84 +328,12 @@ export class ApiLogger {
    * @returns Sanitized headers
    */
   private sanitizeHeaders(headers: Record<string, string>): Record<string, string> {
-    const sanitized: Record<string, string> = {};
-    const sensitiveHeaders = [
-      "authorization",
-      "x-authentication",
-      "x-auth-token",
-      "cookie",
-      "set-cookie",
-    ];
-
-    for (const [key, value] of Object.entries(headers)) {
-      const lowerKey = key.toLowerCase();
-      if (sensitiveHeaders.includes(lowerKey)) {
-        // Mask sensitive headers but show length
-        sanitized[key] = `[REDACTED - length: ${String(value.length)}]`;
-      } else {
-        sanitized[key] = value;
-      }
-    }
-
-    return sanitized;
+    return redactDiagnostics(headers);
   }
 
-  /**
-   * Sanitize request/response body to remove sensitive information
-   *
-   * @param body - Raw body
-   * @returns Sanitized body
-   */
-    private sanitizeBody(body: unknown): unknown {
-      if (!body) {
-        return body;
-      }
-
-      // If body is a string, return as-is (already serialized)
-      if (typeof body === "string") {
-        return body;
-      }
-
-      // If body is a plain object, sanitize sensitive fields
-      if (this.isPlainObject(body)) {
-        const sanitized: Record<string, unknown> = {};
-        const sensitiveFields = [
-          "password",
-          "token",
-          "secret",
-          "api_key",
-          "apiKey",
-          "private_key",
-          "privateKey",
-        ];
-
-        // TypeScript knows body is Record<string, unknown> here due to type guard
-        for (const [key, value] of Object.entries(body)) {
-          const lowerKey = key.toLowerCase();
-          if (sensitiveFields.some((field) => lowerKey.includes(field))) {
-            sanitized[key] = "[REDACTED]";
-          } else {
-            sanitized[key] = value;
-          }
-        }
-
-        return sanitized;
-      }
-
-      return body;
-    }
-
-
-    /**
-     * Check if value is a plain object
-     */
-    private isPlainObject(value: unknown): value is Record<string, unknown> {
-      if (Object.prototype.toString.call(value) !== "[object Object]") {
-        return false;
-      }
-      const prototype = Object.getPrototypeOf(value) as object | null;
-      return prototype === null || prototype === Object.prototype;
-    }
+  private sanitizeBody(body: unknown): unknown {
+    return redactDiagnostics(body);
+  }
 
   /**
    * Create a preview of the body for logging
@@ -419,7 +348,7 @@ export class ApiLogger {
 
     try {
       const bodyStr =
-        typeof body === "string" ? body : JSON.stringify(body);
+        typeof body === "string" ? redactDiagnostics(body) : JSON.stringify(redactDiagnostics(body));
 
       // Return first 200 characters
       if (bodyStr.length > 200) {

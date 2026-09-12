@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { redactDiagnostics, redactText, REDACTED } from '../../../backend/src/shared/diagnosticRedaction';
   import { showSuccess, showError } from '../lib/toast.svelte';
   import type { DebugInfo } from '../lib/api';
   import type { LogEntry } from '../lib/logger.svelte';
@@ -96,12 +97,12 @@
     const storage: Record<string, string> = {};
 
     try {
-      for (let i = 0; i < localStorage.length; i++) {
+      for (let i = 0; i < Math.min(localStorage.length, 100); i++) {
         const key = localStorage.key(i);
         if (key) {
           const value = localStorage.getItem(key);
           if (value !== null) {
-            storage[key] = value;
+            storage[key] = REDACTED;
           }
         }
       }
@@ -121,12 +122,12 @@
     const storage: Record<string, string> = {};
 
     try {
-      for (let i = 0; i < sessionStorage.length; i++) {
+      for (let i = 0; i < Math.min(sessionStorage.length, 100); i++) {
         const key = sessionStorage.key(i);
         if (key) {
           const value = sessionStorage.getItem(key);
           if (value !== null) {
-            storage[key] = value;
+            storage[key] = REDACTED;
           }
         }
       }
@@ -142,6 +143,19 @@
    * Optimized for easy sharing with support teams and AI assistants
    */
   function formatForSupport(): string {
+    const safe = redactDiagnostics({ debugInfo, frontendInfo, frontendLogs, data });
+    if (frontendInfo && safe.frontendInfo) {
+      for (const name of ['cookies', 'localStorage', 'sessionStorage'] as const) {
+        const storage = frontendInfo[name];
+        safe.frontendInfo[name] = storage
+          ? Object.fromEntries(Object.keys(storage).slice(0, 100).map(key => [redactText(key), REDACTED]))
+          : undefined;
+      }
+    }
+    return formatSupportData(safe);
+  }
+
+  function formatSupportData({ debugInfo, frontendInfo, frontendLogs = [], data }: Pick<Props, 'debugInfo' | 'frontendInfo' | 'frontendLogs' | 'data'>): string {
     const sections: string[] = [];
 
     // Header with clear formatting for AI parsing
@@ -362,8 +376,8 @@
       if (currentCookies && Object.keys(currentCookies).length > 0) {
         sections.push('');
         sections.push('Cookies:');
-        Object.entries(currentCookies).forEach(([key, value]) => {
-          sections.push(`  ${key}: ${value}`);
+        Object.keys(currentCookies).forEach((key) => {
+          sections.push(`  ${key}: ${REDACTED}`);
         });
       }
 
@@ -415,7 +429,7 @@
     sections.push('metrics, and frontend context information.');
     sections.push('='.repeat(80));
 
-    return sections.join('\n');
+    return sections.map(redactText).join('\n');
   }
 
   /**
