@@ -64,18 +64,9 @@ resources:
     cpu: 500m
     memory: 512Mi
 
+# Enabling autoscaling is rejected for all database types.
 autoscaling:
   enabled: false
-  minReplicas: 2
-  maxReplicas: 5
-  behavior: {}
-  metrics:
-    - type: Resource
-      resource:
-        name: cpu
-        target:
-          type: Utilization
-          averageUtilization: 70
 
 migrations:
   enabled: true
@@ -104,13 +95,7 @@ topologySpreadConstraints: []
 priorityClassName: ""
 terminationGracePeriodSeconds: 30
 
-# SQLite always uses Recreate to prevent overlapping writers during rollouts.
-# This strategy applies only to PostgreSQL.
-strategy:
-  type: RollingUpdate
-  rollingUpdate:
-    maxSurge: 1
-    maxUnavailable: 0
+# Every database type uses Recreate to preserve single-process ownership.
 
 probes:
   liveness:

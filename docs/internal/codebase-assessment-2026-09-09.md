@@ -2,6 +2,18 @@
 
 Assessment date: 2026-09-09. Repository version: 1.5.0. Assessed commit: `ee7fb20a9e697d248a6fd713031a807cf570ae41`. The working tree was clean at the start. This report records findings and proposed work; it does not implement remediation.
 
+## Remediation continuation: 2026-09-12
+
+The [A01-A22 status ledger](remediation-ledger-2026-09-12.md) tracks completed
+evidence, implemented work awaiting validation and remaining implementation.
+
+A21 topology tranche: the chart now rejects multiple application replicas and
+HPA for every database type. Every application rollout uses `Recreate`, including
+external PostgreSQL, to preserve the supported single-process ownership contract.
+Distributed HA remains separately scoped. Node 24.21.0 passed all seven chart
+render tests and six documentation contract tests. These checks do not establish
+cluster execution or complete A21 shutdown/recovery acceptance.
+
 ## Remediation verification: 2026-09-10
 
 This section records follow-up verification against the working tree after

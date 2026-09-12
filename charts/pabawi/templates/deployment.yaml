@@ -1,20 +1,14 @@
 {{- if and (not .Values.secrets.create) (not .Values.secrets.existingSecret) }}
 {{- fail "secrets.create=false requires secrets.existingSecret to provide at least JWT_SECRET" }}
 {{- end }}
-{{- if and (eq .Values.database.type "sqlite") (gt (int .Values.replicaCount) 1) (not .Values.autoscaling.enabled) }}
-{{- fail "SQLite mode requires replicaCount=1. Use database.type=postgres before scaling replicas." }}
+{{- if ne (int .Values.replicaCount) 1 }}
+{{- fail "Pabawi supports exactly one application replica for every database type." }}
 {{- end }}
-{{- if and (eq .Values.database.type "sqlite") .Values.autoscaling.enabled }}
-{{- fail "SQLite mode cannot use autoscaling. Use database.type=postgres before enabling autoscaling." }}
+{{- if .Values.autoscaling.enabled }}
+{{- fail "Pabawi does not support autoscaling: execution and session ownership are process-local." }}
 {{- end }}
 {{- if and .Values.postgresql.enabled (ne .Values.database.type "postgres") }}
 {{- fail "postgresql.enabled=true requires database.type=postgres" }}
-{{- end }}
-{{- if and .Values.postgresql.enabled (gt (int .Values.replicaCount) 1) (not .Values.autoscaling.enabled) }}
-{{- fail "Bundled PostgreSQL is intended for single-replica/demo installs. Use external PostgreSQL for scalable Pabawi releases." }}
-{{- end }}
-{{- if and .Values.postgresql.enabled .Values.autoscaling.enabled }}
-{{- fail "Bundled PostgreSQL is intended for single-replica/demo installs. Use external PostgreSQL before enabling autoscaling." }}
 {{- end }}
 apiVersion: apps/v1
 kind: Deployment
@@ -27,22 +21,13 @@ metadata:
     {{- toYaml . | nindent 4 }}
   {{- end }}
 spec:
-  {{- if not .Values.autoscaling.enabled }}
   replicas: {{ .Values.replicaCount }}
-  {{- end }}
   revisionHistoryLimit: {{ .Values.revisionHistoryLimit }}
   selector:
     matchLabels:
       {{- include "pabawi.selectorLabels" . | nindent 6 }}
-  {{- if or (eq .Values.database.type "sqlite") (eq .Values.strategy.type "Recreate") }}
   strategy:
     type: Recreate
-  {{- else }}
-  {{- with .Values.strategy }}
-  strategy:
-    {{- toYaml . | nindent 4 }}
-  {{- end }}
-  {{- end }}
   template:
     metadata:
       labels:
