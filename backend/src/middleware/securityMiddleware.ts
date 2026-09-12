@@ -106,28 +106,12 @@ export function createAuthRateLimitMiddleware(): (req: Request, res: Response, n
     // Use IP address as the key with proper IPv6 handling
     keyGenerator: (req: Request): string => ipKeyGenerator(req.ip ?? req.socket.remoteAddress ?? ""),
 
-    // Skip rate limiting for non-credential endpoints that happen to live
-    // under /api/auth. These are either read-only discovery endpoints or
-    // authenticated operations that are not brute-force targets.
-    //
-    // Also skip Entra ID SSO endpoints: these are not brute-forceable because
-    // /login is just a redirect to Microsoft, /callback is automated by the
-    // provider, and /token consumes a cryptographic single-use code with 60s TTL.
+    // Match router-relative paths, never query text. SSO has a separate budget.
     skip: (req: Request): boolean => {
-      // GET /api/auth/providers — public discovery, not an auth attempt
       if (req.method === "GET" && req.path === "/providers") return true;
-      // POST /api/auth/refresh — token refresh, not a credential submission
-      if (req.method === "POST" && req.path === "/refresh") return true;
-      // POST /api/auth/logout — requires existing auth, not an attempt
-      if (req.method === "POST" && req.path === "/logout") return true;
-      // All Entra ID SSO paths — not brute-forceable credential submissions.
-      // /login → 302 redirect to Microsoft (no credentials accepted here)
-      // /callback → automated redirect from Microsoft with one-time code+state
-      // /token → exchanges a cryptographic single-use auth code (60s TTL)
-      // Use originalUrl to avoid false matches with local POST /login which
-      // shares the same req.path when mounted at /api/auth.
-      if (req.originalUrl.includes("/entra-id/")) return true;
-      return false;
+      if (req.method === "POST" && ["/refresh", "/logout"].includes(req.path)) return true;
+      return (req.method === "GET" && ["/entra-id/login", "/entra-id/callback"].includes(req.path))
+        || (req.method === "POST" && req.path === "/entra-id/token");
     },
 
     // Custom handler for auth rate limit exceeded
@@ -303,4 +287,61 @@ export function additionalSecurityHeaders(
   );
 
   next();
+}
+
+// SSO allocates state and performs provider work even without local passwords.
+export function createSsoRateLimitMiddleware(): ReturnType<typeof rateLimit>[] {
+  return [rateLimit({
+    windowMs: 15 * 60 * 1000,
+    limit: 30,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: "SSO workload limit reached", retryAfter: 900 },
+  }), rateLimit({
+    windowMs: 15 * 60 * 1000,
+    limit: 300,
+    keyGenerator: () => "sso-global",
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: "SSO global workload limit reached", retryAfter: 900 },
+  })];
+}
+
+export function createRefreshRateLimitMiddleware(): ReturnType<typeof rateLimit> {
+  return rateLimit({
+    windowMs: 60 * 1000,
+    limit: 30,
+    standardHeaders: true,
+    legacyHeaders: false,
+    skip: req => req.method !== "POST" || req.path !== "/refresh",
+    message: { error: "Refresh workload limit reached", retryAfter: 60 },
+  });
+}
+
+export function createMcpConcurrencyMiddleware(): (req: Request, res: Response, next: NextFunction) => void {
+  const active = new Map<string, number>();
+  let total = 0;
+  return (req, res, next): void => {
+    const account = req.user?.userId;
+    if (!account) { res.sendStatus(401); return; }
+    const count = active.get(account) ?? 0;
+    if (count >= 4 || total >= 20) {
+      res.setHeader("Retry-After", "1");
+      res.status(429).json({ error: "MCP concurrent request limit reached" });
+      return;
+    }
+    active.set(account, count + 1);
+    total++;
+    let released = false;
+    const release = (): void => {
+      if (released) return;
+      released = true;
+      total--;
+      const remaining = (active.get(account) ?? 1) - 1;
+      if (remaining === 0) active.delete(account); else active.set(account, remaining);
+    };
+    res.once("finish", release);
+    res.once("close", release);
+    next();
+  };
 }

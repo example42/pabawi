@@ -1,3 +1,4 @@
+import { redactDiagnostics } from '../../../backend/src/shared/diagnosticRedaction';
 /**
  * Frontend Logger Service
  *
@@ -30,19 +31,6 @@ export interface LoggerConfig {
   includePerformance: boolean;
   throttleMs: number;
 }
-
-// Sensitive field patterns to obfuscate
-const SENSITIVE_PATTERNS = [
-  /password/i,
-  /token/i,
-  /secret/i,
-  /api[_-]?key/i,
-  /auth/i,
-  /credential/i,
-  /private[_-]?key/i,
-  /session/i,
-  /cookie/i,
-];
 
 // Default configuration
 const DEFAULT_CONFIG: LoggerConfig = {
@@ -125,45 +113,14 @@ class FrontendLogger {
    * Obfuscate sensitive data in objects
    */
   private obfuscateData(data: unknown): unknown {
-    if (data === null || data === undefined) {
-      return data;
-    }
-
-    if (typeof data === 'string') {
-      // Don't obfuscate strings directly, only when they're values of sensitive keys
-      return data;
-    }
-
-    if (Array.isArray(data)) {
-      return data.map(item => this.obfuscateData(item));
-    }
-
-    if (typeof data === 'object') {
-      const result: Record<string, unknown> = {};
-
-      for (const [key, value] of Object.entries(data)) {
-        // Check if key matches sensitive pattern
-        const isSensitive = SENSITIVE_PATTERNS.some(pattern => pattern.test(key));
-
-        if (isSensitive) {
-          result[key] = '***';
-        } else if (typeof value === 'object' && value !== null) {
-          result[key] = this.obfuscateData(value);
-        } else {
-          result[key] = value;
-        }
-      }
-
-      return result;
-    }
-
-    return data;
+    return redactDiagnostics(data);
   }
 
   /**
    * Add log entry to buffer
    */
   private addToBuffer(entry: LogEntry): void {
+    entry = redactDiagnostics(entry, 8 * 1024);
     // Add to circular buffer
     this.buffer.push(entry);
     if (this.buffer.length > this.config.bufferSize) {
@@ -173,6 +130,7 @@ class FrontendLogger {
     // Add to pending logs for backend sync if expert mode is enabled
     if (this.shouldSendToBackend()) {
       this.pendingLogs.push(entry);
+      if (this.pendingLogs.length > 100) this.pendingLogs.shift();
       this.scheduleBackendSync();
 
       // Also log to console when expert mode is enabled
@@ -253,7 +211,7 @@ class FrontendLogger {
         width: window.innerWidth,
         height: window.innerHeight,
       },
-      url: window.location.href,
+      url: redactDiagnostics(window.location.href),
     };
   }
 

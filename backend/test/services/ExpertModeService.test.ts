@@ -156,7 +156,7 @@ describe('ExpertModeService', () => {
   });
 
   describe('size limits', () => {
-    it('should truncate debug info when it exceeds 1MB', () => {
+    it('should bound diagnostic collections before serialization', () => {
       const data = { result: 'success' };
 
       // Create debug info that exceeds 1MB
@@ -179,10 +179,8 @@ describe('ExpertModeService', () => {
       const result = service.attachDebugInfo(data, debugInfo);
 
       expect(result._debug).toBeDefined();
-      expect(result._debug?.metadata?._truncated).toBe(true);
-      expect(result._debug?.metadata?._originalSize).toBeGreaterThan(1024 * 1024);
-      expect(result._debug?.metadata?._maxSize).toBe(1024 * 1024);
-      expect(result._debug?.apiCalls).toBeUndefined();
+      expect(result._debug?.apiCalls).toHaveLength(100);
+      expect(JSON.stringify(result).length).toBeLessThan(1024 * 1024);
     });
 
     it('should not truncate debug info when it is within size limits', () => {
@@ -210,7 +208,7 @@ describe('ExpertModeService', () => {
       expect(result._debug?.apiCalls).toBeDefined();
     });
 
-    it('should remove apiCalls and errors when truncating', () => {
+    it('should retain bounded API calls and useful errors', () => {
       const data = { result: 'success' };
 
       // Create large debug info
@@ -233,9 +231,9 @@ describe('ExpertModeService', () => {
 
       const result = service.attachDebugInfo(data, debugInfo);
 
-      expect(result._debug?.apiCalls).toBeUndefined();
-      expect(result._debug?.errors).toBeUndefined();
-      expect(result._debug?.metadata?._truncated).toBe(true);
+      expect(result._debug?.apiCalls).toHaveLength(100);
+      expect(result._debug?.errors).toHaveLength(1);
+      expect(JSON.stringify(result).length).toBeLessThan(1024 * 1024);
     });
 
     it('should preserve basic fields when truncating', () => {
@@ -287,9 +285,9 @@ describe('ExpertModeService', () => {
 
       const result = service.attachDebugInfo(data, debugInfo);
 
-      // Should truncate due to serialization failure
+      // Circular values are replaced before serialization.
       expect(result._debug).toBeDefined();
-      expect(result._debug?.metadata?._truncated).toBe(true);
+      expect(result._debug?.metadata?.self).toBe('[Circular]');
     });
 
     it('should handle non-serializable values in debug info', () => {

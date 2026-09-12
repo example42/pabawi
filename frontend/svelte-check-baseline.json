@@ -103,7 +103,7 @@
     },
     "src/components/ReportViewer.svelte": {
       "'resourceType' is of type 'unknown'.": 2,
-      "Argument of type '() => { name: string; time: number; }[]' is not assignable to parameter of type 'ArrayLike<unknown> | Iterable<unknown> | null | undefined'.": 1
+      "Argument of type '() => { name: string; time: number; }[]' is not assignable to parameter of type 'Iterable<unknown> | ArrayLike<unknown> | null | undefined'.": 1
     },
     "src/components/RoleDetailDialog.svelte": {
       "'onMount' is declared but its value is never read.": 1

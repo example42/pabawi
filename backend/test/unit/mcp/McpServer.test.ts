@@ -394,3 +394,23 @@ describe('MCP Tool Handlers', () => {
     });
   });
 });
+
+describe('MCP tool workload ownership', () => {
+  it('shares capacity across sessions and auth methods until provider promises settle', async () => {
+    let finish!: () => void;
+    const pending = new Promise<void>(resolve => { finish = resolve; });
+    const deps = createMockDeps({ principal: { userId: 'workload-account', authMethod: 'jwt' } });
+    vi.mocked(deps.integrationManager.getAggregatedInventory).mockImplementation(async () => {
+      await pending;
+      return { nodes: [], groups: [], sources: {} };
+    });
+    registerAllTools(createMockServer(), deps);
+    const handler = registeredTools.get('inventory_list')!.handler;
+    const running = Array.from({ length: 4 }, () => handler({}));
+    try {
+      registerAllTools(createMockServer(), { ...deps, principal: { userId: 'workload-account', authMethod: 'static' } });
+      expect((await callTool('inventory_list')).content[0].text).toContain('concurrent tool limit');
+    } finally { finish(); await Promise.all(running); }
+    expect((await callTool('inventory_list')).isError).not.toBe(true);
+  });
+});

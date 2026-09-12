@@ -1,4 +1,5 @@
-import fs from "node:fs";
+import { redactDiagnostics } from "../shared/diagnosticRedaction";
+import { writeDiagnosticFile, retainedDiagnosticFiles } from "./diagnosticFiles";
 import path from "node:path";
 import { monitorEventLoopDelay, type IntervalHistogram } from "node:perf_hooks";
 import type { LoggerService } from "../services/LoggerService";
@@ -10,7 +11,7 @@ import type { LoggerService } from "../services/LoggerService";
  * (recent + in-flight requests, memory, event-loop lag, optional Node diagnostic
  * report) so a supervisor restart leaves forensic evidence behind.
  *
- * Dump directory: PABAWI_CRASH_DUMP_DIR env var, else <cwd>/crash-dumps.
+ * Dump directory: ConfigService override, else <cwd>/crash-dumps.
  */
 
 interface RequestRecord {
@@ -37,7 +38,7 @@ function inflightKey(rec: RequestRecord): string {
 
 export function recordRequestStart(rec: RequestRecord): string {
   const key = inflightKey(rec);
-  inflight.set(key, rec);
+  if (inflight.size < 1000) inflight.set(key, redactDiagnostics(rec));
   return key;
 }
 
@@ -58,13 +59,12 @@ export function recordRequestFinish(
 }
 
 function resolveDumpDir(): string {
-  return configuredDumpDir ?? process.env.PABAWI_CRASH_DUMP_DIR ?? path.join(process.cwd(), "crash-dumps");
+  return configuredDumpDir ?? path.join(process.cwd(), "crash-dumps");
 }
 
 function writeCrashDump(reason: string, error: unknown): string | null {
   try {
     const dir = resolveDumpDir();
-    fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
     const stamp = new Date().toISOString().replace(/[:.]/g, "-");
     const file = path.join(dir, `crash-${stamp}-${String(process.pid)}.json`);
     const dump = {
@@ -88,14 +88,15 @@ function writeCrashDump(reason: string, error: unknown): string | null {
       inflightRequests: Array.from(inflight.values()),
       recentRequests: recent.slice(),
     };
-    fs.writeFileSync(file, JSON.stringify(dump, null, 2), { mode: 0o600 });
+    writeDiagnosticFile(dir, path.basename(file), dump);
     // Best-effort native diagnostic report (heap, native stacks, libuv state)
     try {
-      if (typeof process.report.writeReport === "function") {
-        process.report.writeReport(path.join(dir, `report-${stamp}-${String(process.pid)}.json`));
+      if (typeof process.report.getReport === "function") {
+        Object.assign(process.report, { excludeEnv: true });
+        writeDiagnosticFile(dir, `report-${stamp}-${String(process.pid)}.json`, process.report.getReport());
       }
     } catch {
-      // ignore — diagnostic report is best-effort
+      // ignore: diagnostic report is best-effort
     }
     return file;
   } catch {
@@ -104,26 +105,30 @@ function writeCrashDump(reason: string, error: unknown): string | null {
 }
 
 /**
- * Install global crash handlers. Idempotent — safe to call once at boot.
+ * Install global crash handlers. Idempotent: safe to call once at boot.
  * Pass the shared LoggerService so fatal events appear in the normal log stream
  * in addition to the on-disk dump.
  *
  * @param dumpDir - Optional override for crash dump directory. Falls back to
- *   PABAWI_CRASH_DUMP_DIR env var, then <cwd>/crash-dumps.
+ *   <cwd>/crash-dumps.
  */
 export function installCrashHandlers(logger: LoggerService, dumpDir?: string): void {
+  if (dumpDir) configuredDumpDir = dumpDir;
   if (installed) return;
   installed = true;
 
-  if (dumpDir) {
-    configuredDumpDir = dumpDir;
-  }
+  Object.assign(process.report, { excludeEnv: true });
+  try { retainedDiagnosticFiles(resolveDumpDir()); } catch { /* Diagnostic storage must not prevent startup. */ }
+  const retentionTimer = setInterval(() => {
+    try { retainedDiagnosticFiles(resolveDumpDir()); } catch { /* Retry at next collection. */ }
+  }, 60 * 60 * 1000);
+  retentionTimer.unref();
 
   try {
     eventLoopMonitor = monitorEventLoopDelay({ resolution: 20 });
     eventLoopMonitor.enable();
   } catch {
-    // perf_hooks not available — non-fatal
+    // perf_hooks not available: non-fatal
   }
 
   process.on("uncaughtException", (err, origin) => {
@@ -164,7 +169,7 @@ export function installCrashHandlers(logger: LoggerService, dumpDir?: string): v
     });
   });
 
-  logger.info(`Crash handlers installed — dumps will be written to ${resolveDumpDir()}`, {
+  logger.info(`Crash handlers installed: dumps will be written to ${resolveDumpDir()}`, {
     component: "Process",
     operation: "installCrashHandlers",
   });

@@ -1,3 +1,4 @@
+import { redactDiagnostics } from '../shared/diagnosticRedaction';
 /**
  * Expert Mode Service
  *
@@ -231,29 +232,19 @@ export class ExpertModeService {
    * @returns Response data with debug info attached (if within size limits)
    */
   public attachDebugInfo<T>(data: T, debugInfo: DebugInfo): ResponseWithDebug<T> {
+    debugInfo = redactDiagnostics(debugInfo);
     // Calculate the size of the debug info
     const debugSize = this.calculateDebugSize(debugInfo);
 
     // If debug info exceeds size limit, truncate or omit it
     if (debugSize > this.MAX_DEBUG_SIZE) {
-      const truncatedDebugInfo: DebugInfo = {
-        ...debugInfo,
-        metadata: {
-          ...debugInfo.metadata,
-          _truncated: true,
-          _originalSize: debugSize,
-          _maxSize: this.MAX_DEBUG_SIZE,
-          _message: 'Debug information exceeded size limit and was truncated',
-        },
-      };
-
-      // Remove large fields to reduce size
-      delete truncatedDebugInfo.apiCalls;
-      delete truncatedDebugInfo.errors;
-
       return {
         ...data,
-        _debug: truncatedDebugInfo,
+        _debug: {
+          timestamp: debugInfo.timestamp, requestId: debugInfo.requestId,
+          operation: debugInfo.operation, duration: debugInfo.duration,
+          metadata: { _truncated: true, _originalSize: debugSize, _maxSize: this.MAX_DEBUG_SIZE },
+        },
       };
     }
 
@@ -509,7 +500,7 @@ export class ExpertModeService {
       }
     });
 
-    return {
+    return redactDiagnostics({
       url: req.originalUrl || req.url,
       method: req.method,
       headers,
@@ -517,7 +508,7 @@ export class ExpertModeService {
       userAgent: req.headers['user-agent'] ?? 'unknown',
       ip: req.ip ?? req.socket.remoteAddress ?? 'unknown',
       timestamp: new Date().toISOString(),
-    };
+    });
   }
 
   /**

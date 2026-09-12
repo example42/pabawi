@@ -100,7 +100,7 @@ DATABASE_URL=postgres://pabawi:pabawi@postgres:5432/pabawi
 
 `PABAWI_LIFECYCLE_TOKEN` exists for unattended clients (scripts, cron jobs,
 webhooks) that drive the generic lifecycle endpoints without a user session. It
-is an *alternative* to a JWT in the `Authorization` header, not an extra header
+is an _alternative_ to a JWT in the `Authorization` header, not an extra header
 alongside one.
 
 When it is set, the server provisions a built-in `lifecycle-service` account
@@ -504,7 +504,6 @@ See [SSH integration](integrations/ssh.md) for inventory and trust enrollment.
 | `SSH_SUDO_PASSWORD` | `unset` | Escalation password when passwordless is false | yes |
 | `SSH_SUDO_USER` | `root` | Escalation target user | no |
 
-
 ## MCP Server
 
 | Variable | Default | Description | Secret value |
@@ -526,3 +525,7 @@ Configuration validation failed: <field>: <reason>
 
 Check the exact variable name. Invalid console numbers fall back with warnings;
 incomplete Checkmk credentials skip plugin registration with a warning.
+
+Diagnostic retention, size limits and credential sanitization are documented in
+[diagnostic security](diagnostics-security.md). These fixed limits also apply to
+`PABAWI_CRASH_DUMP_DIR`; stdout/stderr retention remains the operator's responsibility.

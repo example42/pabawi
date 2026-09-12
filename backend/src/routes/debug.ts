@@ -1,3 +1,4 @@
+import { redactDiagnostics } from '../shared/diagnosticRedaction';
 /**
  * Debug Routes
  *
@@ -162,7 +163,7 @@ export function createDebugRouter(container: DIContainer): Router {
         return;
       }
 
-      const batch = parseResult.data;
+      const batch = redactDiagnostics(parseResult.data);
 
       // Store logs by correlation ID
       for (const log of batch.logs) {
@@ -174,7 +175,8 @@ export function createDebugRouter(container: DIContainer): Router {
 
         const logs = frontendLogStore.get(correlationId);
         if (logs) {
-          logs.push(log);
+          logs.push(redactDiagnostics({ ...log, timestamp: new Date().toISOString() }, 8 * 1024));
+          if (logs.length > 100) logs.shift();
         }
 
         // Also log to backend logger for unified logging
@@ -194,6 +196,7 @@ export function createDebugRouter(container: DIContainer): Router {
         });
       }
 
+      cleanupOldLogs();
       const duration = Date.now() - startTime;
 
       logger.info('Frontend logs received successfully', {
