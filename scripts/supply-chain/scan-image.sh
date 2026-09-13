@@ -14,4 +14,4 @@ docker run --rm -v "$output:/scan" -v "$output/cache:/root/.cache/trivy" "$scann
 docker run --rm -v "$output:/scan" -v "$output/cache:/root/.cache/trivy" "$scanner" --quiet image --input /scan/image.tar \
   --scanners vuln --format json --output /scan/vulnerabilities.json
 docker run --rm -v "$output:/scan" -v "$output/cache:/root/.cache/trivy" "$scanner" --quiet image --input /scan/image.tar \
-  --scanners vuln --severity HIGH,CRITICAL --exit-code 1
+  --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1

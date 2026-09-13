@@ -64,8 +64,14 @@ RUN apt-get update && \
     git \
     coreutils \
     ansible \
+    && apt-get install -y --only-upgrade libpcre2-8-0 \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+
+# The base image ships a global npm install that the runtime never uses
+# (the app only ever runs `node dist/server.js`); drop it so its vendored
+# dependencies (e.g. brace-expansion, tar, ip-address) don't ship either.
+RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack
 
 # Copy Bolt installation from upstream package builder stage
 COPY --from=bolt-builder /opt/puppetlabs /opt/puppetlabs
