@@ -1,6 +1,6 @@
 # Changelog
 
-## [1.5.0] - 
+## [1.5.0] - 2026-09-14
 
 ### Security: breaking for operators
 
@@ -64,19 +64,66 @@
 **Action required:** custom roles do not receive the new permissions
 automatically. See [docs/upgrading.md](docs/upgrading.md#upgrading-to-150).
 
+### Deployment: breaking for operators on Kubernetes
+
+- **The Helm chart now rejects the topologies it never actually supported.**
+  PostgreSQL does not distribute execution queues, concurrency limits, stream
+  tickets, MCP transports or console sessions, so `replicaCount > 1` and
+  `autoscaling.enabled: true` were unverified rather than safe, for every
+  database type. The chart now fails at render time for both: `replicaCount`
+  must be `1` and `autoscaling.enabled` must be `false`. Every rollout uses
+  `Recreate`, which stops the running pod before starting its replacement;
+  the previous `strategy.type: RollingUpdate` option for external PostgreSQL
+  is gone.
+- Chart version bumped to `0.2.0` to mark this incompatible template change;
+  `appVersion` tracks the application release as before.
+
+**Action required:** installations with `replicaCount` above 1, `strategy` set,
+or `autoscaling.enabled: true` in their values must remove those settings
+before upgrading, and should plan for downtime during rollouts. See
+[docs/upgrading.md](docs/upgrading.md#upgrading-to-150).
+
+### Execution lifecycle
+
+- **Direct commands, tasks, playbooks, packages and Puppet runs now share the
+  batch execution queue** (assessment finding I11). They previously bypassed
+  batch admission entirely, so a direct run and a batch could not share
+  concurrency limits, durable attribution or shutdown handling. `ExecutionService`
+  now owns admission and worker lifecycle for both, and `ExecutionDispatcher`
+  preserves the provider-specific parameters and outcome mapping for command,
+  task, plan, package and Puppet targets whether the work runs once or is
+  re-executed. Direct routes respond `202` with `status: "queued"`; a queue at
+  capacity returns `503` without creating a durable record.
+- `POST /api/executions/:id/re-execute` is admitted and dispatched through the
+  same owner as the original run, preserves the original provider-specific
+  parameters, and records the caller re-executing it. It accepts one target;
+  use batch admission to re-run several.
+- Startup and shutdown reconciliation (see Hardening, below) now covers direct
+  executions the same way it already covered batches: interrupted work is
+  never replayed, and settled provider outcomes are preserved.
+
 ### Quality gates
 
 - **Svelte components are type-checked.** `eslint` ignores `**/*.svelte` and
   `tsc --noEmit` never sees component markup, so a type error inside a
   component passed every gate and reached deployment (assessment finding I10).
   `npm run check:components` runs `svelte-check` and compares the result with a
-  recorded baseline: the 163 existing errors are tolerated, anything new fails.
-  Refresh the baseline with `npm run check:update --workspace=frontend` after
-  fixing some.
+  recorded baseline. The baseline started at 163 tolerated errors and now
+  records zero: every component error found during the cycle was fixed rather
+  than grandfathered in, and the gate fails on any new one. Refresh the
+  baseline with `npm run check:update --workspace=frontend` only if you
+  deliberately accept new errors.
 - **CI runs the gates that only existed locally.** New jobs run the backend
   suite against a real PostgreSQL 15 service (the migration, transaction and
   populated-upgrade tests skip themselves without one), the Playwright suite,
   and a secret scan over the whole tracked tree.
+- **A documentation contracts check keeps the API reference honest.**
+  `scripts/documentation/contracts.test.mjs` cross-checks `docs/api.md` and
+  `docs/openapi.yaml` against the route source (`docs/api-contract-coverage.md`
+  records the current coverage and its explicit, documented omissions), so a
+  route added or changed without updating the docs fails CI instead of aging
+  silently. `docs/architecture.md` and `docs/configuration.md` were corrected
+  against the current source as part of the same pass.
 - **The secret scan covers the paths the pre-commit hook excludes** — docs,
   backend tests, frontend test files and the e2e fixtures. Run it with
   `bash scripts/quality/secret-scan.sh`; the reviewed baseline grew from 32 to
@@ -89,6 +136,45 @@ automatically. See [docs/upgrading.md](docs/upgrading.md#upgrading-to-150).
   is isolated from the developer's environment (scratch database, no Bolt, an
   SSH inventory of two deliberately unreachable hosts) and the whole suite runs
   in about six seconds.
+
+### Hardening
+
+- **Shutdown is bounded and restart reconciles interrupted work.** SIGINT and
+  SIGTERM stop HTTP admission, health scheduling and batch admission, close
+  local streams and console sessions, and drain before closing the database,
+  inside a 25-second budget; a missed deadline or cleanup failure exits with
+  status 1. On the next startup, queued records become cancelled and running
+  records become interrupted, preserving attribution, without replaying
+  uncertain provider work. Deployment termination grace periods must exceed
+  25 seconds.
+- **Aggregated inventory and facts reads are bounded per source.** Each
+  source allows at most 20 outstanding read operations and a 15-second
+  deadline (60 seconds for Checkmk), so one slow or hung provider cannot
+  exhaust capacity or stall requests that only need other sources; a timed
+  out caller does not free capacity until the provider call itself settles.
+- **Authentication and MCP work are bounded per account, not just per route.**
+  Local credential attempts, refresh exchanges and Entra login/callback/token
+  calls have explicit per-IP and global budgets; MCP adds per-account and
+  global caps on HTTP requests, open requests and in-flight provider tool
+  operations, plus a session cap and a 24-hour maximum session lifetime.
+  Provider capacity for an MCP tool call is held until the call actually
+  settles, including after the client disconnects, so a slow provider cannot
+  be worked around by reconnecting. See
+  [docs/diagnostics-security.md](docs/diagnostics-security.md) for the exact
+  budgets.
+- **Diagnostic exports use one shared redaction policy.** Backend and browser
+  diagnostics (API previews, buffered logs, expert-mode metadata, crash
+  dumps, native reports and support-copy output) now redact credentials,
+  auth/cookie headers, URL userinfo, OAuth codes, stream tickets, JWTs and PEM
+  keys through the same code path, with bounded traversal depth, item counts
+  and text size. Viewing or downloading an older crash report re-applies the
+  current policy instead of serving its original bytes.
+- Container images pull in patched `libpcre2-8-0` (Debian) and
+  `libssl3`/`libcrypto3` (Alpine) beyond what the base image had already
+  cached, strip `npm`/`corepack` from the runtime image (the process only
+  ever execs `node dist/server.js`), and the CI vulnerability scan skips
+  findings with no available patch and is allowed to fail without blocking
+  the rest of the pipeline.
 
 ### Fixed: database migrations
 

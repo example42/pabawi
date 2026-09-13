@@ -281,6 +281,22 @@ want to enable it. Add `CHECKMK_ENABLED=true` and the related variables to
 
 ### Upgrading to 1.5.0
 
+**Helm: breaking for operators running multiple replicas or autoscaling.**
+
+The chart now fails at render/install time if `replicaCount` is not `1` or
+`autoscaling.enabled` is `true`, for every `database.type`. This was already
+unsupported (PostgreSQL does not distribute execution queues, concurrency
+limits, stream tickets, MCP transports or console sessions), but the chart
+previously only rejected it for SQLite and bundled PostgreSQL, and external
+PostgreSQL could set `replicaCount > 1` unblocked. Every rollout now also
+uses `Recreate` unconditionally; the `strategy.type: RollingUpdate` option
+for external PostgreSQL is gone, so upgrades and rotations stop the running
+pod before starting its replacement instead of overlapping. Remove
+`replicaCount` values above 1, `autoscaling.enabled: true` and any `strategy`
+override from your values before upgrading, and plan a maintenance window for
+the resulting downtime. The chart's own version moved to `0.2.0` to mark this
+incompatible change; `appVersion` still tracks the application release.
+
 **Security: breaking for operators using custom roles.**
 
 Infrastructure routes that previously required only authentication now enforce
