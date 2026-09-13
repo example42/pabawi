@@ -60,7 +60,7 @@ const fields = generateFormFields(vmCapability);
 const validationRules = generateValidationRules(fields);
 
 // Initialize form state
-let formData = $state(initializeFormData(fields));
+let formData = $state<Record<string, any>>(initializeFormData(fields) as Record<string, any>);
 let errors = $state<Record<string, string>>({});
 let submitting = $state(false);
 
@@ -116,7 +116,7 @@ function handleFieldChange(fieldName: string, value: unknown) {
           <input
             id={field.name}
             type={field.type}
-            value={formData[field.name] ?? ''}
+            value={(formData[field.name] as string | number | string[] | null | undefined) ?? ''}
             oninput={(e) => handleFieldChange(field.name, e.currentTarget.value)}
             placeholder={field.placeholder}
             class="w-full px-3 py-2 border rounded-md"
@@ -125,7 +125,7 @@ function handleFieldChange(fieldName: string, value: unknown) {
         {:else if field.type === 'select'}
           <select
             id={field.name}
-            value={formData[field.name] ?? ''}
+            value={(formData[field.name] as string | number | string[] | null | undefined) ?? ''}
             onchange={(e) => handleFieldChange(field.name, e.currentTarget.value)}
             class="w-full px-3 py-2 border rounded-md"
             class:border-red-500={errors[field.name]}

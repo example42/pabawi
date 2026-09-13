@@ -110,9 +110,9 @@
 
     // Apply usage filter mode
     if (filterMode === 'used') {
-      keys = keys.filter(k => hieraData.usedKeys.includes(k.key));
+      keys = keys.filter(k => hieraData!.usedKeys.includes(k.key));
     } else if (filterMode === 'unused') {
-      keys = keys.filter(k => hieraData.unusedKeys.includes(k.key));
+      keys = keys.filter(k => hieraData!.unusedKeys.includes(k.key));
     }
 
     // Apply found/not found filter

@@ -1,3 +1,4 @@
+import type { ExecutionService } from "../../src/services/ExecutionService";
 import { describe, it, expect, beforeEach, afterEach, vi, beforeAll, afterAll } from "vitest";
 import express, { type Express } from "express";
 import request from "supertest";
@@ -63,6 +64,7 @@ afterAll(async () => {
 describe("Re-execution API Endpoints", () => {
   let app: Express;
   let executionRepository: ExecutionRepository;
+  const executionService = { reExecute: vi.fn() } as unknown as ExecutionService;
 
   beforeEach(() => {
     // Create Express app
@@ -74,7 +76,7 @@ describe("Re-execution API Endpoints", () => {
     executionRepository = new ExecutionRepository(mockDb as unknown as Database);
 
     // Add routes
-    app.use("/api/executions", createExecutionsRouter(executionRepository, noPermissionCheck));
+    app.use("/api/executions", createExecutionsRouter(executionRepository, noPermissionCheck, undefined, undefined, undefined, undefined, undefined, executionService));
 
     // Add error handler
     app.use(errorHandler);
@@ -282,7 +284,7 @@ describe("Re-execution API Endpoints", () => {
         .mockResolvedValueOnce(originalExecution)
         .mockResolvedValueOnce(newExecution);
       // Mock createReExecution to return new ID
-      vi.spyOn(executionRepository, "createReExecution").mockResolvedValue(
+      vi.spyOn(executionService, "reExecute").mockResolvedValue(
         "re-exec-456",
       );
 
@@ -295,14 +297,15 @@ describe("Re-execution API Endpoints", () => {
       expect(response.body).toHaveProperty("message");
       expect(response.body.execution.id).toBe("re-exec-456");
       expect(response.body.execution.originalExecutionId).toBe("original-123");
-      expect(executionRepository.createReExecution).toHaveBeenCalledWith(
-        "original-123",
+      expect(executionService.reExecute).toHaveBeenCalledWith(
         expect.objectContaining({
+          originalExecutionId: "original-123",
           type: "command",
           targetNodes: ["node1"],
           action: "ls -la",
-          status: "running",
+          status: "queued",
         }),
+        "unknown",
       );
     });
 
@@ -334,7 +337,7 @@ describe("Re-execution API Endpoints", () => {
         .mockResolvedValueOnce(originalExecution)
         .mockResolvedValueOnce(newExecution);
       // Mock createReExecution to return new ID
-      vi.spyOn(executionRepository, "createReExecution").mockResolvedValue(
+      vi.spyOn(executionService, "reExecute").mockResolvedValue(
         "re-exec-456",
       );
 
@@ -346,11 +349,12 @@ describe("Re-execution API Endpoints", () => {
         .expect(201);
 
       expect(response.body.execution.targetNodes).toEqual(["node1", "node2"]);
-      expect(executionRepository.createReExecution).toHaveBeenCalledWith(
-        "original-123",
+      expect(executionService.reExecute).toHaveBeenCalledWith(
         expect.objectContaining({
+          originalExecutionId: "original-123",
           targetNodes: ["node1", "node2"],
         }),
+        "unknown",
       );
     });
 

@@ -119,7 +119,7 @@
   );
 
   // Get top resource types by time
-  const topResourceTypes = $derived(() => {
+  const topResourceTypes = $derived.by(() => {
     const timeMetrics = report.metrics.time;
     const resourceTypes: Array<{name: string, time: number}> = [];
 

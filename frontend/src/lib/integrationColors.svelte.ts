@@ -28,7 +28,7 @@ export interface IntegrationColors {
 /**
  * Integration type
  */
-export type IntegrationType = keyof IntegrationColors;
+export type IntegrationType = string;
 
 /**
  * API response for colors endpoint
@@ -102,10 +102,10 @@ class IntegrationColorStore {
       return this.getDefaultColor();
     }
 
-    const normalizedIntegration = integration.toLowerCase() as IntegrationType;
+    const normalizedIntegration = integration.toLowerCase();
 
     if (normalizedIntegration in this.colors) {
-      return this.colors[normalizedIntegration];
+      return this.colors[normalizedIntegration as keyof IntegrationColors];
     }
 
     return this.getDefaultColor();

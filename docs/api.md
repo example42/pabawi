@@ -373,11 +373,22 @@ is terminal; a cancellation response does not mean running work has stopped.
 The status filter limits returned children, while batch counts and progress still
 cover every target. Terminal progress includes cancelled and interrupted targets.
 
+Direct commands, tasks, playbooks, packages and Puppet runs share the batch queue.
+They return HTTP 202 with `status: "queued"`; exhausted capacity returns HTTP 503
+without durable work. All multi-node Puppet records commit together. Direct
+cancellation has the same `cancelledCount`, `runningCount` and
+`cancellationRequestedAt` contract as batch cancellation. `POST
+/api/executions/:id/re-execute` now admits and dispatches work through the same
+owner, preserves provider-specific parameters and records the current caller.
+It accepts one target; use batch admission for multiple targets. Provider exceptions
+produce `interrupted`, since transport failure cannot establish the remote outcome.
+
 Recovery supports one application process. Shutdown stops admission; shutdown and
 startup reconciliation mark undispatched batch work `cancelled` and dispatched
 work with an unknown outcome `interrupted`. Neither is automatically replayed.
-Verify provider state before retrying interrupted work. Multi-process ownership
-and global concurrency across direct execution routes are separate work.
+Graceful shutdown drains direct and batch workers before closing storage and
+preserves provider results that settle. Verify provider state before retrying
+interrupted work. Multi-process ownership is separately scoped.
 
 ### Request idempotency
 

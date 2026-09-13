@@ -15,6 +15,8 @@ interface Props {
 let { executionId, autoConnect = true }: Props = $props();
 
 // Create execution stream
+// The example intentionally captures the initial prop for a single stream.
+// svelte-ignore state_referenced_locally
 const stream = useExecutionStream(executionId, {
   maxReconnectAttempts: 3,
   reconnectDelay: 1000,

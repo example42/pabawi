@@ -39,7 +39,6 @@
   import type { DebugInfo, LabeledDebugInfo } from '../lib/api';
 
   // Dynamic page title based on node name
-  const pageTitle = $derived(node ? `Pabawi - ${node.name}` : 'Pabawi - Node Details');
 
   interface Props {
     params?: { id: string };
@@ -115,6 +114,7 @@
 
   // State
   let node = $state<Node | null>(null);
+  const pageTitle = $derived(node ? `Pabawi - ${node.name}` : 'Pabawi - Node Details');
   let loading = $state(true);
   let error = $state<string | null>(null);
 
@@ -208,7 +208,7 @@
   let initialTaskParameters = $state<Record<string, unknown> | undefined>(undefined);
 
   // Execution history state
-  let executions = $state<ExecutionResult[]>([]);
+  let executions = $state<any[]>([]);
   let executionsLoading = $state(false);
   let executionsError = $state<string | null>(null);
 
@@ -273,7 +273,7 @@
   let environmentsError = $state<string | null>(null);
 
   // Cache for loaded data
-  let dataCache = $state<Record<TabId, any>>({});
+  let dataCache = $state<Record<string, any>>({});
 
   // Debug info state for expert mode - support multiple debug blocks
   let debugInfoBlocks = $state<LabeledDebugInfo[]>([]);
@@ -2032,7 +2032,7 @@
           {@const providerFromSourceData = sourceData ? Object.keys(sourceData).find(k => provisioningProviders.includes(k)) : undefined}
           {@const providerFromSources = !providerFromSourceData ? (nodeWithMeta.sources ?? []).find((s: string) => provisioningProviders.includes(s)) : undefined}
           {@const providerFromSource = !providerFromSourceData && !providerFromSources && nodeWithMeta.source ? (provisioningProviders.includes(nodeWithMeta.source) ? nodeWithMeta.source : undefined) : undefined}
-          {@const providerFromId = !providerFromSourceData && !providerFromSources && !providerFromSource ? provisioningProviders.find(p => node.id.startsWith(p + ':')) : undefined}
+          {@const providerFromId = !providerFromSourceData && !providerFromSources && !providerFromSource ? provisioningProviders.find(p => node?.id.startsWith(p + ':')) : undefined}
           {@const providerName = providerFromSourceData || providerFromSources || providerFromSource || providerFromId}
           {@const providerData = providerName && sourceData ? sourceData[providerName] : undefined}
           {@const providerMetadata = providerData?.metadata}

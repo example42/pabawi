@@ -64,11 +64,12 @@ flowchart TD
   IM --> Providers[Enabled permitted providers]
   Auth --> Batch[POST /api/executions/batch]
   Batch --> Store[Atomic parent and child records]
-  Store --> Queue[Process-local batch queue]
+  Store --> Queue[Shared process-local execution queue]
   Queue --> IM
   Auth --> Direct[POST /api/nodes/:id/command]
   Direct --> Whitelist[Command validation]
-  Whitelist --> IM
+  Whitelist --> Owner[ExecutionService admission and worker ownership]
+  Owner --> Queue
   IM --> Output[Execution history and SSE output]
 ```
 
@@ -86,21 +87,28 @@ underlying provider or apply to every direct provider API route.
 
 Batch admission commits records before dispatch and returns IDs asynchronously.
 Queued cancellation prevents execution. Dispatched cancellation records intent;
-plugins have no general abort contract. Startup/shutdown cancel undispatched batch
-work and mark uncertain dispatched work interrupted without replay. Direct command
-and multi-node Puppet routes do not share batch queue admission. The configured
-batch concurrency limit is not a global execution limit.
+plugins have no general abort contract. Commands, tasks, playbooks, packages,
+single-node and multi-node Puppet runs, and re-execution use `ExecutionService`
+with the same queue as batches. `ExecutionDispatcher` preserves provider semantics
+for initial and repeated work; batch and direct command/task/plan dispatch share
+its action mapping. All these paths persist caller attribution and queued state
+before effects. Provider exceptions leave an interrupted outcome without retries.
+Provisioning, lifecycle and monitoring mutations use their own provider APIs and
+are outside this execution queue.
 
 On startup, standalone queued records become cancelled and running records become
 interrupted, preserving attribution and terminal records. Recovery never replays
 uncertain provider work. Console session recovery precedes HTTP admission.
-SIGINT and SIGTERM stop HTTP admission, health scheduling and batch admission,
+SIGINT and SIGTERM stop HTTP admission, health scheduling and execution admission,
 close local streams/sessions, and attempt draining before database closure. The
 process exits within a 25-second shutdown budget; deadline or cleanup failure
 produces exit code 1 and leaves unfinished records for startup reconciliation.
 Deployment termination grace must exceed 25 seconds. A successful local shutdown
-does not prove that an upstream action stopped. Direct background worker ownership
-is still being consolidated under A22.
+does not prove that an upstream action stopped. Direct and batch workers retain
+capacity until actual settlement. Shutdown tracks admissions already writing,
+cancels queued work and waits for workers before closing storage; settled outcomes
+are preserved. A hung provider exhausts the deadline and leaves its durable running
+record for restart reconciliation.
 
 Mutation clients default to no transport retries. Batch and multi-node Puppet
 admission support durable user/route-scoped `Idempotency-Key` claims. Other mutation

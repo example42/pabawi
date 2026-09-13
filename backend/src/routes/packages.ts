@@ -1,11 +1,10 @@
 import type { PermissionMiddlewareFactory } from "../middleware/routeAuthorization";
 import { Router, type Request, type Response } from "express";
 import { z } from "zod";
-import type { BoltService } from "../integrations/bolt/BoltService";
-import type { ExecutionRepository } from "../database/ExecutionRepository";
+import { type ExecutionService, ExecutionLifecycleError } from "../services/ExecutionService";
+import { ExecutionQueueFullError } from "../services/ExecutionQueue";
 import type { IntegrationManager } from "../integrations/IntegrationManager";
 import { asyncHandler } from "./asyncHandler";
-import type { StreamingExecutionManager } from "../services/StreamingExecutionManager";
 import { PackageNameSchema } from "../validation/commonSchemas";
 import { type DIContainer, createDefaultContainer } from "../container/DIContainer";
 
@@ -39,18 +38,15 @@ interface PackageTaskConfig {
 /**
  * Create router for package installation endpoints
  *
- * @param boltService - Bolt service instance
- * @param executionRepository - Execution repository instance
+ * @param executionService - Shared execution owner
  * @param packageTasks - Array of available package installation tasks
  * @returns Express router
  */
 export function createPackagesRouter(
   integrationManager: IntegrationManager,
   requirePermission: PermissionMiddlewareFactory,
-  boltService: BoltService,
-  executionRepository: ExecutionRepository,
+  executionService: ExecutionService,
   packageTasks: PackageTaskConfig[],
-  streamingManager?: StreamingExecutionManager,
   container: DIContainer = createDefaultContainer(),
 ): Router {
   const router = Router();
@@ -275,135 +271,19 @@ export function createPackagesRouter(
           });
         }
 
-        // Create initial execution record
-        const executionId = await executionRepository.create({
+        const admission = await executionService.submit([{
           type: "package",
           targetNodes: [nodeId],
           action: selectedTool === "ansible" ? "ansible.builtin.package" : (taskName ?? "package"),
           parameters: { packageName, ensure, version, settings },
-          status: "running",
-          startedAt: new Date().toISOString(),
-          results: [],
           expertMode,
           executionTool: selectedTool,
-        });
-
-        logger.info("Execution record created, starting package installation", {
-          component: "PackagesRouter",
-          integration: "bolt",
-          operation: "installPackage",
-          metadata: { executionId, nodeId, taskName: taskName ?? "", packageName, selectedTool },
-        });
-
-        if (debugInfo) {
-          expertModeService.addInfo(debugInfo, {
-            message: "Execution record created, starting package installation",
-            context: JSON.stringify({ executionId, nodeId, taskName, packageName }),
-            level: 'info',
-          });
-        }
-
-        // Execute package installation asynchronously
-        void (async (): Promise<void> => {
-          try {
-            const streamingCallback = streamingManager?.createStreamingCallback(
-              executionId,
-              expertMode
-            );
-
-            // Execute package installation task with parameter mapping
-            let result;
-            if (selectedTool === "ansible") {
-              result = await integrationManager.executeAction("ansible", {
-                type: "task",
-                target: nodeId,
-                action: "package",
-                parameters: {
-                  packageName,
-                  ensure,
-                  version,
-                  settings,
-                },
-                metadata: {
-                  streamingCallback,
-                },
-              });
-            } else {
-              // For bolt, taskName and taskConfig are guaranteed to exist due to validation above
-              if (!taskName || !taskConfig) {
-                throw new Error("Task name and configuration required for Bolt execution");
-              }
-              result = await boltService.installPackage(
-                nodeId,
-                taskName,
-                {
-                  packageName,
-                  ensure,
-                  version,
-                  settings,
-                },
-                taskConfig.parameterMapping,
-                streamingCallback,
-              );
-            }
-
-            // Update execution record with results
-            // Include stdout/stderr when expert mode is enabled
-            await executionRepository.update(executionId, {
-              status: result.status,
-              completedAt: result.completedAt,
-              results: result.results,
-              error: result.error,
-              command: result.command,
-              stdout: expertMode ? result.stdout : undefined,
-              stderr: expertMode ? result.stderr : undefined,
-            });
-
-            // Emit completion event if streaming
-            if (streamingManager) {
-              streamingManager.emitComplete(executionId, result);
-            }
-          } catch (error) {
-            logger.error("Error installing package", {
-              component: "PackagesRouter",
-              integration: selectedTool,
-              operation: "installPackage",
-              metadata: {
-                executionId,
-                nodeId,
-                packageName,
-                ...(selectedTool === "ansible"
-                  ? { action: "ansible:package" }
-                  : { taskName: taskName ?? "package" }),
-              },
-            }, error instanceof Error ? error : undefined);
-
-            let errorMessage = "Unknown error";
-            if (error instanceof Error) {
-              errorMessage = error.message;
-            }
-
-            // Update execution record with error
-            await executionRepository.update(executionId, {
-              status: "failed",
-              completedAt: new Date().toISOString(),
-              results: [
-                {
-                  nodeId,
-                  status: "failed",
-                  error: errorMessage,
-                  duration: 0,
-                },
-              ],
-              error: errorMessage,
-            });
-
-            // Emit error event if streaming
-            if (streamingManager) {
-              streamingManager.emitError(executionId, errorMessage);
-            }
-          }
-        })();
+        }], req.user?.userId ?? "unknown", (ids) => ({
+          status: 202,
+          body: { executionId: ids[0], status: "queued", message: "Package installation queued" },
+        }));
+        const responseData = admission.body as { executionId: string; status: string; message: string };
+        const { executionId } = responseData;
 
         const duration = Date.now() - startTime;
 
@@ -413,13 +293,6 @@ export function createPackagesRouter(
           operation: "installPackage",
           metadata: { executionId, nodeId, taskName: taskName ?? "", packageName, duration, selectedTool },
         });
-
-        // Return execution ID and initial status immediately
-        const responseData = {
-          executionId,
-          status: "running",
-          message: "Package installation started",
-        };
 
         // Attach debug info if expert mode is enabled
         if (debugInfo) {
@@ -444,6 +317,10 @@ export function createPackagesRouter(
           res.status(202).json(responseData);
         }
       } catch (error) {
+        if (error instanceof ExecutionQueueFullError || error instanceof ExecutionLifecycleError) {
+          res.status(503).json({ error: { code: "EXECUTION_UNAVAILABLE", message: error.message } });
+          return;
+        }
         const duration = Date.now() - startTime;
 
         // Unknown error

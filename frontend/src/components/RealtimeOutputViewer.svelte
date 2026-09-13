@@ -9,11 +9,11 @@
   interface Props {
     stream: ExecutionStream;
     autoConnect?: boolean;
-    executionId: string;
+    executionId?: string;
     enablePollingFallback?: boolean;
   }
 
-  let { stream, autoConnect = true, executionId, enablePollingFallback = true }: Props = $props();
+  let { stream, autoConnect = true, executionId = '', enablePollingFallback = true }: Props = $props();
 
   // Auto-scroll state
   let autoScroll = $state(true);

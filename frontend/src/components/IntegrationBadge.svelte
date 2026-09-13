@@ -3,7 +3,7 @@
   import { onMount } from 'svelte';
 
   interface Props {
-    integration: IntegrationType;
+    integration: string;
     variant?: 'dot' | 'label' | 'badge';
     size?: 'sm' | 'md' | 'lg';
   }
@@ -29,7 +29,7 @@
     checkmk: 'Checkmk',
   };
 
-  const label = $derived(integrationLabels[integration]);
+  const label = $derived(integrationLabels[integration as keyof typeof integrationLabels] ?? integration);
 
   // Size classes for different variants
   const dotSizeClasses = {

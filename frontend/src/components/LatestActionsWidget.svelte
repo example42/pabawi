@@ -32,7 +32,7 @@
 
   let { nodeId, onReady, onError }: Props = $props();
 
-  let executions = $state<ExecutionResult[]>([]);
+  let executions = $state<any[]>([]);
   let loading = $state(true);
   let error = $state<string | null>(null);
 

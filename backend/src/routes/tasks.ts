@@ -1,15 +1,13 @@
 import type { PermissionMiddlewareFactory } from "../middleware/routeAuthorization";
 import { Router, type Request, type Response } from "express";
 import { z } from "zod";
-import type { ExecutionRepository } from "../database/ExecutionRepository";
-import type { StreamingExecutionManager } from "../services/StreamingExecutionManager";
+import { type ExecutionService, ExecutionLifecycleError } from "../services/ExecutionService";
+import { ExecutionQueueFullError } from "../services/ExecutionQueue";
 import type { IntegrationManager } from "../integrations/IntegrationManager";
 import {
   BoltExecutionError,
   BoltParseError,
   BoltInventoryNotFoundError,
-  BoltTaskNotFoundError,
-  BoltTaskParameterError,
 } from "../integrations/bolt/types";
 import { asyncHandler } from "./asyncHandler";
 import type { BoltPlugin } from "../integrations/bolt/BoltPlugin";
@@ -44,8 +42,7 @@ const TaskExecutionBodySchema = z.object({
 export function createTasksRouter(
   integrationManager: IntegrationManager,
   requirePermission: PermissionMiddlewareFactory,
-  executionRepository: ExecutionRepository,
-  streamingManager?: StreamingExecutionManager,
+  executionService: ExecutionService,
   container: DIContainer = createDefaultContainer(),
 ): Router {
   const router = Router();
@@ -566,108 +563,19 @@ export function createTasksRouter(
           });
         }
 
-        // Create initial execution record
-        const executionId = await executionRepository.create({
+        const admission = await executionService.submit([{
           type: "task",
           targetNodes: [nodeId],
           action: taskName,
           parameters,
-          status: "running",
-          startedAt: new Date().toISOString(),
-          results: [],
           expertMode,
-        });
-
-        logger.info("Execution record created, starting task execution", {
-          component: "TasksRouter",
-          integration: "bolt",
-          operation: "executeTask",
-          metadata: { executionId, nodeId, taskName },
-        });
-
-        if (debugInfo) {
-          expertModeService.addInfo(debugInfo, {
-            message: "Execution record created, starting task execution",
-            context: JSON.stringify({ executionId, nodeId, taskName }),
-            level: 'info',
-          });
-        }
-
-        // Execute task asynchronously using IntegrationManager
-        // We don't await here to return immediately with execution ID
-        void (async (): Promise<void> => {
-          try {
-            const streamingCallback = streamingManager?.createStreamingCallback(
-              executionId,
-              expertMode
-            );
-
-            // Execute action through IntegrationManager
-            const result = await integrationManager.executeAction("bolt", {
-              type: "task",
-              target: nodeId,
-              action: taskName,
-              parameters,
-              metadata: {
-                streamingCallback,
-              },
-            });
-
-            // Update execution record with results
-            // Include stdout/stderr when expert mode is enabled
-            await executionRepository.update(executionId, {
-              status: result.status,
-              completedAt: result.completedAt,
-              results: result.results,
-              error: result.error,
-              command: result.command,
-              stdout: expertMode ? result.stdout : undefined,
-              stderr: expertMode ? result.stderr : undefined,
-            });
-
-            // Emit completion event if streaming
-            if (streamingManager) {
-              streamingManager.emitComplete(executionId, result);
-            }
-          } catch (error) {
-            logger.error("Error executing task", {
-              component: "TasksRouter",
-              integration: "bolt",
-              operation: "executeTask",
-              metadata: { executionId, nodeId, taskName },
-            }, error instanceof Error ? error : undefined);
-
-            let errorMessage = "Unknown error";
-
-            if (error instanceof BoltTaskNotFoundError) {
-              errorMessage = error.message;
-            } else if (error instanceof BoltTaskParameterError) {
-              errorMessage = error.message;
-            } else if (error instanceof Error) {
-              errorMessage = error.message;
-            }
-
-            // Update execution record with error
-            await executionRepository.update(executionId, {
-              status: "failed",
-              completedAt: new Date().toISOString(),
-              results: [
-                {
-                  nodeId,
-                  status: "failed",
-                  error: errorMessage,
-                  duration: 0,
-                },
-              ],
-              error: errorMessage,
-            });
-
-            // Emit error event if streaming
-            if (streamingManager) {
-              streamingManager.emitError(executionId, errorMessage);
-            }
-          }
-        })();
+          executionTool: "bolt",
+        }], req.user?.userId ?? "unknown", (ids) => ({
+          status: 202,
+          body: { executionId: ids[0], status: "queued", message: "Task execution queued" },
+        }));
+        const responseData = admission.body as { executionId: string; status: string; message: string };
+        const { executionId } = responseData;
 
         const duration = Date.now() - startTime;
 
@@ -677,13 +585,6 @@ export function createTasksRouter(
           operation: "executeTask",
           metadata: { executionId, nodeId, taskName, duration },
         });
-
-        // Return execution ID and initial status immediately
-        const responseData = {
-          executionId,
-          status: "running",
-          message: "Task execution started",
-        };
 
         // Attach debug info if expert mode is enabled
         if (debugInfo) {
@@ -707,6 +608,10 @@ export function createTasksRouter(
           res.status(202).json(responseData);
         }
       } catch (error) {
+        if (error instanceof ExecutionQueueFullError || error instanceof ExecutionLifecycleError) {
+          res.status(503).json({ error: { code: "EXECUTION_UNAVAILABLE", message: error.message } });
+          return;
+        }
         const duration = Date.now() - startTime;
 
         if (error instanceof z.ZodError) {

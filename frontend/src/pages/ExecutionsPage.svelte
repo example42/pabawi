@@ -50,6 +50,7 @@
     value?: unknown;
     error?: string;
     duration: number;
+    showFullResult?: boolean;
   }
 
   interface StatusCounts {
@@ -276,7 +277,7 @@
         { maxRetries: 2 }
       );
 
-      selectedExecution = data.execution || data;
+      selectedExecution = data.execution || (data as any);
 
       // Store debug info if present (for the detail view)
       if (data._debug) {
@@ -884,8 +885,8 @@
                           </div>
                           {#if result.showFullResult}
                             <pre class="overflow-x-auto rounded-lg border border-gray-200 bg-gray-50 p-3 text-xs text-gray-900 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100">{JSON.stringify(result.value, null, 2)}</pre>
-                          {:else if result.value._output}
-                            <pre class="overflow-x-auto whitespace-pre-wrap rounded-lg border border-gray-200 bg-gray-50 p-3 text-xs dark:border-gray-700 dark:bg-gray-900">{@html ansiToHtml(result.value._output)}</pre>
+                          {:else if (result.value as any)?._output}
+                            <pre class="overflow-x-auto whitespace-pre-wrap rounded-lg border border-gray-200 bg-gray-50 p-3 text-xs dark:border-gray-700 dark:bg-gray-900">{@html ansiToHtml((result.value as any)._output)}</pre>
                           {:else}
                             <pre class="overflow-x-auto rounded-lg border border-gray-200 bg-gray-50 p-3 text-xs text-gray-900 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100">{JSON.stringify(result.value, null, 2)}</pre>
                           {/if}
@@ -914,12 +915,12 @@
             <div class="flex justify-between">
               <div class="flex gap-2">
                 <ReExecutionButton execution={selectedExecution} size="md" variant="button" />
-                {#if ['queued', 'running'].includes(selectedExecution.status) && !selectedExecution.cancellationRequestedAt}
+                {#if selectedExecution && ['queued', 'running'].includes(selectedExecution.status) && !selectedExecution.cancellationRequestedAt}
                   <button
                     type="button"
                     class="rounded-lg border border-red-300 bg-white px-4 py-2 text-sm font-medium text-red-700 shadow-sm hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed dark:border-red-600 dark:bg-gray-700 dark:text-red-400 dark:hover:bg-red-900/20"
-                    onclick={() => cancelExecution(selectedExecution.id)}
-                    disabled={cancelling || !hasPermission("execute", selectedExecution.executionTool || "bolt")}
+                    onclick={() => cancelExecution(selectedExecution!.id)}
+                    disabled={cancelling || !hasPermission("execute", selectedExecution!.executionTool || "bolt")}
                   >
                     {cancelling ? 'Cancelling...' : 'Cancel Execution'}
                   </button>

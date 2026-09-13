@@ -1,3 +1,4 @@
+import type { ExecutionService } from "../../src/services/ExecutionService";
 import { noPermissionCheck } from "../../src/middleware/routeAuthorization";
 import {
   describe,
@@ -122,15 +123,14 @@ describe("API Integration Tests", () => {
       "/api/nodes",
       createCommandsRouter(
         integrationManager,
-        executionRepository,
+        {} as ExecutionService,
         commandWhitelistService,
         noPermissionCheck,
-        streamingManager,
       ),
     );
     app.use(
       "/api/nodes",
-      createTasksRouter(integrationManager, noPermissionCheck, executionRepository, streamingManager),
+      createTasksRouter(integrationManager, noPermissionCheck, {} as ExecutionService),
     );
 
     // Add error handler

@@ -29,7 +29,7 @@
   let loadedTabs = $state<Set<TabId>>(new Set(['reports']));
 
   // Cache for loaded data
-  let dataCache = $state<Record<TabId, any>>({});
+  let dataCache = $state<Partial<Record<TabId, any>>>({});
 
   // Debug info state for expert mode
   let debugInfo = $state<DebugInfo | null>(null);

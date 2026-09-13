@@ -22,6 +22,7 @@
     uri: string;
     transport: 'ssh' | 'winrm' | 'docker' | 'local';
     source?: string;
+    config?: { user?: string };
     sources?: string[];
     linked?: boolean;
   }
@@ -939,7 +940,7 @@
                   {node.uri}
                 </td>
                 <td class="whitespace-nowrap px-4 py-2 text-sm text-gray-600 dark:text-gray-400">
-                  {node.config.user || '-'}
+                  {node.config?.user || '-'}
                 </td>
               </tr>
             {/each}
@@ -1007,7 +1008,7 @@
       </div>
     {:else}
       <ExecutionList
-        {executions}
+        executions={executions as any}
         onExecutionClick={(execution) => router.navigate(`/executions?id=${execution.id}`)}
         showTargets={true}
       />
