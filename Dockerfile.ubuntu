@@ -10,6 +10,7 @@ ENV npm_config_build_from_source=true npm_config_nodedir=/usr/local
 RUN npm ci --ignore-scripts --no-audit --no-fund && npm run install:approved
 COPY backend/ ./backend/
 COPY frontend/ ./frontend/
+COPY scripts/compilation/backend.mjs ./scripts/compilation/backend.mjs
 RUN npm run build:frontend && npm run build:backend
 RUN npm sbom --workspace=frontend --omit=dev --sbom-format=cyclonedx > frontend.cdx.json
 
