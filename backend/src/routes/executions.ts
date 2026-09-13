@@ -1,3 +1,5 @@
+import { type ExecutionService, ExecutionLifecycleError } from "../services/ExecutionService";
+import { ExecutionDispatchError } from "../services/ExecutionDispatcher";
 import { Router, type Request, type Response, type RequestHandler } from "express";
 import { z } from "zod";
 import type {
@@ -7,7 +9,7 @@ import type {
   NewExecution,
 } from "../database/ExecutionRepository";
 import { type ExecutionFilters } from "../database/ExecutionRepository";
-import type { ExecutionQueue } from "../services/ExecutionQueue";
+import { type ExecutionQueue, ExecutionQueueFullError } from "../services/ExecutionQueue";
 import { asyncHandler } from "./asyncHandler";
 import type { BatchExecutionService } from "../services/BatchExecutionService";
 import { type DIContainer, createDefaultContainer } from "../container/DIContainer";
@@ -87,6 +89,7 @@ export function createExecutionsRouter(
   container: DIContainer = createDefaultContainer(),
   commandWhitelistService?: BoltCommandWhitelistService,
   requestIdempotency?: RequestIdempotencyService,
+  executionService?: ExecutionService,
 ): Router {
   const router = Router();
   const logger = container.resolve("logger");
@@ -881,8 +884,7 @@ export function createExecutionsRouter(
           action: (modifications.action ?? originalExecution.action),
 
           parameters: (modifications.parameters ?? originalExecution.parameters),
-          status: "running",
-          startedAt: new Date().toISOString(),
+          status: "queued",
           results: [] as NodeResult[],
           command: (modifications.command ?? originalExecution.command),
           expertMode: (modifications.expertMode ?? originalExecution.expertMode),
@@ -926,10 +928,13 @@ export function createExecutionsRouter(
 
         // Create the re-execution with reference to original
 
-        const newExecutionId = await executionRepository.createReExecution(
-          executionId,
-          executionData,
-        );
+        if (!executionService) {
+          res.status(503).json({ error: { code: "SERVICE_UNAVAILABLE", message: "Execution service unavailable" } });
+          return;
+        }
+        const newExecutionId = await executionService.reExecute({
+          ...executionData, originalExecutionId: executionId,
+        }, req.user?.userId ?? "unknown");
 
         // Return the new execution ID and details
         const createdExecution =
@@ -974,6 +979,13 @@ export function createExecutionsRouter(
           res.status(201).json(responseData);
         }
       } catch (error) {
+        if (error instanceof ExecutionDispatchError || error instanceof ExecutionLifecycleError || error instanceof ExecutionQueueFullError) {
+          res.status(error instanceof ExecutionDispatchError ? 400 : 503).json({
+            error: { code: "EXECUTION_UNAVAILABLE", message: error.message },
+          });
+          return;
+        }
+
         const duration = Date.now() - startTime;
 
         if (error instanceof z.ZodError) {
@@ -1433,138 +1445,18 @@ export function createExecutionsRouter(
           return;
         }
 
-        // Check if execution is already completed
-        if (execution.status !== 'running') {
-          logger.warn("Cannot cancel non-running execution", {
-            component: "ExecutionsRouter",
-            operation: "cancelExecution",
-            metadata: { executionId, status: execution.status },
-          });
-
-          const duration = Date.now() - startTime;
-
-          if (req.expertMode) {
-            const debugInfo = expertModeService.createDebugInfo(
-              'POST /api/executions/:id/cancel',
-              requestId,
-              duration
-            );
-            expertModeService.addWarning(debugInfo, {
-              message: `Execution '${executionId}' is not running (status: ${execution.status})`,
-              level: 'warn',
-            });
-            debugInfo.performance = expertModeService.collectPerformanceMetrics();
-            debugInfo.context = expertModeService.collectRequestContext(req);
-          }
-
-          res.status(400).json({
-            error: {
-              code: "INVALID_STATUS",
-              message: `Cannot cancel execution with status '${execution.status}'`,
-            },
-          });
+        if (!executionService) {
+          res.status(503).json({ error: { code: "SERVICE_UNAVAILABLE", message: "Execution service unavailable" } });
           return;
         }
-
-        // Try to cancel from queue if it's queued
-        let cancelledFromQueue = false;
-        if (executionQueue) {
-          cancelledFromQueue = executionQueue.cancel(executionId);
-        }
-
-        // Update execution status to failed with cancellation message
-        try {
-          await executionRepository.update(executionId, {
-            status: 'failed',
-            completedAt: new Date().toISOString(),
-            error: 'Execution cancelled by user',
-          });
-        } catch (dbError) {
-          // Database error - likely a constraint violation
-          logger.error("Database error while cancelling execution", {
-            component: "ExecutionsRouter",
-            operation: "cancelExecution",
-            metadata: { executionId },
-          }, dbError instanceof Error ? dbError : undefined);
-
-          const duration = Date.now() - startTime;
-
-          if (req.expertMode) {
-            const debugInfo = expertModeService.createDebugInfo(
-              'POST /api/executions/:id/cancel',
-              requestId,
-              duration
-            );
-            expertModeService.addError(debugInfo, {
-              message: "Database error while updating execution status",
-              context: JSON.stringify({
-                executionId,
-                attemptedStatus: 'failed',
-                error: dbError instanceof Error ? dbError.message : String(dbError),
-              }),
-              stack: dbError instanceof Error ? dbError.stack : undefined,
-              level: 'error',
-            });
-            debugInfo.performance = expertModeService.collectPerformanceMetrics();
-            debugInfo.context = expertModeService.collectRequestContext(req);
-
-            res.status(500).json(expertModeService.attachDebugInfo({
-              error: {
-                code: "DATABASE_ERROR",
-                message: "Failed to update execution status in database",
-                details: dbError instanceof Error ? dbError.message : String(dbError),
-              },
-            }, debugInfo));
-          } else {
-            res.status(500).json({
-              error: {
-                code: "DATABASE_ERROR",
-                message: "Failed to update execution status in database",
-              },
-            });
-          }
+        const result = await executionService.cancel(executionId);
+        if (!result.cancelledCount && !result.runningCount) {
+          res.status(400).json({ error: { code: "INVALID_STATUS", message: "Execution is already terminal" } });
           return;
         }
-
-        const duration = Date.now() - startTime;
-
-        logger.info("Execution cancelled successfully", {
-          component: "ExecutionsRouter",
-          operation: "cancelExecution",
-          metadata: {
-            executionId,
-            cancelledFromQueue,
-            duration,
-          },
-        });
-
-        const responseData = {
-          message: "Execution cancelled successfully",
-          executionId,
-          cancelledFromQueue,
-        };
-
-        // Handle expert mode response
-        if (req.expertMode) {
-          const debugInfo = expertModeService.createDebugInfo(
-            'POST /api/executions/:id/cancel',
-            requestId,
-            duration
-          );
-
-          expertModeService.addInfo(debugInfo, {
-            message: "Execution cancelled successfully",
-            context: JSON.stringify({ executionId, cancelledFromQueue }),
-            level: 'info',
-          });
-
-          debugInfo.performance = expertModeService.collectPerformanceMetrics();
-          debugInfo.context = expertModeService.collectRequestContext(req);
-
-          res.json(expertModeService.attachDebugInfo(responseData, debugInfo));
-        } else {
-          res.json(responseData);
-        }
+        res.json({ executionId, ...result, message: result.runningCount
+          ? "Cancellation requested; dispatched work cannot be interrupted and is still running"
+          : "Cancelled before dispatch" });
       } catch (error) {
         const duration = Date.now() - startTime;
 

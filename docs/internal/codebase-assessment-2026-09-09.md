@@ -22,6 +22,36 @@ per-source capacity until real settlement; stopped health schedulers cannot
 resurrect after a late result. Direct background ownership remains an A22
 prerequisite for completing the overall lifecycle contract.
 
+## Remediation completion: 2026-09-13
+
+A22 is implemented. Direct commands, tasks, playbooks, packages, single-node and
+multi-node Puppet runs, and re-execution now use `ExecutionService` for atomic
+admission, the shared process queue, caller attribution, cancellation and worker
+settlement. `ExecutionDispatcher` keeps provider-specific mapping and Puppet exit
+code normalization in one path. Shutdown tracks admissions and workers before
+database closure; queued direct work is cancelled, running work retains a
+cancellation request until the provider settles, and provider failures become
+`interrupted` without automatic replay.
+
+The component diagnostic backlog is cleared. Svelte semantic checking reports
+zero errors across the frontend, with strict null checking retained for the
+TypeScript lint configuration. The frontend suite passes 1,043 tests.
+
+Validation on Node 24.21.0: full backend suite 3,751 passed, 77 skipped, one
+todo; full frontend suite 1,043 passed; focused SQLite/PostgreSQL lifecycle and
+storage suite 78 passed; backend and frontend lint passed; backend and frontend
+builds passed; all 14 chart, compilation and documentation contract checks
+passed; built-server SIGINT and SIGTERM smoke tests passed; Playwright passed all
+8 isolated browser tests; whole-tree secret scan passed with 172 reviewed
+findings. No production provider, tenant, database or cluster was accessed.
+
+The remaining release boundaries are external evidence rather than unfinished
+repository work: installed exposure and historical data recovery, current image
+advisory scans on every base variant, remote CI workflow execution, real Proxmox
+and Windows compatibility, real Entra compatibility, and multi-process or
+provider-abort acceptance. The supported topology remains one process with
+SQLite or PostgreSQL.
+
 Built-process validation exposed retired migration files surviving incremental
 builds in `dist`. The backend now compiles into staging and replaces generated
 output only after successful compilation. A regression gate injects retired SQL
@@ -1112,7 +1142,7 @@ implementation and validation are recorded above.
 
 Recommended module boundaries are a shared authorization/session policy, an execution lifecycle service, transaction-scoped storage, and a console session broker. Keep provider-specific API/CLI semantics in plugins. Reduce repetitive expert-mode/error blocks after behavior is covered; file size alone is not a reason to refactor.
 
-Queue admission should apply consistently to direct and batch execution. [commands.ts](../../backend/src/routes/commands.ts), line 233, dispatches directly through IntegrationManager without acquiring the batch queue; the examined Bolt service also spawns directly. Verify every execution path before describing the concurrency limit as global. Inventory/facts timeout behavior and shutdown at [server.ts](../../backend/src/server.ts), line 1181 onward, need a clear drain/cancel/restart contract.
+Resolved by A22 on 2026-09-13. `ExecutionService` now owns admission, durable attribution, terminal status, cancellation and shutdown draining for direct and batch execution, while `ExecutionDispatcher` preserves provider-specific command, task, plan, package and Puppet semantics. SQLite and PostgreSQL lifecycle tests, direct ownership regressions, full backend tests and browser flows provide local evidence. Distributed ownership and provider abort semantics remain separately scoped.
 
 **Acceptance:** all execution entry points share tested admission, attribution, terminal status, cancellation and retry semantics. Provider failure cannot indefinitely block unrelated inventory or shutdown. Persisted running work is reconciled after restart.
 
@@ -1179,7 +1209,7 @@ Owners below are proposed responsibility areas, not assignments to named people.
 | A19. Correct backup/auth/Checkmk/OpenAPI and deployment references | P1-P3 | Maintainers / docs | 3-5 days | Update alongside behavior changes | D01-D10 resolved with verified commands and contract checks |
 | A20. Harden workload limits and redact/retain diagnostic data consistently | P2 | Security / observability | 2-4 days | A05/A06 | Query-based limiter bypass fails; canary credentials stay out of support exports |
 | A21. Define the supported topology, shutdown and recovery contract | P2 | Architecture / operations | 2-4 days for specification and single-process hardening | A11/A13/A15/A16 | Single-process baseline is reliable; unsupported HA claims removed; distributed work separately scoped |
-| A22. Consolidate execution and diagnostics modules using the repaired contracts | P3 | Backend / frontend | Scope after phases 1-2 | Behavioral regression suite | Duplicate paths no longer diverge in admission, cancellation, attribution or status |
+| A22. Consolidate execution and diagnostics modules using the repaired contracts (completed 2026-09-13) | P3 | Backend / frontend | Scope after phases 1-2 | Behavioral regression suite | Duplicate paths no longer diverge in admission, cancellation, attribution or status |
 
 Security tests should be added with each fix, not deferred to A18. Documentation describing unsafe recovery or incorrect protection should be corrected with the corresponding behavior change. Broader multi-replica execution is a separate design project and is intentionally not hidden inside the estimates above.
 
@@ -1208,4 +1238,9 @@ npm run lint
 (cd backend && node ../node_modules/vitest/vitest.mjs run test/AuthenticationService.test.ts test/unit/mcp test/unit/services/EntraIdService.test.ts test/properties/EntraIdAuthCode.property.test.ts)
 ```
 
-Still required before claiming release readiness: full backend regression coverage, populated PostgreSQL upgrades, image/runtime verification, browser execution/console workflows, provider compatibility checks, dependency/OS advisory scans, historical secret scanning with reviewed exceptions, and documented backup/restore and secret-rotation exercises. Passing the current targeted suites does not close any finding without its stated acceptance tests.
+Release readiness still depends on external evidence: installed exposure and historical
+data recovery, current advisory scans for every shipped image variant, remote CI
+workflow execution, real Proxmox, Windows and Entra compatibility, multi-process
+ownership, provider-abort behavior, and documented backup/restore and secret-rotation
+exercises. These boundaries require deployment access or provider credentials that
+are not present in this repository.

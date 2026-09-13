@@ -1,3 +1,4 @@
+import type { ExecutionService } from "../services/ExecutionService";
 import { createSourceAuthorization } from "../middleware/sourceAuthorization";
 import { createInventoryRouter } from "./inventory";
 import { createFactsRouter } from "./facts";
@@ -40,6 +41,7 @@ interface InfrastructureRouteDependencies {
   integrationManager: IntegrationManager;
   boltService: BoltService;
   executionRepository: ExecutionRepository;
+  executionService: ExecutionService;
   commandWhitelistService: BoltCommandWhitelistService;
   streamingManager: StreamingExecutionManager;
   executionQueue?: ExecutionQueue;
@@ -66,7 +68,7 @@ interface InfrastructureRouteDependencies {
 }
 
 export function mountInfrastructureRoutes(app: Express, dependencies: InfrastructureRouteDependencies): void {
-  const { db, integrationManager, boltService, executionRepository, commandWhitelistService, streamingManager, executionQueue, batchExecutionService, requestIdempotency, puppetDBService, puppetserverService, puppetRunHistoryService, journalService, container, config, authMiddleware, inventoryAuthMiddleware, rbacMiddleware, rateLimitMiddleware } = dependencies;
+  const { executionService, db, integrationManager, boltService, executionRepository, commandWhitelistService, streamingManager, executionQueue, batchExecutionService, requestIdempotency, puppetDBService, puppetserverService, puppetRunHistoryService, container, config, authMiddleware, inventoryAuthMiddleware, rbacMiddleware, rateLimitMiddleware } = dependencies;
   const authorizeSources = createSourceAuthorization(db, integrationManager);
 
   // API Routes - Inventory routes (protected with RBAC)
@@ -90,10 +92,9 @@ export function mountInfrastructureRoutes(app: Express, dependencies: Infrastruc
     rateLimitMiddleware,
     createCommandsRouter(
       integrationManager,
-      executionRepository,
+      executionService,
       commandWhitelistService,
       rbacMiddleware,
-      streamingManager,
       container,
     ),
   );
@@ -104,8 +105,7 @@ export function mountInfrastructureRoutes(app: Express, dependencies: Infrastruc
     createTasksRouter(
       integrationManager,
       rbacMiddleware,
-      executionRepository,
-      streamingManager,
+      executionService,
       container,
     ),
   );
@@ -116,8 +116,7 @@ export function mountInfrastructureRoutes(app: Express, dependencies: Infrastruc
     createPlaybooksRouter(
       integrationManager,
       rbacMiddleware,
-      executionRepository,
-      streamingManager,
+      executionService,
       container,
     ),
   );
@@ -125,7 +124,7 @@ export function mountInfrastructureRoutes(app: Express, dependencies: Infrastruc
     "/api/nodes",
     authMiddleware,
     rateLimitMiddleware,
-    createPuppetRouter(integrationManager, rbacMiddleware, executionRepository, journalService, streamingManager, container, requestIdempotency),
+    createPuppetRouter(integrationManager, rbacMiddleware, executionService, container),
   );
   app.use(
     "/api/nodes",
@@ -138,7 +137,7 @@ export function mountInfrastructureRoutes(app: Express, dependencies: Infrastruc
     "/api/puppet-run",
     authMiddleware,
     rateLimitMiddleware,
-    createPuppetRouter(integrationManager, rbacMiddleware, executionRepository, journalService, streamingManager, container, requestIdempotency),
+    createPuppetRouter(integrationManager, rbacMiddleware, executionService, container),
   );
   // Add puppet history routes if PuppetDB is available
   if (puppetRunHistoryService) {
@@ -156,10 +155,8 @@ export function mountInfrastructureRoutes(app: Express, dependencies: Infrastruc
     createPackagesRouter(
       integrationManager,
       rbacMiddleware,
-      boltService,
-      executionRepository,
+      executionService,
       config.packageTasks,
-      streamingManager,
       container,
     ),
   );
@@ -170,8 +167,7 @@ export function mountInfrastructureRoutes(app: Express, dependencies: Infrastruc
     createTasksRouter(
       integrationManager,
       rbacMiddleware,
-      executionRepository,
-      streamingManager,
+      executionService,
       container,
     ),
   );
@@ -192,7 +188,7 @@ export function mountInfrastructureRoutes(app: Express, dependencies: Infrastruc
     "/api/executions",
     authMiddleware,
     rateLimitMiddleware,
-    createExecutionsRouter(executionRepository, rbacMiddleware, executionQueue, batchExecutionService, container, commandWhitelistService, requestIdempotency),
+    createExecutionsRouter(executionRepository, rbacMiddleware, executionQueue, batchExecutionService, container, commandWhitelistService, requestIdempotency, executionService),
   );
   app.use(
     "/api/executions",

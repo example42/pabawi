@@ -194,6 +194,21 @@ export class RequestIdempotencyService {
     };
   }
 
+  /** Replays a committed decision before mutable provider and capacity checks. */
+  async lookup(request: IdempotentSubmission): Promise<IdempotentResponse | undefined> {
+    if (request.key === undefined) return undefined;
+    const stored = await this.db.queryOne<StoredRow>(
+      `SELECT scope, fingerprint, response_status, response_body
+       FROM request_idempotency WHERE user_id = ? AND idempotency_key = ?`,
+      [request.userId, request.key],
+    );
+    if (!stored) return undefined;
+    if (stored.scope !== request.scope || stored.fingerprint !== request.fingerprint) {
+      throw new IdempotencyConflictError("Idempotency-Key was already used for a different request");
+    }
+    return { status: stored.response_status, body: JSON.parse(stored.response_body) as unknown };
+  }
+
   /**
    * Claim a submission and perform its admission in one transaction.
    *

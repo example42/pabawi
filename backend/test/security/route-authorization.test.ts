@@ -1,3 +1,4 @@
+import type { ExecutionService } from "../../src/services/ExecutionService";
 import type { PuppetRunHistoryService } from "../../src/services/PuppetRunHistoryService";
 import { createAuthRouter } from "../../src/routes/auth";
 import { mountInfrastructureRoutes } from "../../src/routes/mountInfrastructureRoutes";
@@ -279,6 +280,7 @@ beforeAll(async () => {
   mountInfrastructureRoutes(app, {
     db, integrationManager, boltService: {} as BoltService,
     executionRepository, streamingManager,
+    executionService: { reExecute: createReExecution, cancel: vi.fn().mockResolvedValue({ cancelledCount: 0, runningCount: 1 }) } as unknown as ExecutionService,
     batchExecutionService: { createBatch, cancelBatch } as unknown as BatchExecutionService,
     puppetserverService,
     puppetRunHistoryService: {} as PuppetRunHistoryService,

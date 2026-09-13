@@ -552,7 +552,9 @@
       class="w-full max-w-md rounded-lg bg-white shadow-xl dark:bg-gray-800"
       role="dialog"
       aria-modal="true"
+      tabindex="-1"
       onclick={(e) => e.stopPropagation()}
+      onkeydown={(e) => e.stopPropagation()}
     >
       <div class="border-b border-gray-200 px-5 py-3 dark:border-gray-700">
         <h3 class="text-base font-semibold text-gray-900 dark:text-white">

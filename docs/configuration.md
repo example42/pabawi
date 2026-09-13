@@ -227,7 +227,7 @@ logs a warning at startup when it is disabled.
 
 | Variable | Default | Description | Secret value |
 |---|---|---|---|
-| `CONCURRENT_EXECUTION_LIMIT` | `5` | Batch queue concurrency per process; direct command and Puppet run routes do not share this admission limit | no |
+| `CONCURRENT_EXECUTION_LIMIT` | `5` | Shared concurrency per process for direct commands, tasks, playbooks, packages, Puppet runs, re-execution and batches; excludes provisioning/lifecycle/monitoring APIs | no |
 | `MAX_QUEUE_SIZE` | `50` | Max queued executions before rejecting | no |
 
 ## Provisioning Safety

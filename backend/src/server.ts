@@ -1,3 +1,5 @@
+import { ExecutionService } from "./services/ExecutionService";
+import { ExecutionDispatcher } from "./services/ExecutionDispatcher";
 import type { AWSPlugin } from "./integrations/aws/AWSPlugin";
 import type { AzurePlugin } from "./integrations/azure/AzurePlugin";
 import { mountInfrastructureRoutes } from "./routes/mountInfrastructureRoutes";
@@ -779,7 +781,12 @@ async function startServer(): Promise<Express> {
       createMonitoringActionsRouter(integrationManager, databaseService, container),
     );
 
+    const executionDispatcher = new ExecutionDispatcher(integrationManager, boltService, config.packageTasks,
+      commandWhitelistService, streamingManager, journalService, logger);
+    const executionService = new ExecutionService(databaseService.getAdapter(), executionQueue,
+      executionRepository, executionDispatcher, streamingManager, logger);
     mountInfrastructureRoutes(app, {
+      executionService,
       integrationManager, boltService, executionRepository, commandWhitelistService, streamingManager, executionQueue, batchExecutionService, requestIdempotency, puppetDBService, puppetserverService, puppetRunHistoryService, journalService, container, config, authMiddleware, inventoryAuthMiddleware, rbacMiddleware, rateLimitMiddleware,
       db: databaseService.getAdapter(),
     });
@@ -963,6 +970,7 @@ async function startServer(): Promise<Express> {
     const shutdown = new ShutdownCoordinator(
       () => {
         streamingManager.cleanup();
+        executionService.stopAdmission();
         batchExecutionService.stopAdmission();
         integrationManager.stopHealthCheckScheduler();
         if (entraIdCleanupInterval) clearInterval(entraIdCleanupInterval);
@@ -976,6 +984,8 @@ async function startServer(): Promise<Express> {
           }),
           closeMcp?.() ?? Promise.resolve(),
           consoleWebSocketProxy.drain(),
+          executionService.drain(),
+          batchExecutionService.drain(),
         ]);
         await Promise.all(integrationManager.getAllConsoleProviders()
           .map(provider => consoleSessionManager.terminateAllForProvider(provider.name)));

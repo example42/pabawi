@@ -1,3 +1,7 @@
+import { ExecutionService } from "../../src/services/ExecutionService";
+import { ExecutionDispatcher } from "../../src/services/ExecutionDispatcher";
+import type { BoltService } from "../../src/integrations/bolt/BoltService";
+import { BoltCommandWhitelistService } from "../../src/validation/CommandWhitelistService";
 /**
  * Idempotent admission over HTTP (A14 / I05).
  *
@@ -38,6 +42,7 @@ describe("Idempotent admission", () => {
   let db: DatabaseAdapter;
   let executionRepository: ExecutionRepository;
   let queue: ExecutionQueue;
+  let executionService: ExecutionService;
   let integrationManager: IntegrationManager;
   let batchExecutionService: BatchExecutionService;
   let requestIdempotency: RequestIdempotencyService;
@@ -75,6 +80,10 @@ describe("Idempotent admission", () => {
 
     batchExecutionService = new BatchExecutionService(db, queue, executionRepository, integrationManager);
 
+    executionService = new ExecutionService(db, queue, executionRepository,
+      new ExecutionDispatcher(integrationManager, {} as BoltService, [],
+        new BoltCommandWhitelistService({ allowAll: true, whitelist: [], matchMode: "exact" })));
+
     app = express();
     app.use(express.json());
     app.use(requestIdMiddleware);
@@ -82,7 +91,7 @@ describe("Idempotent admission", () => {
       executionRepository, noPermissionCheck, queue, batchExecutionService, undefined, undefined, requestIdempotency,
     ));
     app.use("/api/puppet-run", createPuppetRouter(
-      integrationManager, noPermissionCheck, executionRepository, undefined, undefined, undefined, requestIdempotency,
+      integrationManager, noPermissionCheck, executionService,
     ));
     app.use(errorHandler);
   });
@@ -99,6 +108,7 @@ describe("Idempotent admission", () => {
     }, { timeout: 3000 });
     batchExecutionService.stopAdmission();
     await vi.waitFor(() => expect(queue.getStatus().running).toBe(0));
+    await executionService.drain();
     await db.close();
     vi.restoreAllMocks();
   });

@@ -250,6 +250,10 @@ describe.skipIf(dialect === 'postgres' && !databaseUrl)(`${dialect}: durable bat
     service.stopAdmission();
     gate.resolve();
     await vi.waitFor(() => expect(queue.getStatus().running).toBe(0));
+    await service.drain();
+    // Seed a crash snapshot separately from graceful shutdown, which preserves settled results.
+    await database.getAdapter().execute("UPDATE executions SET status = 'running', completed_at = NULL, results = '[]', error = NULL WHERE id = ?",
+      [result.executionIds[0]]);
     await database.close();
     const url = new URL(databaseUrl ?? 'postgres://localhost/test');
     url.searchParams.set('options', `-csearch_path=${schema}`);

@@ -2,8 +2,8 @@ import type { PermissionMiddlewareFactory } from "../middleware/routeAuthorizati
 import { Router, type Request, type Response } from "express";
 import { z } from "zod";
 import type { IntegrationManager } from "../integrations/IntegrationManager";
-import type { ExecutionRepository } from "../database/ExecutionRepository";
-import type { StreamingExecutionManager } from "../services/StreamingExecutionManager";
+import { type ExecutionService, ExecutionLifecycleError } from "../services/ExecutionService";
+import { ExecutionQueueFullError } from "../services/ExecutionQueue";
 import { asyncHandler } from "./asyncHandler";
 import { NodeIdParamSchema } from "../validation/commonSchemas";
 import { type DIContainer, createDefaultContainer } from "../container/DIContainer";
@@ -32,8 +32,7 @@ const PlaybookExecutionBodySchema = z.object({
 export function createPlaybooksRouter(
   integrationManager: IntegrationManager,
   requirePermission: PermissionMiddlewareFactory,
-  executionRepository: ExecutionRepository,
-  streamingManager?: StreamingExecutionManager,
+  executionService: ExecutionService,
   container: DIContainer = createDefaultContainer(),
 ): Router {
   const router = Router();
@@ -94,91 +93,23 @@ export function createPlaybooksRouter(
           return;
         }
 
-        const executionId = await executionRepository.create({
-          type: "task",
+        const admission = await executionService.submit([{
+          type: "plan",
           targetNodes: [nodeId],
           action: playbookPath,
-          parameters: {
-            playbook: true,
-            extraVars,
-          },
-          status: "running",
-          startedAt: new Date().toISOString(),
-          results: [],
+          parameters: { extraVars },
           expertMode,
           executionTool: "ansible",
-        });
-
-        void (async (): Promise<void> => {
-          try {
-            const streamingCallback = streamingManager?.createStreamingCallback(
-              executionId,
-              expertMode,
-            );
-
-            const result = await integrationManager.executeAction("ansible", {
-              type: "plan",
-              target: nodeId,
-              action: playbookPath,
-              parameters: {
-                extraVars,
-              },
-              metadata: {
-                streamingCallback,
-              },
-            });
-
-            await executionRepository.update(executionId, {
-              status: result.status,
-              completedAt: result.completedAt,
-              results: result.results,
-              error: result.error,
-              command: result.command,
-              stdout: expertMode ? result.stdout : undefined,
-              stderr: expertMode ? result.stderr : undefined,
-            });
-
-            if (streamingManager) {
-              streamingManager.emitComplete(executionId, result);
-            }
-          } catch (error) {
-            logger.error("Error executing playbook", {
-              component: "PlaybooksRouter",
-              integration: "ansible",
-              operation: "executePlaybook",
-              metadata: { executionId, nodeId, playbookPath },
-            }, error instanceof Error ? error : undefined);
-
-            const errorMessage =
-              error instanceof Error ? error.message : "Unknown error";
-
-            await executionRepository.update(executionId, {
-              status: "failed",
-              completedAt: new Date().toISOString(),
-              results: [
-                {
-                  nodeId,
-                  status: "failed",
-                  error: errorMessage,
-                  duration: 0,
-                },
-              ],
-              error: errorMessage,
-            });
-
-            if (streamingManager) {
-              streamingManager.emitError(executionId, errorMessage);
-            }
-          }
-        })();
+        }], req.user?.userId ?? "unknown", (ids) => ({
+          status: 202,
+          body: { executionId: ids[0], status: "queued", message: "Playbook execution queued" },
+        }));
+        const responseData = admission.body as { executionId: string; status: string; message: string };
+        const { executionId } = responseData;
 
         const duration = Date.now() - startTime;
 
-        const responseData = {
-          executionId,
-          status: "running",
-          message: "Playbook execution started",
-        };
+
 
         if (debugInfo) {
           debugInfo.duration = duration;
@@ -198,6 +129,10 @@ export function createPlaybooksRouter(
           res.status(202).json(responseData);
         }
       } catch (error) {
+        if (error instanceof ExecutionQueueFullError || error instanceof ExecutionLifecycleError) {
+          res.status(503).json({ error: { code: "EXECUTION_UNAVAILABLE", message: error.message } });
+          return;
+        }
         const duration = Date.now() - startTime;
 
         logger.error("Error processing playbook execution request", {

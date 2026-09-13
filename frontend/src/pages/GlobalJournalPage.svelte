@@ -322,7 +322,7 @@
                       class="h-3.5 w-3.5 rounded border-gray-300 text-primary-600 focus:ring-primary-500 dark:border-gray-600" />
                     <span class="flex-1 truncate text-gray-800 dark:text-gray-200">{node.name}</span>
                     {#if node.source}
-                      <IntegrationBadge integration={node.source} size="xs" />
+                    <IntegrationBadge integration={node.source} size="sm" />
                     {/if}
                   </label>
                 {/each}
@@ -342,7 +342,7 @@
                       class="h-3.5 w-3.5 border-gray-300 text-primary-600 focus:ring-primary-500 dark:border-gray-600" />
                     <span class="flex-1 truncate text-gray-800 dark:text-gray-200">{group.name}</span>
                     <span class="text-xs text-gray-400 dark:text-gray-500">{group.nodes.length} nodes</span>
-                    <IntegrationBadge integration={group.source} size="xs" />
+                    <IntegrationBadge integration={group.source} size="sm" />
                   </label>
                 {/each}
               </div>

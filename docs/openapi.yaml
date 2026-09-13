@@ -4452,13 +4452,13 @@ components:
           description: Unique execution identifier
         status:
           type: string
-          enum: [running]
+          enum: [queued]
         message:
           type: string
       example:
         executionId: abc123def456  # pragma: allowlist secret
-        status: running
-        message: Command execution started
+        status: queued
+        message: Command execution queued
 
     ExecutionRecord:
       type: object

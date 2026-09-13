@@ -1,11 +1,11 @@
 import { Router, type Request, type Response } from "express";
 import { z } from "zod";
-import type { ExecutionRepository } from "../database/ExecutionRepository";
+import { type ExecutionService, ExecutionLifecycleError } from "../services/ExecutionService";
+import { ExecutionQueueFullError } from "../services/ExecutionQueue";
 import type { BoltCommandWhitelistService } from "../validation/CommandWhitelistService";
 import { BoltCommandNotAllowedError } from "../validation/CommandWhitelistService";
 import { BoltInventoryNotFoundError } from "../integrations/bolt/types";
 import { asyncHandler } from "./asyncHandler";
-import type { StreamingExecutionManager } from "../services/StreamingExecutionManager";
 import type { IntegrationManager } from "../integrations/IntegrationManager";
 import type { PermissionMiddlewareFactory } from "../middleware/routeAuthorization";
 import { NodeIdParamSchema } from "../validation/commonSchemas";
@@ -22,10 +22,9 @@ const CommandExecutionBodySchema = z.object({
  */
 export function createCommandsRouter(
   integrationManager: IntegrationManager,
-  executionRepository: ExecutionRepository,
+  executionService: ExecutionService,
   commandWhitelistService: BoltCommandWhitelistService,
   requirePermission: PermissionMiddlewareFactory,
-  streamingManager?: StreamingExecutionManager,
   container: DIContainer = createDefaultContainer(),
 ): Router {
   const router = Router();
@@ -204,100 +203,18 @@ export function createCommandsRouter(
           });
         }
 
-        // Create initial execution record
-        const executionId = await executionRepository.create({
+        const admission = await executionService.submit([{
           type: "command",
           targetNodes: [nodeId],
           action: command,
-          status: "running",
-          startedAt: new Date().toISOString(),
-          results: [],
           expertMode,
           executionTool: selectedTool,
-        });
-
-        logger.info("Execution record created, starting command execution", {
-          component: "CommandsRouter",
-          integration: "bolt",
-          operation: "executeCommand",
-          metadata: { executionId, nodeId, command },
-        });
-
-        if (debugInfo) {
-          expertModeService.addInfo(debugInfo, {
-            message: "Execution record created, starting command execution",
-            context: JSON.stringify({ executionId, nodeId, command }),
-            level: 'info',
-          });
-        }
-
-        // Execute command asynchronously using IntegrationManager
-        // We don't await here to return immediately with execution ID
-        void (async (): Promise<void> => {
-          try {
-            const streamingCallback = streamingManager?.createStreamingCallback(
-              executionId,
-              expertMode
-            );
-
-            // Execute action through IntegrationManager
-            const result = await integrationManager.executeAction(selectedTool, {
-              type: "command",
-              target: nodeId,
-              action: command,
-              metadata: {
-                streamingCallback,
-              },
-            });
-
-            // Update execution record with results
-            // Include stdout/stderr when expert mode is enabled
-            await executionRepository.update(executionId, {
-              status: result.status,
-              completedAt: result.completedAt,
-              results: result.results,
-              error: result.error,
-              command: result.command,
-              stdout: expertMode ? result.stdout : undefined,
-              stderr: expertMode ? result.stderr : undefined,
-            });
-
-            // Emit completion event if streaming
-            if (streamingManager) {
-              streamingManager.emitComplete(executionId, result);
-            }
-          } catch (error) {
-            logger.error("Error executing command", {
-              component: "CommandsRouter",
-              integration: "bolt",
-              operation: "executeCommand",
-              metadata: { executionId, nodeId, command },
-            }, error instanceof Error ? error : undefined);
-
-            const errorMessage =
-              error instanceof Error ? error.message : "Unknown error";
-
-            // Update execution record with error
-            await executionRepository.update(executionId, {
-              status: "failed",
-              completedAt: new Date().toISOString(),
-              results: [
-                {
-                  nodeId,
-                  status: "failed",
-                  error: errorMessage,
-                  duration: 0,
-                },
-              ],
-              error: errorMessage,
-            });
-
-            // Emit error event if streaming
-            if (streamingManager) {
-              streamingManager.emitError(executionId, errorMessage);
-            }
-          }
-        })();
+        }], req.user?.userId ?? "unknown", (ids) => ({
+          status: 202,
+          body: { executionId: ids[0], status: "queued", message: "Command execution queued" },
+        }));
+        const responseData = admission.body as { executionId: string; status: string; message: string };
+        const { executionId } = responseData;
 
         const duration = Date.now() - startTime;
 
@@ -307,13 +224,6 @@ export function createCommandsRouter(
           operation: "executeCommand",
           metadata: { executionId, nodeId, command, duration },
         });
-
-        // Return execution ID and initial status immediately
-        const responseData = {
-          executionId,
-          status: "running",
-          message: "Command execution started",
-        };
 
         // Attach debug info if expert mode is enabled
         if (debugInfo) {
@@ -337,6 +247,10 @@ export function createCommandsRouter(
           res.status(202).json(responseData);
         }
       } catch (error) {
+        if (error instanceof ExecutionQueueFullError || error instanceof ExecutionLifecycleError) {
+          res.status(503).json({ error: { code: "EXECUTION_UNAVAILABLE", message: error.message } });
+          return;
+        }
         const duration = Date.now() - startTime;
 
         if (error instanceof z.ZodError) {

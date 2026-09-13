@@ -161,8 +161,8 @@
   }
 
   // Handle form submission from action components
-  function handleActionFormSubmit(data: Record<string, unknown>): void {
-    actionFormData = data;
+  function handleActionFormSubmit(data: unknown): void {
+    actionFormData = data as Record<string, unknown>;
   }
 
   // Map action types to batch execution types

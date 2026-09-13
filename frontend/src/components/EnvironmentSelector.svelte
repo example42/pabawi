@@ -24,6 +24,7 @@
     selectedEnvironment?: string;
     onSelect?: (environment: string) => void;
     showFlushButton?: boolean;
+    showDeployButton?: boolean;
     onDebugInfo?: (info: DebugInfo | null) => void;
   }
 

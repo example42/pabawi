@@ -1,3 +1,4 @@
+import { dispatchExecutionAction } from "./ExecutionDispatcher";
 import { randomUUID } from "node:crypto";
 import type { DatabaseAdapter } from "../database/DatabaseAdapter";
 import type { ExecutionQueue, QueuedExecution } from "./ExecutionQueue";
@@ -274,6 +275,12 @@ export class BatchExecutionService {
     userId: string,
     idempotency?: BatchIdempotency,
   ): Promise<BatchExecutionResponse> {
+    if (idempotency) {
+      const replay = await idempotency.service.lookup({
+        userId, key: idempotency.key, scope: idempotency.scope, fingerprint: idempotency.fingerprint,
+      });
+      if (replay) return replay.body as BatchExecutionResponse;
+    }
     const groupNodeIds = await this.expandGroups(request.targetGroupIds ?? []);
     const allNodeIds = this.deduplicateNodes([...(request.targetNodeIds ?? []), ...groupNodeIds]);
     if (allNodeIds.length === 0) throw new BatchLifecycleError("Invalid node IDs: batch has no targets");
@@ -289,7 +296,6 @@ export class BatchExecutionService {
     const response: BatchExecutionResponse = {
       batchId, executionIds, targetCount: allNodeIds.length, expandedNodeIds: allNodeIds,
     };
-    this.executionQueue.reserve(entries);
     const admission = this.db.withTransaction(async () => {
       if (this.isStopping()) throw new BatchLifecycleError("Batch admission is stopped");
       if (idempotency) {
@@ -299,6 +305,7 @@ export class BatchExecutionService {
         );
         if (!outcome.claimed) return outcome.replay.body as BatchExecutionResponse;
       }
+      this.executionQueue.reserve(entries);
       await this.db.execute(`INSERT INTO batch_executions (
         id, type, action, parameters, target_nodes, target_groups, status, created_at,
         user_id, execution_ids, stats_total, stats_queued, stats_running, stats_success, stats_failed
@@ -336,7 +343,7 @@ export class BatchExecutionService {
     }
 
     // Schedule outside the transaction and HTTP admission path. All records now exist.
-    setImmediate(() => {
+    {
       for (const entry of entries) {
         const work = this.executeAction(batchId, entry, request);
         this.pending.add(work);
@@ -346,7 +353,7 @@ export class BatchExecutionService {
           }, error instanceof Error ? error : undefined);
         }).finally(() => this.pending.delete(work));
       }
-    });
+    }
     return response;
   }
 
@@ -535,6 +542,11 @@ export class BatchExecutionService {
     this.executionQueue.clearQueue();
   }
 
+  async drain(): Promise<void> {
+    await Promise.allSettled(this.admissions);
+    await Promise.all(this.pending);
+  }
+
   /** Single-process startup/shutdown reconciliation never replays uncertain provider work. */
   async reconcileInterrupted(): Promise<number> {
     if (this.pending.size && !this.stopping) throw new BatchLifecycleError("Cannot reconcile live batch workers");
@@ -673,10 +685,10 @@ export class BatchExecutionService {
         return result.changes === 1;
       });
       if (!claimed || this.isStopping()) return;
-      const result = await this.integrationManager.executeAction(request.tool ?? "bolt", {
-        type: request.type, target: entry.nodeId, action: request.action, parameters: request.parameters,
+      const result = await dispatchExecutionAction(this.integrationManager, {
+        type: request.type, targetNodes: [entry.nodeId], action: request.action,
+        parameters: request.parameters, executionTool: request.tool ?? "bolt",
       });
-      if (this.isStopping()) return;
       if (!["success", "failed", "partial"].includes(result.status)) {
         throw new BatchLifecycleError("Provider returned without a terminal outcome");
       }
