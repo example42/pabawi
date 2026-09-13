@@ -51,12 +51,18 @@ LABEL org.opencontainers.image.source="https://github.com/example42/pabawi"
 
 # Install only runtime dependencies, without build tools in the final image
 # hadolint ignore=DL3018
-RUN apk add --no-cache \
+RUN apk add --no-cache --upgrade libssl3 libcrypto3 \
+    && apk add --no-cache \
     ruby ruby-syslog \
     bash \
     openssh-client \
     git \
     coreutils
+
+# The base image ships a global npm install that the runtime never uses
+# (the app only ever runs `node dist/server.js`); drop it so its vendored
+# dependencies (e.g. brace-expansion, tar, ip-address) don't ship either.
+RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack
 
 # Copy pre-built Bolt gems from builder stage (avoids build-base in final image)
 COPY --from=bolt-builder /usr/lib/ruby/gems /usr/lib/ruby/gems
