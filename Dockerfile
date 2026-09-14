@@ -43,6 +43,28 @@ RUN apt-get update && \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
+# openbolt 5.6.0 bundles gems with known-fixed HIGH/CRITICAL CVEs; patch the
+# ones with an upstream fix compatible with openbolt's own dependency
+# constraints. rubyzip's fix (>=3.4.0) is excluded: winrm-fs 1.3.5 (still
+# latest upstream) hard-pins `rubyzip ~> 2.0`, so bumping it would break
+# Bolt's WinRM transport with no compatible winrm-fs release available yet.
+# resolv>=0.4 ships a native extension (a no-op outside Windows, but its
+# extconf check still compiles a probe program), so build tools are needed
+# here only (they aren't copied into the final image, just /opt/puppetlabs is).
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends make gcc libc6-dev && \
+    /opt/puppetlabs/bolt/bin/gem install --no-document \
+    concurrent-ruby:1.3.8 \
+    faraday:2.14.3 \
+    jwt:2.10.3 \
+    resolv:0.7.2 \
+    && /opt/puppetlabs/bolt/bin/gem uninstall --force --ignore-dependencies \
+    concurrent-ruby:1.3.6 faraday:2.14.2 jwt:2.10.2 \
+    && rm -rf /opt/puppetlabs/bolt/lib/ruby/gems/3.2.0/specifications/default/resolv-0.2.3.gemspec \
+    /opt/puppetlabs/bolt/lib/ruby/gems/3.2.0/gems/resolv-0.2.3 \
+    && apt-get purge -y make gcc libc6-dev && apt-get autoremove -y \
+    && rm -rf /var/lib/apt/lists/*
+
 # Stage 4: Production image
 FROM node:24.21.0-bookworm-slim@sha256:2fe369e969550cde8e867afc3fe370b260140cab4a23d467074295b42163d553
 ARG TARGETPLATFORM

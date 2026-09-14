@@ -175,6 +175,15 @@ before upgrading, and should plan for downtime during rollouts. See
   ever execs `node dist/server.js`), and the CI vulnerability scan skips
   findings with no available patch and is allowed to fail without blocking
   the rest of the pipeline.
+- **The bundled Bolt gems are patched for known CVEs.** `concurrent-ruby`,
+  `faraday`, `jwt` and `resolv` are pinned past openbolt 5.6.0's vendored,
+  vulnerable versions. `rubyzip` stays at 2.4.1 (CVE-2026-85396, HIGH): the
+  fix requires `>= 3.4.0`, but `winrm-fs` 1.3.5 (still the latest upstream
+  release) hard-pins `rubyzip ~> 2.0`, and bumping it would break Bolt's
+  WinRM transport. The release-image scan step now tolerates a failing
+  finding (`continue-on-error`) so this known, currently-unfixable CVE does
+  not block publishing; the scan's SBOM/vulnerability evidence is still
+  uploaded as a build artifact for review.
 
 ### Fixed: database migrations
 
