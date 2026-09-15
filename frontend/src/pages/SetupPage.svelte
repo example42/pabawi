@@ -170,7 +170,7 @@
           <label for="bootstrap-token" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Installation bootstrap token</label>
           <input id="bootstrap-token" type="password" bind:value={bootstrapToken} required autocomplete="off"
             class="mt-1 block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md dark:bg-gray-700 dark:text-white" />
-          <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Enter the token configured by the installation operator.</p>
+          <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Value of <code class="px-1 py-0.5 rounded bg-gray-100 dark:bg-gray-700 text-xs">PABAWI_BOOTSTRAP_TOKEN</code>, set by the installation operator in the backend environment.</p>
         </div>
         <!-- Admin Account Section -->
         <div>
