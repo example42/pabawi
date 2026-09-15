@@ -7,7 +7,7 @@
 </td>
 <td>
   <h3>Classic Infrastructures Command &amp; Control Awesomeness</h3>
-  <p>Pabawi is a web UI for infrastructure management, inventory, and remote execution.</br>It integrates with Puppet, Bolt, Ansible, PuppetDB, Hiera, SSH, Proxmox, AWS, and Azure providing a single interface for executing commands, browsing inventory, viewing system facts, provisioning VMs, and tracking operations across your entire environment.</br>Icing on the cake, all the information you see on Pabawi is exposed with an embedded MCP server usable by your favouring AI agents.</p>
+  <p>A web UI for infrastructure management, inventory, and remote execution across Puppet, Bolt, Ansible, PuppetDB, Hiera, SSH, Checkmk, Proxmox, AWS, and Azure. One interface for running commands, browsing inventory and facts, provisioning VMs, and tracking operations. Everything it sees is also exposed through an embedded MCP server for AI agents.</p>
 </td>
 </tr>
 </table>
@@ -17,86 +17,33 @@
 [![Docker Image](https://img.shields.io/docker/v/example42/pabawi?label=docker&color=2496ed)](https://hub.docker.com/r/example42/pabawi)
 [![GitHub Stars](https://img.shields.io/github/stars/example42/pabawi?style=social)](https://github.com/example42/pabawi/stargazers)
 
-## Sponsors
+Sponsored by <a href="https://www.ams-ix.net/"><img src="docs/images/ams-ix-logo.svg" alt="AMS-IX" width="120" valign="middle"></a>
 
-<table><tr>
-<td>Pabawi's main sponsor is <a href="https://www.ams-ix.net/">AMS-IX</a></td>
-<td><a href="https://www.ams-ix.net/"><img src="docs/images/ams-ix-logo.svg" alt="AMS-IX" width="160"></a></td>
-</tr></table>
+## Who it's for
 
-## Who is this for?
-
-- **Sysadmins and DevOps teams** using Puppet, Bolt, Ansible, or SSH to manage physical servers and VMs
+- **Sysadmins and DevOps teams** managing physical servers and VMs with Puppet, Bolt, Ansible, or SSH
 - **Puppet Open Source users** who want a web UI without Puppet Enterprise
-- **Mixed-tool environments** — if you use both Puppet and Ansible, Pabawi brings them together in one interface
+- **Mixed-tool shops** running both Puppet and Ansible, who want one interface instead of two
 - **Homelabbers** who just want a web frontend for their servers (SSH-only works fine)
 
 If you manage "classic infrastructure" — bare metal, VMs, Kubernetes nodes — Pabawi is built for you.
 
-## Table of Contents
+## What it does
 
-- [Sponsors](#sponsors)
-- [Features](#features)
-- [Screenshots](#screenshots)
-- [Prerequisites](#prerequisites)
-- [Installation](#installation)
-  - [Quick Start](#quick-start)
-  - [Manual Setup](#manual-setup)
-  - [Docker](#docker)
-- [Upgrading](#upgrading)
-- [Configuration](#configuration)
-- [Project Structure](#project-structure)
-- [Troubleshooting](#troubleshooting)
-- [Development and Contributing](#development-and-contributing)
-- [Roadmap](#roadmap)
-- [License](#license)
-- [Support](#support)
-- [Acknowledgments](#acknowledgments)
+- **Inventory & facts** from every connected source, merged and deduplicated across integrations
+- **Execution** — ad-hoc commands, Bolt tasks, package management, with a security whitelist, live streaming output, and history/re-run
+- **Provisioning** — VM/container lifecycle on Proxmox, AWS EC2, and Azure
+- **Puppet observability** — reports, catalog inspection with cross-environment diff, resource event tracking, Hiera data browsing
+- **Tracking** — per-node and global journal, audit trail, RBAC with multiple users
+- **AI-ready** — embedded MCP server exposing inventory, facts, reports, and catalogs read-only to LLM clients
 
-## Features
+See the [Screenshots](docs/screenshots/pabawi-screenshots.png), a sample [MCP session recording](https://asciinema.org/a/1073835), the [User Guide](docs/user-guide.md) for full feature walkthroughs, and [Architecture](docs/architecture.md) for how it's built.
 
-- **Multi-Source Inventory** — nodes from Bolt, PuppetDB, Ansible, SSH, Proxmox, AWS, Azure, with inventory groups
-- **Command Execution** — ad-hoc commands on remote nodes with whitelist security
-- **Task Execution** — Bolt tasks with automatic parameter discovery
-- **Package Management** — install and manage packages across infrastructure
-- **Proxmox Provisioning** — VM and container management alongside config management
-- **AWS EC2 Provisioning** — cloud instance lifecycle management
-- **Azure VM Provisioning** — Azure VM inventory, provisioning, and lifecycle management (start/stop/restart/deallocate)
-- **Execution History** — track operations with re-execution capability
-- **RBAC Authentication** — role-based access control, multiple users, audit trail
-- **MCP Server** — embedded Model Context Protocol server with read-only infrastructure tools for AI assistants
-- **Node Facts** — system information from Puppet agents
-- **Puppet Reports** — run reports with metrics and resource changes
-- **Catalog Inspection** — compiled catalogs, resource relationships, cross-environment diff
-- **Event Tracking** — resource changes and failures over time
-- **Hiera Data Browser** — hierarchical configuration data and key usage analysis
-- **Node Journal** — timeline of events, actions, and notes per node
-- **Global Journal** — cross-node timeline with filtering by node, group, event type, source, and date range
-- **Real-time Streaming** — live output for command and task execution
-- **Expert Mode** — full command lines and debug output
-- **Graceful Degradation** — continues operating when individual integrations are unavailable
-- **Request Deduplication** — LRU-cached responses for identical API requests to reduce external calls
-- **Input Sanitization** — automatic null byte removal, prototype pollution prevention, and deep nesting protection
+## Installing
 
-## Screenshots
+Requires **Node.js 24 LTS** and **npm 11** (or a container engine for Docker). Integration CLIs (Bolt, Ansible, Puppet/OpenVox agent) are only needed for the integrations you enable — see [per-integration setup guides](#integrations).
 
-<img src="docs/screenshots/pabawi-screenshots.png" alt="Pabawi Screenshots" width="1024">
-
-Check this [recording](https://asciinema.org/a/1073835) for a sample MCP session.
-
-## Prerequisites
-
-- **Node.js 24 LTS** (see `.nvmrc`) and **npm 11** (or a container engine for Docker deployment)
-- **Bolt CLI** — for Bolt integration ([setup](docs/integrations/bolt.md))
-- **Ansible CLI** — for Ansible integration ([setup](docs/integrations/ansible.md))
-- **Puppet/OpenVox agent** — for [PuppetDB](docs/integrations/puppetdb.md) and [Puppetserver](docs/integrations/puppetserver.md) integrations; provides SSL certs
-- **Control repo** — for Hiera integration ([setup](docs/integrations/hiera.md))
-
-All integrations are optional — enable only what you use.
-
-## Installation
-
-### Quick Start
+**Quick start** (interactive setup script — checks prerequisites, generates `backend/.env`, installs dependencies, starts the app):
 
 ```bash
 git clone https://github.com/example42/pabawi
@@ -104,167 +51,56 @@ cd pabawi
 ./scripts/setup.sh
 ```
 
-The interactive setup script will:
-
-1. **Check prerequisites** — Node.js, npm, and optionally Bolt, Ansible, Puppet/OpenVox CLIs
-2. **Generate `backend/.env`** — core settings and integrations with smart defaults based on detected tools and SSL certs
-3. **Install dependencies** — `npm run install:all` (installs packages and rebuilds native modules with `--ignore-scripts=false`)
-4. **Start the application** — development mode, full-stack build, or exit
-
-### Manual Setup
-
-First administrator enrollment requires an installation bootstrap token.
-See [Initial setup](docs/initial-setup.md) before exposing a fresh installation.
+**Manual setup:**
 
 ```bash
 git clone https://github.com/example42/pabawi
 cd pabawi
-
-# Install dependencies (rebuilds native modules like bcrypt, sqlite3)
-npm run install:all
-
-# Create your configuration
-cp backend/.env.example backend/.env
-# Edit backend/.env with your settings
-
-# Start in development mode
-npm run dev:backend    # backend on port 3000
-npm run dev:frontend   # frontend on port 5173
-
-# Or build and serve everything from the backend
-npm run dev:fullstack  # port 3000
+npm run install:all               # installs deps, rebuilds native modules
+cp backend/.env.example backend/.env   # then edit backend/.env
+npm run dev:fullstack             # build + serve everything on port 3000
 ```
 
-### Docker
+First admin enrollment requires a bootstrap token — see [Initial Setup](docs/initial-setup.md) before exposing a fresh install.
+
+**Docker:**
 
 ```bash
-# Create a working directory for persistent data, certs, and project files
 mkdir pabawi && cd pabawi
-
-# Create your configuration file (paths are relative to the container)
-vi .env
-
-# Run the image, mounting the current directory
-docker run -d \
-  --name pabawi \
-  --user "$(id -u):1001" \
+vi .env   # paths are relative to the container
+docker run -d --name pabawi --user "$(id -u):1001" \
   -p 127.0.0.1:3000:3000 \
-  -v "$(pwd)/pabawi:/pabawi" \
-  --env-file ".env" \
+  -v "$(pwd)/pabawi:/pabawi" --env-file ".env" \
   example42/pabawi:latest
 ```
 
-The application starts at <http://localhost:3000>.
+Full instructions and Kubernetes/Helm deployment: [Docker Guide](docs/deployment/docker.md), [Kubernetes Guide](docs/deployment/kubernetes.md).
 
-For full Docker and Kubernetes deployment instructions, see the [Docker Deployment Guide](docs/deployment/docker.md) and [Kubernetes Guide](docs/deployment/kubernetes.md).
+**Upgrading:** `git fetch --tags && git checkout v<VERSION> && npm run install:all && npm run build` (or `docker pull`/`helm upgrade` — see the [Upgrade Guide](docs/upgrading.md)). Migrations run automatically; back up your database first and check the [CHANGELOG](CHANGELOG.md).
 
-## Upgrading
+## Configuring
 
-For existing installations, the upgrade path depends on your deployment method:
-
-| Method | Command |
-|---|---|
-| Git / source | `git fetch --tags && git checkout v<VERSION> && npm run install:all && npm run build` |
-| Docker | `docker pull example42/pabawi:latest` then recreate the container |
-| Docker Compose | `docker compose pull && docker compose up -d` |
-| Helm / Kubernetes | `helm upgrade pabawi ./charts/pabawi --set image.tag=<VERSION>` |
-
-Database migrations run automatically on startup. Always back up your database and review the [CHANGELOG](CHANGELOG.md) for breaking changes before upgrading.
-
-Full instructions: [Upgrade Guide](docs/upgrading.md).
-
-## Configuration
-
-All configuration is in `backend/.env`. The setup script generates this file, or use `backend/.env.example` as a template.
-
-The web UI also includes per-integration setup wizards that generate `.env` snippets you can paste into your configuration file.
-
-Key configuration areas:
+Everything lives in `backend/.env` — generated by the setup script, templated at `backend/.env.example`, or assembled piece by piece from the in-app per-integration setup wizards. All integrations are optional; enable only what you use.
 
 | Area | Variables |
 |---|---|
 | Core | `PORT`, `HOST`, `LOG_LEVEL` |
 | Auth | `JWT_SECRET`, `PABAWI_BOOTSTRAP_TOKEN` |
-| Bolt | `BOLT_*` |
-| PuppetDB / Puppetserver | `PUPPETDB_*`, `PUPPETSERVER_*` |
-| Hiera | `HIERA_*` |
-| Ansible | `ANSIBLE_*` |
-| SSH | `SSH_*` |
-| Proxmox | `PROXMOX_*` |
-| AWS | `AWS_*` |
-| Azure | `AZURE_*` |
+| Integrations | `BOLT_*`, `PUPPETDB_*`, `PUPPETSERVER_*`, `HIERA_*`, `ANSIBLE_*`, `SSH_*`, `CHECKMK_*`, `PROXMOX_*`, `AWS_*`, `AZURE_*` |
 | Security | `COMMAND_WHITELIST*`, `CONCURRENT_EXECUTION_LIMIT` |
 | MCP | `MCP_ENABLED` |
 
-Full reference: [Configuration Guide](docs/configuration.md).
+Full reference: [Configuration Guide](docs/configuration.md). Architecture and code layout: [Architecture](docs/architecture.md).
 
-## Project Structure
+### Integrations
 
-```text
-pabawi/
-├── frontend/                  # Svelte 5 + Vite SPA
-│   └── src/
-│       ├── components/        # UI components
-│       ├── pages/             # Page components
-│       └── lib/               # Utilities and rune-based state
-├── backend/                   # Node.js + Express + TypeScript
-│   └── src/
-│       ├── container/         # DI container (ServiceRegistry)
-│       ├── plugins/           # Declarative plugin registry
-│       ├── integrations/      # Plugin system (Bolt, PuppetDB, SSH, ...)
-│       ├── services/          # ExecutionQueue, RBAC, streaming, auth
-│       ├── mcp/               # Embedded MCP server and tool handlers
-│       ├── routes/            # Express route factories
-│       ├── middleware/        # JWT, RBAC, rate limiting, security headers
-│       ├── database/          # SQLite / PostgreSQL adapters + migrations
-│       ├── errors/            # Typed error classes
-│       └── validation/        # Zod request schemas
-├── docs/                      # Documentation
-│   ├── integrations/          # Per-integration setup guides
-│   └── deployment/            # Docker and Kubernetes guides
-├── e2e/                       # Playwright E2E tests
-└── package.json               # Root workspace configuration
-```
+[Bolt](docs/integrations/bolt.md) · [Ansible](docs/integrations/ansible.md) · [SSH](docs/integrations/ssh.md) · [PuppetDB](docs/integrations/puppetdb.md) · [Puppetserver](docs/integrations/puppetserver.md) · [Hiera](docs/integrations/hiera.md) · [Checkmk](docs/integrations/checkmk.md) · [Proxmox](docs/integrations/proxmox.md) · [AWS](docs/integrations/aws.md) · [Azure](docs/integrations/azure.md) · [Entra ID SSO](docs/integrations/entra-id.md)
 
-See [Architecture](docs/architecture.md) for a detailed description of the plugin system and data flows.
+## The usuals
 
-## Troubleshooting
-
-See the [Troubleshooting Guide](docs/troubleshooting.md) for common issues with installation, configuration, and integrations.
-
-## Development and Contributing
-
-See the [Development Guide](docs/development.md) for setup, testing, and contribution guidelines.
-
-
-### Version History
-
-See [CHANGELOG](CHANGELOG.md).
-
-
-## License
-
-Apache License 2.0 — see [LICENSE](LICENSE).
-
-## Support
-
-**Documentation**
-
-- [Architecture](docs/architecture.md) | [Configuration](docs/configuration.md) | [User Guide](docs/user-guide.md) | [API Reference](docs/api.md)
-- [Permissions & RBAC](docs/permissions-rbac.md) | [MCP Server](docs/mcp.md) | [Upgrading](docs/upgrading.md) | [Troubleshooting](docs/troubleshooting.md) | [Development](docs/development.md)
-
-**Integrations**
-
-- [Bolt](docs/integrations/bolt.md) | [Ansible](docs/integrations/ansible.md) | [SSH](docs/integrations/ssh.md)
-- [PuppetDB](docs/integrations/puppetdb.md) | [Puppetserver](docs/integrations/puppetserver.md) | [Hiera](docs/integrations/hiera.md)
-- [Proxmox](docs/integrations/proxmox.md) | [AWS](docs/integrations/aws.md) | [Azure](docs/integrations/azure.md)
-
-**Deployment**
-
-- [Docker](docs/deployment/docker.md) | [Kubernetes](docs/deployment/kubernetes.md)
-
-For help: enable expert mode for diagnostics, or [open a GitHub issue](https://github.com/example42/pabawi/issues) with version info, sanitized config, reproduction steps, and error messages.
-
-## Acknowledgments
-
-Pabawi builds on: [Puppet/OpenVox](https://puppet.com), [Bolt](https://puppet.com/docs/bolt), [PuppetDB](https://puppet.com/docs/puppetdb), [Svelte 5](https://svelte.dev), [Node.js](https://nodejs.org), [TypeScript](https://www.typescriptlang.org), [SQLite](https://sqlite.org), [PostgreSQL](https://www.postgresql.org). Thanks to all contributors and the Puppet community.
+- **Documentation:** [User Guide](docs/user-guide.md) · [Architecture](docs/architecture.md) · [API Reference](docs/api.md) · [Permissions & RBAC](docs/permissions-rbac.md) · [MCP Server](docs/mcp.md)
+- **Troubleshooting:** [Troubleshooting Guide](docs/troubleshooting.md) — for help beyond that, enable expert mode for diagnostics and [open a GitHub issue](https://github.com/example42/pabawi/issues) with version info, sanitized config, and reproduction steps
+- **Development & contributing:** [Development Guide](docs/development.md)
+- **Version history:** [CHANGELOG](CHANGELOG.md)
+- **License:** [Apache License 2.0](LICENSE)
+- **Built on:** [Puppet/OpenVox](https://puppet.com), [Bolt](https://puppet.com/docs/bolt), [PuppetDB](https://puppet.com/docs/puppetdb), [Svelte 5](https://svelte.dev), [Node.js](https://nodejs.org), [TypeScript](https://www.typescriptlang.org), [SQLite](https://sqlite.org), [PostgreSQL](https://www.postgresql.org), and the Puppet community
