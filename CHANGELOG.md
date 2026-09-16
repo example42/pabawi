@@ -1,5 +1,29 @@
 # Changelog
 
+## [1.5.1] - 2026-09-16
+
+### Container images
+
+- `example42/pabawi` and `ghcr.io/example42/pabawi` now publish a minimal core
+  image as the default tag family. The core image contains Pabawi but excludes
+  Bolt, Ansible, Puppet/OpenVox, OpenSSH and the other integration CLIs.
+- A batteries image adds Bolt 5.6.0, Ansible 2.14.18, Puppet/OpenVox 8.29.0,
+  Facter 5.6.1, OpenSSH, Git, curl, rsync and sshpass. It is published under
+  `batteries`, `batteries-1`, `batteries-1.5`, `batteries-1.5.1` and immutable
+  commit tags.
+- Release CI builds and smoke-tests both profiles for amd64 and arm64, then
+  publishes the verified images to Docker Hub and GHCR without rebuilding.
+  Compose, setup and convenience scripts select the batteries image where the
+  integration toolchain is expected.
+
+### Security
+
+- Core and batteries images retain SBOM and vulnerability evidence. Fixable
+  high or critical findings block publishing, except for a reviewed
+  batteries-only exception for `CVE-2026-85396` in `rubyzip` 2.4.1. OpenBolt's
+  current `winrm-fs` dependency prevents a compatible upgrade. The exception
+  is scoped to the exact gem path and package URL and expires on 2026-12-31.
+
 ## [1.5.0] - 2026-09-14
 
 ### Security: breaking for operators

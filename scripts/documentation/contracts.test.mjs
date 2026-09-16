@@ -16,6 +16,24 @@ for (const [path, item] of Object.entries(spec.paths)) {
 }
 const omissions = [...read('docs/api-contract-coverage.md').matchAll(/\| `(GET|POST|PUT|PATCH|DELETE)` \| `([^`]+)` \| ([^\n]+)/g)];
 
+test('release version is consistent across shipped metadata', () => {
+  const version = JSON.parse(read('package.json')).version;
+  const lock = JSON.parse(read('package-lock.json'));
+  assert.equal(JSON.parse(read('backend/package.json')).version, version);
+  assert.equal(JSON.parse(read('frontend/package.json')).version, version);
+  assert.equal(lock.version, version);
+  assert.equal(lock.packages[''].version, version);
+  assert.equal(lock.packages.backend.version, version);
+  assert.equal(lock.packages.frontend.version, version);
+  assert.match(read('charts/pabawi/Chart.yaml'), new RegExp(`^appVersion: "${version.replaceAll('.', '\\.')}"$`, 'm'));
+  assert.match(read('backend/src/server.ts'), new RegExp(`version: "${version.replaceAll('.', '\\.')}"`));
+  assert.match(read('frontend/src/components/Navigation.svelte'), new RegExp(`>v${version.replaceAll('.', '\\.')}<`));
+  for (const file of ['Dockerfile', 'Dockerfile.alpine', 'Dockerfile.ubuntu']) {
+    assert.match(read(file), new RegExp(`org\\.opencontainers\\.image\\.version="${version.replaceAll('.', '\\.')}"`));
+  }
+  assert.match(read('CHANGELOG.md'), new RegExp(`^## \\[${version.replaceAll('.', '\\.')}\\] - \\d{4}-\\d{2}-\\d{2}$`, 'm'));
+});
+
 test('every declared REST route is specified or explicitly omitted, with no stale entries', () => {
   assert.ok(actual.size > 150, 'Production route discovery unexpectedly incomplete');
   const omitted = new Set(omissions.map(([, method, path]) => key(method, path)));

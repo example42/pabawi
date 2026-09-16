@@ -124,9 +124,9 @@ For production, pin to tags.
 
 ```bash
 # 1. Pull the new image
-docker pull example42/pabawi:latest
+docker pull example42/pabawi:batteries
 # or a specific version:
-# docker pull example42/pabawi:1.4.0
+# docker pull example42/pabawi:batteries-1.4.0
 
 # 2. Stop and remove the old container
 docker stop pabawi
@@ -142,7 +142,7 @@ docker run -d \
   -v "$(pwd)/data:/opt/pabawi/data" \
   -v "$(pwd)/bolt-project:/opt/pabawi/bolt-project:ro" \
   --env-file .env \
-  example42/pabawi:latest
+  example42/pabawi:batteries
 ```
 
 Your data persists in the mounted volumes. The new container applies any

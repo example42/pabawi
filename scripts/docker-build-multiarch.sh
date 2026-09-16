@@ -6,7 +6,8 @@ set -e
 
 # Default values
 IMAGE_NAME="${IMAGE_NAME:-example42/pabawi}"
-IMAGE_TAG="${IMAGE_TAG:-latest}"
+IMAGE_TAG="${IMAGE_TAG:-}"
+PROFILE="${PROFILE:-core}"
 PLATFORMS="${PLATFORMS:-linux/amd64,linux/arm64}"
 PUSH="${PUSH:-false}"
 LOAD="${LOAD:-false}"
@@ -24,6 +25,7 @@ usage() {
     echo "Options:"
     echo "  -n, --name NAME          Image name (default: pabawi)"
     echo "  -t, --tag TAG            Image tag (default: latest)"
+    echo "  --profile PROFILE        Image profile: core or batteries (default: core)"
     echo "  -p, --platforms PLATFORMS Comma-separated platforms (default: linux/amd64,linux/arm64)"
     echo "  --push                   Push to registry after build"
     echo "  --load                   Load image locally (single platform only)"
@@ -34,6 +36,7 @@ usage() {
     echo "  $0 --platforms linux/amd64 --load           # Build for amd64 and load locally"
     echo "  $0 --platforms linux/arm64 --load           # Build for arm64 and load locally"
     echo "  $0 --push                                    # Build and push to registry"
+    echo "  $0 --profile batteries --push                # Build and push the full toolchain image"
     echo "  $0 -n myrepo/pabawi -t v1.0.0 --push       # Build with custom name/tag and push"
     exit 1
 }
@@ -51,6 +54,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         -p|--platforms)
             PLATFORMS="$2"
+            shift 2
+            ;;
+        --profile)
+            PROFILE="$2"
             shift 2
             ;;
         --push)
@@ -71,6 +78,19 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+if [[ "$PROFILE" != "core" && "$PROFILE" != "batteries" ]]; then
+    echo -e "${RED}Error: --profile must be core or batteries${NC}"
+    exit 1
+fi
+
+if [[ -z "$IMAGE_TAG" ]]; then
+    if [[ "$PROFILE" == "batteries" ]]; then
+        IMAGE_TAG="batteries"
+    else
+        IMAGE_TAG="latest"
+    fi
+fi
+
 FULL_IMAGE_NAME="${IMAGE_NAME}:${IMAGE_TAG}"
 
 # Validate options
@@ -87,6 +107,7 @@ fi
 
 echo -e "${GREEN}=== Multi-Architecture Docker Build ===${NC}"
 echo "Image: $FULL_IMAGE_NAME"
+echo "Profile: $PROFILE"
 echo "Platforms: $PLATFORMS"
 echo "Push: $PUSH"
 echo "Load: $LOAD"
@@ -118,6 +139,7 @@ BUILD_CMD="docker buildx build"
 BUILD_CMD="$BUILD_CMD --platform $PLATFORMS"
 BUILD_CMD="$BUILD_CMD -t $FULL_IMAGE_NAME"
 BUILD_CMD="$BUILD_CMD -f Dockerfile"
+BUILD_CMD="$BUILD_CMD --target $PROFILE"
 
 if [[ "$PUSH" == "true" ]]; then
     BUILD_CMD="$BUILD_CMD --push"

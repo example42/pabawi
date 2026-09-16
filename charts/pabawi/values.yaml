@@ -6,6 +6,8 @@ revisionHistoryLimit: 10
 image:
   repository: example42/pabawi
   pullPolicy: IfNotPresent
+  # Use batteries-<version> when Bolt, Ansible, Puppet/OpenVox, or OpenSSH
+  # commands must run inside the pod.
   tag: ""
 
 imagePullSecrets: []

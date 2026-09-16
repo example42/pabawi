@@ -63,7 +63,7 @@ npm run dev:fullstack             # build + serve everything on port 3000
 
 First admin enrollment requires a bootstrap token — see [Initial Setup](docs/initial-setup.md) before exposing a fresh install.
 
-**Docker:**
+**Docker (core image):**
 
 ```bash
 mkdir pabawi && cd pabawi
@@ -73,6 +73,10 @@ docker run -d --name pabawi --user "$(id -u):1001" \
   -v "$(pwd)/pabawi:/pabawi" --env-file ".env" \
   example42/pabawi:latest
 ```
+
+The core image contains the Pabawi application only. Use
+`example42/pabawi:batteries` when Bolt, Ansible, Puppet/OpenVox, or OpenSSH
+commands must run inside the container.
 
 Full instructions and Kubernetes/Helm deployment: [Docker Guide](docs/deployment/docker.md), [Kubernetes Guide](docs/deployment/kubernetes.md).
 

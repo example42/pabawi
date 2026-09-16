@@ -26,8 +26,9 @@ RUN npm ci --workspace=backend --omit=dev --ignore-scripts --no-audit --no-fund 
 # Keep both hoisted and workspace-local packages in their locked locations.
 RUN mkdir -p backend/node_modules
 
-# Stage 3: Install OpenBolt from OpenVox upstream packages
-FROM node:24.21.0-bookworm-slim@sha256:2fe369e969550cde8e867afc3fe370b260140cab4a23d467074295b42163d553 AS bolt-builder
+# Stage 3: Build the optional infrastructure toolchain. The default core
+# target does not depend on this stage, so BuildKit skips it entirely.
+FROM node:24.21.0-bookworm-slim@sha256:2fe369e969550cde8e867afc3fe370b260140cab4a23d467074295b42163d553 AS toolchain-builder
 
 # hadolint ignore=DL3008
 RUN apt-get update && \
@@ -39,7 +40,9 @@ RUN apt-get update && \
     && dpkg -i openvox8-release-debian12.deb \
     && rm openvox8-release-debian12.deb \
     && apt-get update \
-    && apt-get install -y --no-install-recommends openbolt=5.6.0-1+debian12 \
+    && apt-get install -y --no-install-recommends \
+    openbolt=5.6.0-1+debian12 \
+    openvox-agent=8.29.0-1+debian12 \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
@@ -58,34 +61,36 @@ RUN apt-get update && \
     faraday:2.14.3 \
     jwt:2.10.3 \
     resolv:0.7.2 \
+    && /opt/puppetlabs/puppet/bin/gem install --no-document resolv:0.7.2 \
     && /opt/puppetlabs/bolt/bin/gem uninstall --force --ignore-dependencies \
     concurrent-ruby:1.3.6 faraday:2.14.2 jwt:2.10.2 \
     && rm -rf /opt/puppetlabs/bolt/lib/ruby/gems/3.2.0/specifications/default/resolv-0.2.3.gemspec \
     /opt/puppetlabs/bolt/lib/ruby/gems/3.2.0/gems/resolv-0.2.3 \
+    /opt/puppetlabs/puppet/lib/ruby/gems/3.2.0/specifications/default/resolv-0.2.3.gemspec \
+    /opt/puppetlabs/puppet/lib/ruby/gems/3.2.0/gems/resolv-0.2.3 \
     && apt-get purge -y make gcc libc6-dev && apt-get autoremove -y \
     && rm -rf /var/lib/apt/lists/*
 
-# Stage 4: Production image
-FROM node:24.21.0-bookworm-slim@sha256:2fe369e969550cde8e867afc3fe370b260140cab4a23d467074295b42163d553
+# Stage 4: Core production image. This is the default published image and
+# contains only Pabawi and the operating-system packages it needs to start.
+FROM node:24.21.0-bookworm-slim@sha256:2fe369e969550cde8e867afc3fe370b260140cab4a23d467074295b42163d553 AS core
 ARG TARGETPLATFORM
 ARG BUILDPLATFORM
 
 # Add metadata labels
-LABEL org.opencontainers.image.title="Pabawi"
-LABEL org.opencontainers.image.description="Puppet Ansible Bolt Awesome Web Interface"
-LABEL org.opencontainers.image.version="1.5.0"
+LABEL org.opencontainers.image.title="Pabawi Core"
+LABEL org.opencontainers.image.description="Pabawi infrastructure management web interface"
+LABEL org.opencontainers.image.version="1.5.1"
 LABEL org.opencontainers.image.vendor="example42"
 LABEL org.opencontainers.image.source="https://github.com/example42/pabawi"
 
-# Install only runtime dependencies
+# Install only core runtime dependencies. Integration CLIs belong in the
+# batteries target below.
 # hadolint ignore=DL3008
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     bash \
-    openssh-client \
-    git \
-    coreutils \
-    ansible \
+    ca-certificates \
     && apt-get install -y --only-upgrade libpcre2-8-0 \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
@@ -94,10 +99,6 @@ RUN apt-get update && \
 # (the app only ever runs `node dist/server.js`); drop it so its vendored
 # dependencies (e.g. brace-expansion, tar, ip-address) don't ship either.
 RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack
-
-# Copy Bolt installation from upstream package builder stage
-COPY --from=bolt-builder /opt/puppetlabs /opt/puppetlabs
-RUN ln -s /opt/puppetlabs/bolt/bin/bolt /usr/local/bin/bolt
 
 # Create non-root user
 RUN groupadd -g 1001 pabawi && \
@@ -168,3 +169,34 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=30s --retries=3 \
 
 # Start the application
 CMD ["node", "dist/server.js"]
+
+# Stage 5: Optional batteries-included image. It adds every local CLI invoked
+# by an integration plus the Puppet/OpenVox operator toolchain. Cloud and API
+# integrations use the Node SDKs already present in the core image.
+FROM core AS batteries
+USER root
+
+# hadolint ignore=DL3008
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    ansible \
+    curl \
+    git \
+    openssh-client \
+    rsync \
+    sshpass \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+
+COPY --from=toolchain-builder /opt/puppetlabs /opt/puppetlabs
+RUN ln -s /opt/puppetlabs/bolt/bin/bolt /usr/local/bin/bolt \
+    && ln -s /opt/puppetlabs/puppet/bin/facter /usr/local/bin/facter \
+    && ln -s /opt/puppetlabs/puppet/bin/puppet /usr/local/bin/puppet
+
+LABEL org.opencontainers.image.title="Pabawi Batteries Included"
+LABEL org.opencontainers.image.description="Pabawi with Bolt, Ansible, Puppet/OpenVox, and SSH tooling"
+
+USER pabawi
+
+# Keep the default Dockerfile result backward-compatible with the core image.
+FROM core AS final

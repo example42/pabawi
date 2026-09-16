@@ -5,7 +5,7 @@
 set -e
 
 # Default values
-IMAGE_NAME="${IMAGE_NAME:-example42/pabawi:latest}"
+IMAGE_NAME="${IMAGE_NAME:-example42/pabawi:batteries}"
 CONTAINER_NAME="${CONTAINER_NAME:-pabawi}"
 PORT="${PORT:-3000}"
 DATA_PATH="${DATA_PATH:-./data}"

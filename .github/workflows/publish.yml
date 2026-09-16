@@ -8,6 +8,7 @@ on:
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
+  DOCKERHUB_IMAGE: example42/pabawi
 
 concurrency:
   group: publish-${{ github.ref }}
@@ -20,6 +21,7 @@ jobs:
       fail-fast: false
       matrix:
         arch: [amd64, arm64]
+        profile: [core, batteries]
     permissions:
       contents: read
       packages: write
@@ -40,40 +42,55 @@ jobs:
         with:
           context: .
           platforms: linux/${{ matrix.arch }}
+          target: ${{ matrix.profile }}
           load: true
           push: false
           tags: pabawi:candidate
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha,scope=release-${{ matrix.arch }}
-          cache-to: type=gha,mode=max,scope=release-${{ matrix.arch }}
+          cache-from: type=gha,scope=release-${{ matrix.profile }}-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=release-${{ matrix.profile }}-${{ matrix.arch }}
       - name: Verify release candidate
         env:
           DOCKER_DEFAULT_PLATFORM: linux/${{ matrix.arch }}
         run: |
-          bash scripts/supply-chain/image-smoke.sh pabawi:candidate
+          bash scripts/supply-chain/image-smoke.sh pabawi:candidate ${{ matrix.profile }}
           mkdir -p artifacts
           docker run --rm -i --entrypoint node pabawi:candidate < scripts/supply-chain/dependency-graph.cjs > artifacts/dependencies.json
       - name: Scan release candidate
-        continue-on-error: true
-        run: bash scripts/supply-chain/scan-image.sh pabawi:candidate artifacts
+        run: |
+          ignore_file=()
+          if [[ "${{ matrix.profile }}" = batteries ]]; then
+            ignore_file=(scripts/supply-chain/trivy-batteries-ignore.yaml)
+          fi
+          bash scripts/supply-chain/scan-image.sh pabawi:candidate artifacts "${ignore_file[@]}"
       - name: Retain release evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: release-evidence-${{ matrix.arch }}
+          name: release-evidence-${{ matrix.profile }}-${{ matrix.arch }}
           path: artifacts/*.json
       - uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Push the verified image without rebuilding
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Push the verified image to both registries without rebuilding
         id: push
         run: |
-          tag="${REGISTRY}/${IMAGE_NAME}:${GITHUB_REF_NAME}-${{ matrix.arch }}"
-          docker tag pabawi:candidate "$tag"
-          docker push "$tag"
-          digest=$(docker inspect --format '{{index .RepoDigests 0}}' "$tag")
+          suffix=""
+          if [[ "${{ matrix.profile }}" = batteries ]]; then suffix="-batteries"; fi
+          architecture_tag="${GITHUB_REF_NAME}${suffix}-${{ matrix.arch }}"
+          ghcr_tag="${REGISTRY}/${IMAGE_NAME}:${architecture_tag}"
+          dockerhub_tag="${DOCKERHUB_IMAGE}:${architecture_tag}"
+          docker tag pabawi:candidate "$ghcr_tag"
+          docker tag pabawi:candidate "$dockerhub_tag"
+          docker push "$ghcr_tag"
+          docker push "$dockerhub_tag"
+          digest=$(docker inspect --format '{{index .RepoDigests 0}}' "$ghcr_tag")
           echo "digest=${digest#*@}" >> "$GITHUB_OUTPUT"
       - name: Attest the verified image
         uses: actions/attest-build-provenance@v1
@@ -94,16 +111,25 @@ jobs:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
       - name: Publish verified architecture images
         run: |
           version="${GITHUB_REF_NAME#v}"
-          image="${REGISTRY}/${IMAGE_NAME}"
-          tags=(--tag "$image:$version" --tag "$image:sha-${GITHUB_SHA:0:7}")
-          if [[ "$version" != *-* ]]; then
-            tags+=(--tag "$image:${version%.*}" --tag "$image:${version%%.*}" --tag "$image:latest")
-          fi
-          docker buildx imagetools create "${tags[@]}" \
-            "$image:${GITHUB_REF_NAME}-amd64" "$image:${GITHUB_REF_NAME}-arm64"
+          for image in "${REGISTRY}/${IMAGE_NAME}" "${DOCKERHUB_IMAGE}"; do
+            core_tags=(--tag "$image:$version" --tag "$image:sha-${GITHUB_SHA:0:7}")
+            batteries_tags=(--tag "$image:batteries-$version" --tag "$image:batteries-sha-${GITHUB_SHA:0:7}")
+            if [[ "$version" != *-* ]]; then
+              core_tags+=(--tag "$image:${version%.*}" --tag "$image:${version%%.*}" --tag "$image:latest")
+              batteries_tags+=(--tag "$image:batteries-${version%.*}" --tag "$image:batteries-${version%%.*}" --tag "$image:batteries")
+            fi
+            docker buildx imagetools create "${core_tags[@]}" \
+              "$image:${GITHUB_REF_NAME}-amd64" "$image:${GITHUB_REF_NAME}-arm64"
+            docker buildx imagetools create "${batteries_tags[@]}" \
+              "$image:${GITHUB_REF_NAME}-batteries-amd64" "$image:${GITHUB_REF_NAME}-batteries-arm64"
+          done
 
   create-release:
     needs: publish-manifest

@@ -5,7 +5,7 @@
 $ErrorActionPreference = "Stop"
 
 # Default values
-$IMAGE_NAME = if ($env:IMAGE_NAME) { $env:IMAGE_NAME } else { "example42/pabawi:latest" }
+$IMAGE_NAME = if ($env:IMAGE_NAME) { $env:IMAGE_NAME } else { "example42/pabawi:batteries" }
 $CONTAINER_NAME = if ($env:CONTAINER_NAME) { $env:CONTAINER_NAME } else { "pabawi" }
 $PORT = if ($env:PORT) { $env:PORT } else { "3000" }
 $DATA_PATH = if ($env:DATA_PATH) { $env:DATA_PATH } else { "./data" }

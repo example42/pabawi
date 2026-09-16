@@ -38,30 +38,44 @@ From the repository root:
 
 ```bash
 node --test scripts/supply-chain/install-approved.test.mjs
-docker build -t pabawi:verify .
-bash scripts/supply-chain/image-smoke.sh pabawi:verify
-docker run --rm -i --entrypoint node pabawi:verify < scripts/supply-chain/dependency-graph.cjs > dependencies.json
-bash scripts/supply-chain/scan-image.sh pabawi:verify /tmp/pabawi-image-evidence
+docker build --target core -t pabawi:core-verify .
+bash scripts/supply-chain/image-smoke.sh pabawi:core-verify core
+docker build --target batteries -t pabawi:batteries-verify .
+bash scripts/supply-chain/image-smoke.sh pabawi:batteries-verify batteries
+docker run --rm -i --entrypoint node pabawi:core-verify < scripts/supply-chain/dependency-graph.cjs > dependencies.json
+bash scripts/supply-chain/scan-image.sh pabawi:core-verify /tmp/pabawi-core-image-evidence
+bash scripts/supply-chain/scan-image.sh pabawi:batteries-verify /tmp/pabawi-batteries-image-evidence scripts/supply-chain/trivy-batteries-ignore.yaml
 ```
 
-Repeat with `-f Dockerfile.alpine` and `-f Dockerfile.ubuntu` and distinct tags.
+Build the alternative Dockerfiles with distinct tags and run the smoke script
+with the `bolt` profile.
 The smoke test checks the non-root Node runtime, bcrypt, an actual SQLite query,
-SSH module loading, Bolt task discovery, migrations, HTTP health, frontend delivery
-and denial of anonymous inventory requests. It uses disposable container storage
-and does not dispatch infrastructure commands.
+SSH module loading, migrations, HTTP health, frontend delivery and denial of
+anonymous inventory requests. The core profile also proves that integration CLIs
+are absent. The batteries profile checks Bolt task discovery and the Bolt,
+Ansible, Puppet/OpenVox and OpenSSH commands. It uses disposable container
+storage and does not dispatch infrastructure commands.
 
-CI builds all three variants, then performs a second uncached production
-installation and compares its dependency graph with the shipped image. The graph
-check validates installed versions against the lockfile and root security overrides.
-Release CI smoke-tests each architecture, scans the locally exported image, and
-pushes that same image without rebuilding. The multi-architecture manifest is
-published only after both architecture jobs succeed.
+CI builds core and batteries targets plus the Alpine and Ubuntu alternatives,
+then performs a second uncached production installation and compares its
+dependency graph with each image. The graph check validates installed versions
+against the lockfile and root security overrides. Release CI smoke-tests both
+profiles on each architecture, scans the locally exported images, and pushes
+those same images to Docker Hub and GHCR without rebuilding. Both
+multi-architecture manifests are published only after all four architecture
+and profile jobs succeed. GitHub Actions requires `DOCKERHUB_USERNAME` and
+`DOCKERHUB_TOKEN` repository secrets.
 
 The pinned Trivy scanner produces `sbom.cdx.json` and `vulnerabilities.json` from
 the exported image archive. It scans OS, Ruby, Python, Java and JavaScript packages,
 including the embedded frontend SBOM. The image digest and dependency inventory
-are retained with the reports. High or critical advisories fail the release gate,
-including findings without an available fix. Scanner errors also fail the gate.
+are retained with the reports. Fixable high or critical advisories fail the
+release gate. Scanner errors also fail the gate. The batteries image has one
+scoped, expiring exception for `CVE-2026-85396` in its bundled `rubyzip` 2.4.1.
+OpenBolt 5.6.0 depends on `winrm-fs` 1.3.5, which constrains rubyzip to the
+vulnerable 2.x line. The exception matches that exact package URL and gemspec
+path, applies only to the batteries profile, and expires on 2026-12-31. The
+unfiltered JSON report still records the finding.
 See [Trivy's SBOM documentation](https://github.com/aquasecurity/trivy/blob/main/docs/guide/supply-chain/sbom.md).
 
 ## Triage and reproducibility limits
@@ -69,9 +83,9 @@ See [Trivy's SBOM documentation](https://github.com/aquasecurity/trivy/blob/main
 The release maintainer owns scan triage with the security maintainer. For each
 finding, record the artifact digest, advisory, installed and fixed versions,
 reachability assessment, remediation owner and disposition. Do not equate an
-unreachable-looking dependency with an approved exception. No advisory suppressions
-are configured. A blocked gate requires remediation or a separately reviewed,
-scoped and expiring exception before release.
+unreachable-looking dependency with an approved exception. A blocked gate
+requires remediation or a separately reviewed, scoped and expiring exception
+before release.
 
 The npm graph and base-image inputs are pinned. Distribution packages still come
 from live signed repositories, and the Alpine OpenBolt gem dependency tree is resolved by RubyGems.
