@@ -31,6 +31,9 @@ jobs:
       - name: Check documentation contracts
         run: node --test scripts/documentation/contracts.test.mjs
 
+      - name: Check Docker image contracts
+        run: node --test scripts/deployment/docker-images.test.mjs
+
       - name: Run ESLint
         run: npm run lint
 
@@ -140,25 +143,41 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        variant: [bookworm, alpine, ubuntu]
+        include:
+          - variant: bookworm-core
+            file: Dockerfile
+            target: core
+            profile: core
+          - variant: bookworm-batteries
+            file: Dockerfile
+            target: batteries
+            profile: batteries
+          - variant: alpine
+            file: Dockerfile.alpine
+            target: ""
+            profile: bolt
+          - variant: ubuntu
+            file: Dockerfile.ubuntu
+            target: ""
+            profile: bolt
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
       - name: Build and verify shipped image
         run: |
-          file=Dockerfile
-          if [ "${{ matrix.variant }}" != bookworm ]; then file="Dockerfile.${{ matrix.variant }}"; fi
-          docker build --no-cache -f "$file" -t pabawi:test .
-          bash scripts/supply-chain/image-smoke.sh pabawi:test
+          target=()
+          if [ -n "${{ matrix.target }}" ]; then target=(--target "${{ matrix.target }}"); fi
+          docker build --no-cache "${target[@]}" -f "${{ matrix.file }}" -t pabawi:test .
+          bash scripts/supply-chain/image-smoke.sh pabawi:test "${{ matrix.profile }}"
           mkdir -p artifacts
           docker run --rm -i --entrypoint node pabawi:test < scripts/supply-chain/dependency-graph.cjs > artifacts/dependencies.json
-          docker build --no-cache --target backend-deps -f "$file" -t pabawi:deps-repeat .
+          docker build --no-cache --target backend-deps -f "${{ matrix.file }}" -t pabawi:deps-repeat .
           docker run --rm -i --entrypoint node pabawi:deps-repeat < scripts/supply-chain/dependency-graph.cjs > artifacts/dependencies-repeat.json
           cmp artifacts/dependencies.json artifacts/dependencies-repeat.json
           if [ "${{ matrix.variant }}" = ubuntu ]; then
             docker run --rm --entrypoint ruby pabawi:test /opt/bolt/test-winrm-rubyzip.rb
             docker run --rm -i --entrypoint ruby pabawi:test < docker/bolt/dependency-graph.rb > artifacts/ruby-dependencies.json
-            docker build --no-cache --target bolt-builder -f "$file" -t pabawi:ruby-repeat .
+            docker build --no-cache --target bolt-builder -f "${{ matrix.file }}" -t pabawi:ruby-repeat .
             docker run --rm -i --entrypoint ruby pabawi:ruby-repeat < docker/bolt/dependency-graph.rb > artifacts/ruby-dependencies-repeat.json
             cmp artifacts/ruby-dependencies.json artifacts/ruby-dependencies-repeat.json
           fi

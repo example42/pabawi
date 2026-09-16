@@ -44,6 +44,14 @@ docker run -d \
   example42/pabawi:latest
 ```
 
+This is the core image. It intentionally excludes Bolt, Ansible, Puppet/OpenVox,
+OpenSSH, Git, rsync, and sshpass. For local integration commands, use the
+batteries-included image instead:
+
+```bash
+docker run --rm example42/pabawi:batteries
+```
+
 Access the UI at <http://localhost:3000>
 
 ## Documentation

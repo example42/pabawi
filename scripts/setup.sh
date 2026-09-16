@@ -686,7 +686,7 @@ case "$INSTALL_METHOD" in
           -v "$PROJECT_ROOT/data:/opt/pabawi/data" \
           -v "$PROJECT_ROOT/bolt-project:/opt/pabawi/bolt-project:ro" \
           --restart unless-stopped \
-          example42/pabawi:latest
+          example42/pabawi:batteries
         success "Pabawi container started"
         info "View logs: ${BOLD}docker logs -f pabawi${RESET}"
         info "Stop:      ${BOLD}docker stop pabawi && docker rm pabawi${RESET}"
@@ -694,7 +694,7 @@ case "$INSTALL_METHOD" in
         success "Setup complete!"
         echo ""
         info "Run manually:"
-        echo "  ${BOLD}docker run -d --name pabawi --env-file .env -p ${PORT:-3000}:3000 -v ./data:/opt/pabawi/data example42/pabawi:latest${RESET}"
+        echo "  ${BOLD}docker run -d --name pabawi --env-file .env -p ${PORT:-3000}:3000 -v ./data:/opt/pabawi/data example42/pabawi:batteries${RESET}"
       fi
     fi
     ;;
