@@ -7,7 +7,7 @@ Before starting a fresh container, configure `JWT_SECRET` and an independent
 [Initial setup](../initial-setup.md) to claim the administrator account.
 
 ```bash
-# Using published image
+# Using the batteries image because this example mounts a Bolt project
 docker run -d \
   --name pabawi \
   --user "$(id -u):1001" \
@@ -15,8 +15,19 @@ docker run -d \
   -v "$(pwd)/bolt-project:/opt/pabawi/bolt-project:ro" \
   -v "$(pwd)/data:/opt/pabawi/data" \
   --env-file .env \
-  example42/pabawi:latest
+  example42/pabawi:batteries
 ```
+
+Two image profiles are published from the same source and version:
+
+| Tag | Contents | Use when |
+|---|---|---|
+| `example42/pabawi:latest` | Pabawi application and Node dependencies | Integrations use HTTP APIs, cloud SDKs, or the embedded SSH client |
+| `example42/pabawi:batteries` | Core plus Bolt, Ansible, Puppet/OpenVox, OpenSSH, Git, rsync, and sshpass | Integrations need local infrastructure commands |
+
+Versioned core tags use `<version>`, `<major>.<minor>`, and `<major>`. The full
+image uses `batteries-<version>`, `batteries-<major>.<minor>`, and
+`batteries-<major>`. Pre-releases receive only their exact version tags.
 
 `--user "$(id -u):1001"`: your user must be able to read all mounted files.
 
@@ -34,13 +45,15 @@ See [Docker port binding](https://docs.docker.com/reference/compose-file/service
 
 ```bash
 docker build -t pabawi:latest .
-docker build -f Dockerfile.alpine -t pabawi:alpine .  # smaller
+docker build --target core -t pabawi:core .
+docker build --target batteries -t pabawi:batteries .
 ```
 
 **Multi-arch:**
 
 ```bash
-docker buildx build --platform linux/amd64,linux/arm64 -t pabawi:latest .
+docker buildx build --platform linux/amd64,linux/arm64 --target core -t pabawi:core .
+docker buildx build --platform linux/amd64,linux/arm64 --target batteries -t pabawi:batteries .
 ```
 
 ## Volume Mounts
@@ -69,7 +82,7 @@ chmod 600 ./certs/*.pem ./certs/*.key
 ```yaml
 services:
   pabawi:
-    image: example42/pabawi:latest
+    image: example42/pabawi:batteries
     restart: unless-stopped
     ports:
       - "127.0.0.1:3000:3000"
