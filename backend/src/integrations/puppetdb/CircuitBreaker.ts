@@ -165,6 +165,9 @@ export class CircuitBreaker {
       // Service has recovered, close the circuit
       this.reset();
       this.transitionTo("closed");
+    } else if (this.state === "closed") {
+      // Only consecutive failures trip the breaker; a success clears the streak
+      this.failureCount = 0;
     }
   }
 
