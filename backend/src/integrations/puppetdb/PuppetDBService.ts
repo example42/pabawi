@@ -656,8 +656,9 @@ export class PuppetDBService
           const envGroups = this.createEnvironmentGroups(envResult as PuppetDBNode[]);
           groups.push(...envGroups);
         }
-      } catch {
-        this.log("Failed to query nodes for environment grouping", "warn");
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : String(error);
+        this.log(`Failed to query nodes for environment grouping: ${detail}`, "warn");
       }
 
       // Query 2: Group by OS family (from facts)
@@ -673,8 +674,9 @@ export class PuppetDBService
           const osGroups = this.createOSFamilyGroups(osResult as { certname: string; "os.family": string }[]);
           groups.push(...osGroups);
         }
-      } catch {
-        this.log("Failed to query nodes for OS family grouping", "warn");
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : String(error);
+        this.log(`Failed to query nodes for OS family grouping: ${detail}`, "warn");
       }
 
       // Cache the result
