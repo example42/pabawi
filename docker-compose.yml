@@ -1,6 +1,7 @@
 services:
   app:
-    image: example42/pabawi:latest
+    # This example mounts Bolt and Ansible projects, so it uses the toolchain image.
+    image: example42/pabawi:batteries
     container_name: pabawi
     env_file:
       - .env
