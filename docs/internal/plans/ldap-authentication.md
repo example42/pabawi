@@ -1,6 +1,6 @@
 # LDAP authentication implementation plan
 
-**Status:** Packages 1 and 2 complete; packages 3 through 7 pending
+**Status:** Packages 1 through 3 complete; packages 4 through 7 pending
 **Date:** 2026-10-21  
 **Scope:** OpenLDAP and Active Directory authentication, directory group authorization, and provider-bound session revalidation
 
@@ -92,7 +92,7 @@ TLS certificate verification and hostname checking are mandatory, with TLS 1.2 o
 
 ### Active Directory example
 
-Proposed additions to `backend/.env.example`; these variables are not implemented yet:
+Directory-service configuration is implemented in package 3; public authentication remains assigned to package 5B. Example:
 
 ```dotenv
 LDAP_ENABLED=true
@@ -449,8 +449,8 @@ Update this table as work proceeds. Status values: `pending`, `in_progress`, `bl
 | Package | Status | Completion commit or working tree reference | Latest handoff |
 | --- | --- | --- | --- |
 | 1 Identity and schema | complete | Commit `a739cf2`, migration 031 and consumers | [2026-10-21 Codex](#handoff-2026-10-21-codex-package-1) |
-| 2 Shared provisioning | complete | Branch `151`, base `a739cf2`, uncommitted paths in handoff | [2026-10-21 Codex](#handoff-2026-10-21-codex-package-2) |
-| 3 Directory configuration and service | pending | Not started | None |
+| 2 Shared provisioning | complete | Commit `2d37548`, verified against current source | [2026-10-21 Codex](#handoff-2026-10-21-codex-package-2) |
+| 3 Directory configuration and service | complete | Branch `151`, base `2d37548`, uncommitted paths in handoff | [2026-10-21 Codex](#handoff-2026-10-21-codex-package-3) |
 | 4 RBAC mapping administration | pending | Not started | None |
 | 5A Provider context and wiring | pending | Not started | None |
 | 5B LDAP login and transport enforcement | pending | Not started | None |
@@ -662,3 +662,111 @@ Initial new-code verification found a short synthetic JWT secret in the new HTTP
 **Decisions or discoveries affecting the next package:** Supply LDAP directory ID as issuer and only a proven immutable subject from the future directory service. That service must canonicalize/validate directory identifiers and supply profile fields without splitting display names. The provisioning primitive owns its transaction and the adapters reject nested transactions. Package 5B must extend the same transaction to reconcile LDAP-owned grants and publish revision/fencing-checked freshness atomically; wrapping the current public method in another transaction is invalid. Its current null validation state is intentional and must never be treated as session eligibility. Existing validation rows are preserved during profile refresh.
 
 **Next action and acceptance criterion still to satisfy:** Start package 3. Add validated disabled-by-default directory configuration, the reviewed/pinned ldapts dependency, bounded read-only directory operations, immutable ID codecs and reproducible real OpenLDAP fixtures for verified LDAPS and StartTLS. Keep public LDAP authentication unavailable. Record real AD evidence still deferred if no actual AD environment is available.
+
+
+## Handoff 2026-10-21 Codex package 3
+
+**Date and agent:** 2026-10-21, Codex.
+
+**Package and checkpoint:** Package 3, directory configuration and service, complete. Package 4 is next eligible. LDAP provider discovery, login endpoints, Pabawi token issuance, mapping administration and session enforcement remain unavailable until their assigned packages.
+
+**Branch, base commit, completion commit or uncommitted paths:** Branch 151, base 2d37548. The starting tree was clean. Package 2 is now committed in that base, superseding its previous uncommitted reference. Inspected migrations 031, shared provisioning, profile ownership, Entra callers and authentication boundaries; verified their behavior with SQLite and PostgreSQL tests. No completion commit was created. Changed/new paths:
+
+~~~text
+backend/.env.example
+backend/package.json
+backend/src/config/ConfigService.ts
+backend/src/config/schema.ts
+backend/src/config/ldap.ts
+backend/src/config/ldapFilter.ts
+backend/src/services/LdapDirectoryService.ts
+backend/src/services/ldap/LdapDirectoryError.ts
+backend/src/services/ldap/identity.ts
+backend/src/services/ldap/policy.ts
+backend/src/services/ldap/transport.ts
+backend/src/types/ldapjs-dn.d.ts
+backend/src/types/node-tls.d.ts
+backend/test/config/LdapConfig.test.ts
+backend/test/unit/services/LdapDirectoryService.test.ts
+backend/test/integration/ldap-directory.test.ts
+backend/test/fixtures/ldap/Dockerfile
+backend/test/fixtures/ldap/entrypoint.sh
+backend/test/fixtures/ldap/seed.ldif
+backend/test/fixtures/ldap/README.md
+docs/configuration.md
+docs/internal/plans/ldap-authentication.md
+package-lock.json
+scripts/documentation/source-inventory.mjs
+~~~
+
+**Completed scope and changed interfaces:**
+
+- ConfigService.getLdapConfig(): LdapConfig | null and AppConfig.ldap expose validated configuration. LDAP_ENABLED defaults false and accepts only literal booleans. Disabled mode ignores other directory settings. Enabled mode validates all agreed variables, presets, FQDNs, directory IDs, endpoint JSON, bounds, DN/attribute/filter syntax, anonymous lookup consistency and readable PEM certificates. Configuration construction opens no network connection, preserving startup/local access during directory outages. Directory ID is case-sensitive. Environment access remains inside configuration parsing.
+- Pinned ldapts 9.2.0 and @ldapjs/dn 1.1.0 through socket npm install --workspace=backend --save-exact. Both install reviews reported no new risks. ldapts requires Node >=22, compatible with the supported Node 24 range. Parsed DNs support validation, scope and locator comparisons. Maintenance limitation: registry metadata marks @ldapjs/dn and its @ldapjs/asn1 dependency decommissioned. This is recorded for dependency-maintenance review before release, separately from directory interoperability.
+- LdapDirectoryService(config, logger, connector?) exposes authenticate(loginName, password, mappedGroupSubjects?), revalidate(subject, mappedGroupSubjects?), searchGroups(query) and resolveGroup(subject). Authentication/revalidation return { user, groupSubjects }; users contain immutable subject, current DN/login, display name, nullable email and given/surname fields. Search/resolve return { subject, dn, name }. These operations perform no database writes, provisioning or token issuance.
+- Each transaction has bounded immediate admission and one deadline spanning endpoints, TLS, binds, searches and traversal. Abort closes tracked TCP/TLS sockets, rejects unfinished work and prevents reconnects. Operation/connect timeouts are separately bounded. Lookup and user-bind clients are isolated at the selected endpoint. Empty/oversized credentials fail before connecting; passwords are untrimmed. Automatic rebinding is disabled. Failover ends before credential-bearing lookup binding; user passwords are never retried against another endpoint.
+- Both TLS modes require TLS >=1.2, CA verification, endpoint SNI, normal hostname validation and the configured additional wildcard restriction. Extra CA material augments Node's default trust roots, including configured system/extra roots. StartTLS failure cannot fall back to plaintext. A local TLS declaration covers getCACertificates, available in supported Node 24 but absent from the existing Node 20 type package.
+- Runtime queries use typed filter objects, including Buffer-valued AD GUID equality. Configured filters receive structural/parser validation and byte restoration before BER encoding. Tests exposed ldapts accepting unbalanced syntax and converting escaped octets through Latin-1. The implementation rejects malformed syntax and preserves binary assertions and escaped/literal UTF-8. No raw client filter or executable template is accepted.
+- Subjects are validated non-nil lowercase UUIDs. AD GUID conversion reverses the Windows little-endian fields and reconstructs exact binary assertion bytes. Missing/multivalued/wrongly typed IDs fail closed. After user binding, an immutable-ID search checks subject, parsed DN and current login against the pre-bind object. Replacement, disappearance or moved locators return IDENTITY_CHANGED. Revalidation never selects identity by stored DN/login.
+- OpenLDAP applies the configured eligibility filter to every user eligibility search. AD requires readable userAccountControl, msDS-User-Account-Control-Computed, accountExpires, pwdLastSet and msDS-UserPasswordExpiryTimeComputed. It checks disablement, computed lockout/password expiry, forced password change and FILETIME expiration with integer arithmetic/documented sentinels. Missing visibility returns POLICY_UNREADABLE. AD evidence remains protocol/service testing only.
+- Group queries are escaped, scoped and bounded. OpenLDAP supports groupOfUniqueNames/uniqueMember and groupOfNames/member. Optional UID suffixes are rejected when encountered. Reverse membership traversal uses immutable visited IDs and parsed locator comparisons, detects cycles, enforces depth/visit/deadline bounds and avoids downloading AD ranged member lists. AD chain-rule results are checked against bounded in-scope traversal; only definitive unsupported-rule responses permit the traversal result alone. Primary groups and out-of-scope memberships remain excluded.
+- Searches disable pagination, alias dereferencing and referral following. Referrals, unexpected continuation cookies, missing bases and limited/incomplete results cannot become partial authorization. Real OpenLDAP exposed ldapts suppressing sizeLimitExceeded when a requested size limit exists. The transport observes public response objects before accepting results, preserves server status and interrupts responses exceeding the requested entry bound.
+- LoggerService records safe operation/directory IDs, latency, error/limit reason and failover index, without raw exceptions, passwords or full entries. Configuration inventory/examples describe internal support and the unavailable public-login boundary. No migration, infrastructure plugin or frontend source changed.
+
+**Verification: exact commands, outcomes, and external log reference:**
+
+All commands ran from the repository root and are recorded in append-only ~/.agents/logs/pabawi.jsonl. Documentation network tools have supplemental records there. Initial host Node was 26.8.1. Final acceptance used an official Node 24.21.0 Darwin arm64 archive under /tmp/pabawi-node24, verified against its official SHA256 list and scanned with ClamAV before extraction. PostgreSQL was 17.11; OpenLDAP was 2.6.10+dfsg-1; the fixture used OpenSSL 3.5.7-1~deb13u3.
+
+- Before edits, npm run test --workspace=backend -- test/database/federated-provisioning.test.ts test/database/external-identity-boundaries.test.ts test/database/sso-concurrency.test.ts test/integration/ldap-account-ownership.test.ts passed 22 SQLite/HTTP tests with 17 PostgreSQL cases skipped. After docker start pabawi-ldap-p1-postgres, its loopback port was 65056. These prerequisite files plus then-current LDAP tests passed all 112 tests with both adapters and live OpenLDAP (/tmp/pabawi-ldap-p3-focused-fourth.log).
+- docker exec pabawi-ldap-p1-postgres createdb -U postgres ldap_package3_verified created a fresh full-suite acceptance database.
+- Full acceptance on final production code, PASS: 244 files passed, one skipped; 3961 tests passed, two skipped, one todo. Includes SQLite/PostgreSQL migration/provisioning boundaries, local/Entra authentication/profile/password regressions and real directory tests:
+
+~~~bash
+PATH=/tmp/pabawi-node24/node-v24.21.0-darwin-arm64/bin:$PATH TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:65056/ldap_package3_verified TEST_LDAP_LDAPS_PORT=54547 TEST_LDAP_STARTTLS_PORT=54548 TEST_LDAP_CA_FILE=/tmp/pabawi-ldap-p3-tls-final/ca.pem npm run test --workspace=backend > /tmp/pabawi-ldap-p3-node24-backend-verified.log 2>&1
+~~~
+
+- Focused final acceptance, PASS: 78 tests, including the final annotated/shared GUID vector:
+
+~~~bash
+PATH=/tmp/pabawi-node24/node-v24.21.0-darwin-arm64/bin:$PATH TEST_LDAP_LDAPS_PORT=54547 TEST_LDAP_STARTTLS_PORT=54548 TEST_LDAP_CA_FILE=/tmp/pabawi-ldap-p3-tls-final/ca.pem npm run test --workspace=backend -- test/config/LdapConfig.test.ts test/unit/services/LdapDirectoryService.test.ts test/integration/ldap-directory.test.ts > /tmp/pabawi-ldap-p3-node24-focused-acceptance.log 2>&1
+PATH=/tmp/pabawi-node24/node-v24.21.0-darwin-arm64/bin:$PATH npm run build:backend > /tmp/pabawi-ldap-p3-node24-build-verified.log 2>&1
+PATH=/tmp/pabawi-node24/node-v24.21.0-darwin-arm64/bin:$PATH npm run lint > /tmp/pabawi-ldap-p3-node24-lint-verified.log 2>&1
+~~~
+
+- Backend build and both workspace linters passed. Frontend source is unchanged; frontend tests/component checks were not rerun.
+- Fixture commands are documented in backend/test/fixtures/ldap/README.md. The final Dockerfile/entrypoint passed:
+
+~~~bash
+shellcheck backend/test/fixtures/ldap/entrypoint.sh
+docker run --name pabawi-ldap-p3-hadolint-verified --pull never --interactive hadolint/hadolint:latest hadolint --ignore DL3008 --ignore DL3009 - < backend/test/fixtures/ldap/Dockerfile
+docker build -t pabawi-ldap-fixture:package3-verified backend/test/fixtures/ldap > /tmp/pabawi-ldap-p3-fixture-build-verified.log 2>&1
+docker run --detach --name pabawi-ldap-p3-openldap-verified --pull never -p 127.0.0.1::1389 -p 127.0.0.1::1636 pabawi-ldap-fixture:package3-verified
+~~~
+
+- The fixture uses a pinned Debian base, generated two-day TLS certificates, synthetic records and an ACL denying lookup password reads. Final published ports were StartTLS 50326 and LDAPS 50325. The CA was copied to /tmp/pabawi-ldap-p3-verified/tls/ca.pem. After the final Dockerfile adjustment, all ten real-directory tests passed:
+
+~~~bash
+PATH=/tmp/pabawi-node24/node-v24.21.0-darwin-arm64/bin:$PATH TEST_LDAP_LDAPS_PORT=50325 TEST_LDAP_STARTTLS_PORT=50326 TEST_LDAP_CA_FILE=/tmp/pabawi-ldap-p3-verified/tls/ca.pem npm run test --workspace=backend -- test/integration/ldap-directory.test.ts > /tmp/pabawi-ldap-p3-openldap-verified.log 2>&1
+~~~
+
+- Real evidence covers both verified TLS modes, isolated binds, incorrect/empty credentials, active/inactive/missing policy, Unicode/ambiguous login, absent contact/identity fields, two group schemas, optional UID rejection, direct/nested cycles, limits, failover, CA/hostname failures, failed StartTLS before credentials and deadline socket cleanup.
+- ClamAV passed ldapts and its dependency, the DN parser dependencies, the official Node archive and downloaded fixture packages. The final fixture scan checked 19 packages with zero infections (/tmp/pabawi-ldap-p3-fixture-clamav-verified.log). Image digest and exact download/scan commands are in the external log.
+- All six relevant documentation contracts passed:
+
+~~~bash
+PATH=/tmp/pabawi-node24/node-v24.21.0-darwin-arm64/bin:$PATH node --test --test-name-pattern='every declared REST|API guide|OpenAPI version|public exchanges|configuration inventory|architecture registry' scripts/documentation/contracts.test.mjs > /tmp/pabawi-ldap-p3-doc-contracts-acceptance.log 2>&1
+~~~
+
+- The unfiltered documentation check retains the existing version/changelog failure. The required full tracked-tree secret scan retains the four existing findings below. A separate scan includes all 23 changed/new files except the lockfile and compares them with the reviewed baseline and starting-commit content: PASS, zero new findings (/tmp/pabawi-ldap-p3-secret-comparison-verified.json). Synthetic invalid-URL/GUID vectors are annotated. The baseline is unchanged; exact scanner/comparison commands are in the external log.
+- git diff --check passed. docker stop pabawi-ldap-p3-openldap-final pabawi-ldap-p3-openldap-verified pabawi-ldap-p1-postgres stopped all remaining acceptance servers. The earlier directory fixture is also stopped. Containers/images/temporary evidence were retained. No remote push, PR, deployment or cleanup deletion occurred.
+
+**Pre-existing failures:**
+
+- Release metadata is 1.5.1 and CHANGELOG.md lacks a dated 1.5.1 entry. The unfiltered documentation contract therefore fails. Changelog/version values were not changed.
+- PATH=/Users/al/.cache/pre-commit/repovdso_3ip/py_env-python3/bin:$PATH bash scripts/quality/secret-scan.sh reports four existing findings: one in backend/package.json, two in backend/src/cli/resetUserPassword.ts, one in backend/test/unit/cli/resetUserPassword.test.ts. Only dependency entries changed in backend/package.json; its flagged content existed at the starting commit. CLI files and .secrets.baseline are unchanged.
+
+**Remaining work and blockers:** No package-3 acceptance blocker remains. No real AD environment/credentials were available. Actual AD TLS, status visibility, objectGUID queries, matching-rule behavior and large-directory interoperability remain unverified and block package-7 completion/support claims. Existing release-documentation and tracked-tree secret failures remain release blockers outside this package. The DN parser's decommissioned upstream is recorded for dependency-maintenance review. Supported-engine evidence for this package is now present. Public LDAP authentication remains unavailable.
+
+**Decisions or discoveries affecting the next package:** Use service-returned immutable subjects and authoritative current DN/name for mappings; never browser labels/locators as identity. Supply the case-sensitive directory ID as issuer. Safe error codes are INVALID_CREDENTIALS, INELIGIBLE, IDENTITY_CHANGED, INVALID_IDENTITY, POLICY_UNREADABLE, INCOMPLETE_RESULT, LIMIT_EXCEEDED, BUSY, TIMEOUT and UNAVAILABLE. Preserve confirmed ineligibility versus transient/incomplete results. Failures change no stored grants. Construction is lazy and does not make startup depend on directory availability. Preserve the transport/filter guards when upgrading ldapts and rerun real truncation, TLS and binary/UTF-8 checks. Package-2 transaction ownership and package-5B atomic reconciliation/fencing requirements remain unchanged.
+
+**Next action and acceptance criterion still to satisfy:** Start package 4. Implement restricted search/diagnostics and mapping persistence/routes through existing RBAC/container patterns. Require rbac:admin, audit changes, resolve immutable group subjects through this service, and prove revision/fencing-safe grant withdrawal on both adapters. Keep public LDAP login unavailable. Complete permission/error/provenance/revision-race tests and backend contracts before mapping UI or session work.

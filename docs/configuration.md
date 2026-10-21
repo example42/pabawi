@@ -141,6 +141,109 @@ Optional federated authentication via OpenID Connect. When enabled, the login pa
 
 When `ENTRA_ID_ENABLED=true`, all four required variables must be set or the server refuses to start with a validation error listing the missing ones.
 
+## LDAP directory service
+
+LDAP configuration and read-only directory operations are implemented for internal
+services and tests. Public LDAP login and provider discovery remain unavailable
+until the authentication/session package is complete. Enabling this configuration
+does not enable an authentication endpoint or grant any role.
+
+LDAP is disabled by default. When disabled, only LDAP_ENABLED is parsed. Enabled
+invalid configuration fails startup. Construction performs no directory connection;
+a valid but unreachable directory therefore leaves process startup and local access
+intact. Changes require restart. Directory ID is case-sensitive and must remain
+stable across endpoint changes; every endpoint must describe the same logical
+directory. Additional endpoints share schema, TLS and policy settings.
+
+| Variable | Default | Contract | Secret |
+| --- | --- | --- | --- |
+| `LDAP_ENABLED` | `false` | strict boolean | no |
+| `LDAP_DIRECTORY_ID` | Required when enabled | stable operator-chosen identifier, restricted to letters, digits, `_`, and `-` | no |
+| `LDAP_DIRECTORY_TYPE` | See contract | Required: `ad` or `openldap` | no |
+| `LDAP_DISPLAY_NAME` | `LDAP` | provider label in login and user administration | no |
+| `LDAP_LOGIN_HELP_URL` | Empty | optional HTTP(S) help link, safely rendered | no |
+| `LDAP_HOSTNAME` | Required FQDN | no embedded credentials, protocol, path, or search parameters | no |
+| `LDAP_PORT` | `636` for LDAPS, `389` for StartTLS | integer 1 through 65535 | no |
+| `LDAP_FAILOVER_ENDPOINTS` | `[]` | JSON array of additional `{ "hostname": "...", "port": 636 }` objects; maximum four | no |
+| `LDAP_TLS_MODE` | `ldaps` | either `ldaps` or `starttls`; applies to every endpoint | no |
+| `LDAP_CA_FILE` | Empty uses system trust | otherwise readable PEM CA bundle path, added to system trust | no |
+| `LDAP_ALLOW_WILDCARD_CERTIFICATES` | `false` | additional restriction beyond normal hostname validation | no |
+| `LDAP_LOOKUP_USER` | See contract | Required DN unless anonymous lookup is explicitly enabled | no |
+| `LDAP_LOOKUP_PASSWORD` | Required nonempty value with lookup user | never expose in discovery, logs, or diagnostics | yes |
+| `LDAP_ANONYMOUS_LOOKUP` | `false` | when true, lookup user/password must both be absent | no |
+| `LDAP_CONNECT_TIMEOUT_SECONDS` | `10` | positive integer, at most 30 | no |
+| `LDAP_OPERATION_TIMEOUT_SECONDS` | `10` | positive integer, at most 30 | no |
+| `LDAP_REQUEST_TIMEOUT_SECONDS` | `30` | total LDAP transaction deadline across endpoints, binds, searches, and traversal; at most 60 | no |
+| `LDAP_BASE_DN` | See contract | Required nonempty valid DN | no |
+| `LDAP_USER_RDN` | Empty | optional relative DN beneath base DN | no |
+| `LDAP_USER_OBJECT_CLASS` | See contract | `user` for AD, `inetOrgPerson` for OpenLDAP | no |
+| `LDAP_USER_LOOKUP_ATTR` | See contract | `sAMAccountName` for AD, `uid` for OpenLDAP | no |
+| `LDAP_USER_ID_ATTR` | `objectGUID` for AD, `entryUUID` for OpenLDAP | must be immutable and readable | no |
+| `LDAP_USER_EMAIL_ATTR` | `mail` | missing value becomes null, never a fabricated address | no |
+| `LDAP_USER_DISPLAY_NAME_ATTR` | `displayName` | fallback to current directory login name | no |
+| `LDAP_USER_GIVEN_NAME_ATTR` | `givenName` | missing value becomes an empty profile field | no |
+| `LDAP_USER_SURNAME_ATTR` | `sn` | missing value becomes an empty profile field | no |
+| `LDAP_USER_ELIGIBILITY_FILTER` | Empty for AD means built-in AD policy | required valid filter for OpenLDAP | no |
+| `LDAP_GROUP_RDN` | Empty | optional relative DN beneath base DN | no |
+| `LDAP_GROUP_OBJECT_CLASS` | See contract | `group` for AD, `groupOfUniqueNames` for OpenLDAP | no |
+| `LDAP_GROUP_MEMBER_ATTR` | `member` for AD, `uniqueMember` for OpenLDAP | DN-valued memberships only | no |
+| `LDAP_GROUP_ID_ATTR` | See contract | `objectGUID` for AD, `entryUUID` for OpenLDAP | no |
+| `LDAP_GROUP_NAME_ATTR` | `name` for AD, `displayName` for OpenLDAP | display falls back to lookup attribute | no |
+| `LDAP_GROUP_LOOKUP_ATTR` | `cn` | used for administrative search, not persistent identity | no |
+| `LDAP_SEARCH_NESTED_GROUPS` | `false` | direct membership only unless enabled | no |
+| `LDAP_DISABLE_MATCHING_RULE_IN_CHAIN` | `false` | AD optimization switch, irrelevant for OpenLDAP | no |
+| `LDAP_NESTED_GROUP_MAX_DEPTH` | `10` | positive integer, at most 32 | no |
+| `LDAP_GROUP_SEARCH_LIMIT` | `100` | total returned administrative search entries, at most 500 | no |
+| `LDAP_GROUP_TRAVERSAL_LIMIT` | `1000` | maximum visited groups per eligibility transaction, at most 10000 | no |
+| `LDAP_REVALIDATION_INTERVAL_SECONDS` | `300` | positive integer at most 300, so operators can tighten the agreed freshness bound | no |
+| `LDAP_MAX_CONCURRENT_OPERATIONS` | `10` | positive integer at most 100; bounded admission, with excess requests rejected temporarily | no |
+
+All booleans accept only literal true or false. Attribute names/OIDs, DNs, filters,
+JSON and bounds are validated. OpenLDAP requires a deployment-specific positive
+eligibility filter, for example (employeeType=active). The lookup account must see
+all attributes used by that policy. Missing policy attributes do not match the
+example filter. The application cannot infer an operator's account-status schema.
+
+TLS 1.2 or later, CA verification, hostname validation and endpoint SNI are required
+for LDAPS and StartTLS. A configured PEM bundle adds certificates to Node's default
+trust roots (including configured system/extra roots). A failed StartTLS negotiation never falls back to plaintext. Default
+wildcard restrictions supplement normal hostname verification. User binds use a
+separate connection to the selected endpoint. No reconnect or password replay is
+permitted. Failover applies only to transport establishment before lookup binding.
+
+Searches use server limits, no paging, no alias dereferencing and no referral
+following. Server truncation, referrals and traversal/depth bounds fail the whole
+operation. Admission rejects excess transactions immediately; a single total
+deadline covers all endpoints, connections, searches and group traversal. Errors
+and logs expose safe reason codes, never raw directory responses or credentials.
+
+OpenLDAP subjects must be UUID attributes (entryUUID by default). AD subjects must
+be 16-byte binary GUID attributes (objectGUID by default), encoded as lowercase
+canonical UUIDs with the Windows field byte order. Neither DN, login nor email is
+an identity key. OpenLDAP groupOfUniqueNames/uniqueMember and groupOfNames/member
+are supported using DN membership. Optional uniqueMember UID suffixes are rejected
+when encountered. RFC2307 memberUid membership is unsupported.
+
+AD policy requires readable userAccountControl,
+msDS-User-Account-Control-Computed, accountExpires, pwdLastSet and
+msDS-UserPasswordExpiryTimeComputed. It denies disabled, currently locked,
+expired-account and observable password-expiration/change-required states. FILETIME
+is evaluated with integer arithmetic; accountExpires 0 and 9223372036854775807
+mean no expiration. See Microsoft's [computed account flags](https://learn.microsoft.com/en-us/windows/win32/adschema/a-msds-user-account-control-computed)
+and [account expiration](https://learn.microsoft.com/en-us/windows/win32/adschema/a-accountexpires).
+Missing required policy visibility fails closed. Bind-only conditions cannot be
+rechecked without another password-based login.
+
+Nested membership uses bounded reverse membership searches in the configured group
+scope. This avoids reading AD member ranges. AD matching-rule-in-chain results are
+checked against that bounded traversal to prevent out-of-scope paths or unbounded
+recursion from adding grants. Only definitive unsupported-rule errors permit the
+traversal result alone. Primary groups and cross-domain/out-of-scope memberships
+are excluded. Actual AD interoperability remains unverified.
+
+Reproducible OpenLDAP TLS tests and commands are in
+[the fixture guide](../backend/test/fixtures/ldap/README.md).
+
 ## Bolt
 
 | Variable | Default | Description | Secret value |

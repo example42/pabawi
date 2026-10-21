@@ -1,0 +1,95 @@
+dn: dc=example,dc=test
+objectClass: domain
+dc: example
+
+dn: cn=reader,dc=example,dc=test
+objectClass: simpleSecurityObject
+objectClass: organizationalRole
+cn: reader
+userPassword: fixture-reader
+
+dn: ou=people,dc=example,dc=test
+objectClass: organizationalUnit
+ou: people
+
+dn: ou=groups,dc=example,dc=test
+objectClass: organizationalUnit
+ou: groups
+
+dn: uid=alice,ou=people,dc=example,dc=test
+objectClass: inetOrgPerson
+uid: alice
+cn: Alice
+sn: Example
+displayName: Alice Fixture
+mail: alice@example.test
+employeeType: active
+userPassword: fixture-user
+
+dn: uid=inactive,ou=people,dc=example,dc=test
+objectClass: inetOrgPerson
+uid: inactive
+cn: Inactive
+sn: Example
+employeeType: inactive
+userPassword: fixture-user
+
+dn: uid=missing-policy,ou=people,dc=example,dc=test
+objectClass: inetOrgPerson
+uid: missing-policy
+cn: Missing
+sn: Example
+userPassword: fixture-user
+
+dn: cn=operators,ou=groups,dc=example,dc=test
+objectClass: groupOfUniqueNames
+cn: operators
+uniqueMember: uid=alice,ou=people,dc=example,dc=test
+uniqueMember: cn=admins,ou=groups,dc=example,dc=test
+
+dn: cn=admins,ou=groups,dc=example,dc=test
+objectClass: groupOfUniqueNames
+cn: admins
+uniqueMember: cn=operators,ou=groups,dc=example,dc=test
+
+dn: cn=ordinary,ou=groups,dc=example,dc=test
+objectClass: groupOfNames
+cn: ordinary
+member: uid=alice,ou=people,dc=example,dc=test
+
+dn: uid=josé,ou=people,dc=example,dc=test
+objectClass: inetOrgPerson
+uid: josé
+cn: José
+sn: Example
+employeeType: active
+userPassword: fixture-user
+
+dn: uid=duplicate,ou=people,dc=example,dc=test
+objectClass: inetOrgPerson
+uid: duplicate
+cn: Duplicate One
+sn: Example
+employeeType: active
+userPassword: fixture-user
+
+dn: cn=duplicate-two,ou=people,dc=example,dc=test
+objectClass: inetOrgPerson
+uid: duplicate
+cn: duplicate-two
+sn: Example
+employeeType: active
+userPassword: fixture-user
+
+dn: uid=suffix,ou=people,dc=example,dc=test
+objectClass: inetOrgPerson
+uid: suffix
+cn: Suffix
+sn: Example
+employeeType: active
+userPassword: fixture-user
+
+dn: cn=optionaluid,ou=groups,dc=example,dc=test
+objectClass: groupOfUniqueNames
+cn: optionaluid
+uniqueMember: uid=suffix,ou=people,dc=example,dc=test#'0101'B

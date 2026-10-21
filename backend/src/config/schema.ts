@@ -1,3 +1,5 @@
+import { LdapConfigSchema } from "./ldap";
+export { LdapConfigSchema, type LdapConfig } from "./ldap";
 import { z } from "zod";
 
 /**
@@ -473,6 +475,7 @@ export const AppConfigSchema = z.object({
   mcpEnabled: z.boolean().default(false),
   mcpAuthToken: z.string().optional(),
   entraId: EntraIdConfigSchema.optional(),
+  ldap: LdapConfigSchema.optional(),
 });
 
 export type AppConfig = z.infer<typeof AppConfigSchema>;

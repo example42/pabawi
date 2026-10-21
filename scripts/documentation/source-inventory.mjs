@@ -54,7 +54,7 @@ export function routes() {
 
 export function environmentVariables() {
   const result = new Set();
-  for (const file of ['backend/src/config/ConfigService.ts', 'backend/src/integrations/ssh/config.ts']) {
+  for (const file of ['backend/src/config/ConfigService.ts', 'backend/src/config/ldap.ts', 'backend/src/integrations/ssh/config.ts']) {
     const source = parse(file);
     walk(source, node => {
       if (ts.isPropertyAccessExpression(node) && ['process.env', 'env'].includes(node.expression.getText(source))) {
