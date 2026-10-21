@@ -768,6 +768,14 @@ All endpoints require access JWT authentication and appropriate RBAC permissions
 
 ### Users
 
+User DTOs from authentication and user administration include nullable `email`
+and `displayName` fields. Group member DTOs also allow a null `email`. External
+contact email can be absent or shared across accounts; it never identifies an
+account for linking. Local account creation still requires a unique local email
+and username. The `ldap:` username prefix is reserved for directory accounts.
+Password hashes are excluded from responses. Entra enrollment continues to
+require explicit administrative authority and rejects implicit email linking.
+
 | Method | Endpoint | Description |
 |---|---|---|
 | `POST` | `/api/users` | Create user |

@@ -24,7 +24,8 @@ const ACCESS_TOKEN_LIFETIME_MS = 60 * 60 * 1000; // 1 hour
 export interface UserDTO {
   id: string;
   username: string;
-  email: string;
+  email: string | null;
+  displayName: string | null;
   firstName: string;
   lastName: string;
   isActive: boolean;

@@ -48,11 +48,13 @@ for (const dialect of ['sqlite', 'postgres'] as const) {
         const users = await Promise.all(services.map(service => service.provisionUser(claims)));
         expect(new Set(users.map(user => user.id)).size).toBe(1);
         expect(await adapters[0].query('SELECT * FROM federated_identities')).toHaveLength(1);
+        const identity = await adapters[0].queryOne<{ id: string }>('SELECT id FROM federated_identities WHERE user_id = ?', [users[0].id]);
+        expect(identity).not.toBeNull();
         await adapters[0].execute('DELETE FROM user_roles WHERE user_id = ?', [users[0].id]);
         const permissions = new PermissionService(adapters[1]);
-        await Promise.all(services.map(service => service.syncGroupRoles(users[0].id, ['a'])));
+        await Promise.all(services.map(service => service.syncGroupRoles(identity!.id, ['a'])));
         expect(await permissions.hasPermission(users[0].id, 'executions', 'read')).toBe(true);
-        await services[0].syncGroupRoles(users[0].id, undefined);
+        await services[0].syncGroupRoles(identity!.id, undefined);
         expect(await permissions.hasPermission(users[0].id, 'executions', 'read')).toBe(false);
         const { token, refreshToken } = await services[0].authService.generateTokenPair(users[0]);
         const binding = 'a'.repeat(64);

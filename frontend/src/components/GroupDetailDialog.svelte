@@ -17,7 +17,7 @@
   interface UserDTO {
     id: string;
     username: string;
-    email: string;
+    email: string | null;
     firstName: string;
     lastName: string;
   }
@@ -341,7 +341,7 @@
                             {member.username}
                           </p>
                           <p class="text-xs text-gray-500 dark:text-gray-400">
-                            {member.firstName} {member.lastName} • {member.email}
+                            {member.firstName} {member.lastName} • {member.email ?? 'Not provided'}
                           </p>
                         </div>
                         <button

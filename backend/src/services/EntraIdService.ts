@@ -277,7 +277,12 @@ export class EntraIdService {
     const user = await this.provisionUser(claims);
 
     // 9. Sync group-to-role mapping
-    await this.syncGroupRoles(user.id, claims.groupsUnavailable ? [] : claims.groups);
+    const identity = await this.db.queryOne<{ id: string }>(
+      'SELECT id FROM federated_identities WHERE user_id = ? AND provider = ? AND issuer = ? AND subject = ?',
+      [user.id, 'entra-id', claims.iss, claims.sub],
+    );
+    if (!identity) throw new EntraIdError(ENTRA_ID_ERROR_CODES.PROVISIONING_FAILED, 'Authenticating identity is missing');
+    await this.syncGroupRoles(identity.id, claims.groupsUnavailable ? [] : claims.groups);
     if (claims.groupsUnavailable && this.config.groupMapping) {
       throw new EntraIdError(ENTRA_ID_ERROR_CODES.GROUPS_UNAVAILABLE, "Complete group membership is required for login");
     }
@@ -334,7 +339,7 @@ export class EntraIdService {
       return existingUser;
     }
 
-    if (claims.email && await this.userService.findByEmail(claims.email)) {
+    if (claims.email && (await this.userService.findAllByEmail(claims.email)).length > 0) {
       const winner = await this.userService.findByFederatedIdentity('entra-id', claims.sub, claims.iss);
       if (winner) {
         this.requireActiveUser(winner);
@@ -784,20 +789,26 @@ export class EntraIdService {
   }
 
   /** Replace only provider-owned grants, including grants from removed mappings. */
-  async syncGroupRoles(userId: string, groups: string[] | undefined): Promise<void> {
+  async syncGroupRoles(identityId: string, groups: string[] | undefined): Promise<void> {
     await this.db.withTransaction(async () => {
+      const identity = await this.db.queryOne<{ userId: string }>(
+        `SELECT user_id AS "userId" FROM federated_identities WHERE id = ? AND provider = 'entra-id' AND issuer = ?`,
+        [identityId, `https://login.microsoftonline.com/${this.config.tenantId}/v2.0`],
+      );
+      if (!identity) throw new EntraIdError(ENTRA_ID_ERROR_CODES.PROVISIONING_FAILED, 'Authenticating identity is missing');
+      const { userId } = identity;
       // Serialize reconciliation of this account across PostgreSQL connections.
       await this.db.execute('UPDATE users SET updated_at = updated_at WHERE id = ?', [userId]);
       await this.db.execute(`DELETE FROM user_roles WHERE user_id = ? AND role_id IN
         (SELECT role_id FROM legacy_federated_user_roles WHERE user_id = ?)`, [userId, userId]);
-      await this.db.execute('DELETE FROM federated_user_roles WHERE user_id = ?', [userId]);
+      await this.db.execute('DELETE FROM federated_user_roles WHERE identity_id = ?', [identityId]);
       const normalizedGroups = new Set((groups ?? []).map(group => group.toLowerCase()));
       for (const [group, roleName] of Object.entries(this.config.groupMapping ?? {})) {
         if (!normalizedGroups.has(group.toLowerCase())) continue;
         const role = await this.db.queryOne<{ id: string }>('SELECT id FROM roles WHERE LOWER(name) = LOWER(?)', [roleName]);
         if (!role) throw new EntraIdError(ENTRA_ID_ERROR_CODES.PROVISIONING_FAILED, 'Group mapping references an unknown role');
-        await this.db.execute(`INSERT INTO federated_user_roles (user_id, role_id) VALUES (?, ?)
-          ON CONFLICT(user_id, role_id) DO NOTHING`, [userId, role.id]);
+        await this.db.execute(`INSERT INTO federated_user_roles (user_id, role_id, identity_id, source_key) VALUES (?, ?, ?, ?)
+          ON CONFLICT(identity_id, role_id, source_key) DO NOTHING`, [userId, role.id, identityId, `group:${group.toLowerCase()}`]);
       }
     });
   }

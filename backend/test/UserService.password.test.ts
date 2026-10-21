@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { SQLiteAdapter } from '../src/database/SQLiteAdapter';
 import { UserService } from '../src/services/UserService';
 import { AuthenticationService } from '../src/services/AuthenticationService';
+import { initializeTestSchema } from './helpers/schema';
 
 describe('UserService - Password Validation Integration', () => {
   let db: SQLiteAdapter;
@@ -15,9 +16,7 @@ describe('UserService - Password Validation Integration', () => {
     await db.initialize();
 
     // Initialize schema
-    await initializeSchema(db);
-
-    await db.execute('CREATE VIEW effective_user_roles AS SELECT user_id, role_id FROM user_roles');
+    await initializeTestSchema(db);
 
     authService = new AuthenticationService(db, testJwtSecret);
     userService = new UserService(db, authService);
@@ -182,112 +181,3 @@ describe('UserService - Password Validation Integration', () => {
     });
   });
 });
-
-
-// Helper function to initialize database schema
-async function initializeSchema(db: SQLiteAdapter): Promise<void> {
-  const schema = `
-    CREATE TABLE users (
-      id TEXT PRIMARY KEY,
-      username TEXT NOT NULL UNIQUE,
-      email TEXT NOT NULL UNIQUE,
-      password_hash TEXT NOT NULL,
-        session_version TEXT NOT NULL DEFAULT '0',
-      first_name TEXT NOT NULL,
-      last_name TEXT NOT NULL,
-      is_active INTEGER NOT NULL DEFAULT 1,
-      is_admin INTEGER NOT NULL DEFAULT 0,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL,
-      last_login_at TEXT
-    );
-
-    CREATE TABLE groups (
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL UNIQUE,
-      description TEXT NOT NULL,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL
-    );
-
-    CREATE TABLE roles (
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL UNIQUE,
-      description TEXT NOT NULL,
-      is_built_in INTEGER NOT NULL DEFAULT 0,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL
-    );
-
-    CREATE TABLE permissions (
-      id TEXT PRIMARY KEY,
-      resource TEXT NOT NULL,
-      action TEXT NOT NULL,
-      description TEXT NOT NULL,
-      created_at TEXT NOT NULL,
-      UNIQUE(resource, action)
-    );
-
-    CREATE TABLE user_groups (
-      user_id TEXT NOT NULL,
-      group_id TEXT NOT NULL,
-      assigned_at TEXT NOT NULL,
-      PRIMARY KEY (user_id, group_id),
-      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-      FOREIGN KEY (group_id) REFERENCES groups(id) ON DELETE CASCADE
-    );
-
-    CREATE TABLE user_roles (
-      user_id TEXT NOT NULL,
-      role_id TEXT NOT NULL,
-      assigned_at TEXT NOT NULL,
-      PRIMARY KEY (user_id, role_id),
-      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-      FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE CASCADE
-    );
-
-    CREATE TABLE group_roles (
-      group_id TEXT NOT NULL,
-      role_id TEXT NOT NULL,
-      assigned_at TEXT NOT NULL,
-      PRIMARY KEY (group_id, role_id),
-      FOREIGN KEY (group_id) REFERENCES groups(id) ON DELETE CASCADE,
-      FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE CASCADE
-    );
-
-    CREATE TABLE role_permissions (
-      role_id TEXT NOT NULL,
-      permission_id TEXT NOT NULL,
-      assigned_at TEXT NOT NULL,
-      PRIMARY KEY (role_id, permission_id),
-      FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE CASCADE,
-      FOREIGN KEY (permission_id) REFERENCES permissions(id) ON DELETE CASCADE
-    );
-
-    CREATE TABLE revoked_tokens (
-      token TEXT PRIMARY KEY,
-      user_id TEXT NOT NULL,
-      revoked_at TEXT NOT NULL,
-      expires_at TEXT NOT NULL,
-      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-    );
-
-    CREATE TABLE config (
-      key TEXT PRIMARY KEY,
-      value TEXT NOT NULL,
-      updated_at TEXT NOT NULL
-    );
-
-    INSERT INTO config (key, value, updated_at) VALUES
-      ('allow_self_registration', 'false', datetime('now')),
-      ('default_new_user_role', 'role-viewer-001', datetime('now'));
-
-    INSERT INTO roles (id, name, description, is_built_in, created_at, updated_at) VALUES
-      ('role-viewer-001', 'Viewer', 'Default viewer role', 1, datetime('now'), datetime('now'));
-  `;
-
-  const statements = schema.split(';').map(s => s.trim()).filter(s => s.length > 0);
-  for (const statement of statements) {
-    await db.execute(statement);
-  }
-}

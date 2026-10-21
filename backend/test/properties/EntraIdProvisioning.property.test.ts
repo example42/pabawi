@@ -74,6 +74,8 @@ function createMockUser(overrides: Partial<User> = {}): User {
     username: 'testuser',
     email: 'user@example.com',
     passwordHash: '',
+    localAuthEnabled: 0,
+    displayName: null,
     firstName: 'Test',
     lastName: 'User',
     isActive: 1,
@@ -144,7 +146,7 @@ describe('EntraIdService — User Provisioning Properties', () => {
 
     mockUserService = {
       findByFederatedIdentity: vi.fn().mockResolvedValue(null),
-      findByEmail: vi.fn().mockResolvedValue(null),
+      findAllByEmail: vi.fn().mockResolvedValue([]),
       createFederatedUser: vi.fn().mockImplementation(async (claims: IdTokenClaims) => {
         return createMockUser({
           id: `new-user-${claims.sub}`,
@@ -207,7 +209,7 @@ describe('EntraIdService — User Provisioning Properties', () => {
           async (claims) => {
             // Reset mocks for each iteration
             vi.mocked(mockUserService.findByFederatedIdentity).mockResolvedValue(null);
-            vi.mocked(mockUserService.findByEmail).mockResolvedValue(null);
+            vi.mocked(mockUserService.findAllByEmail).mockResolvedValue([]);
             vi.mocked(mockUserService.createFederatedUser).mockResolvedValue(
               createMockUser({
                 id: `new-user-${claims.sub}`,
@@ -250,7 +252,7 @@ describe('EntraIdService — User Provisioning Properties', () => {
           validClaimsArb,
           async (claims) => {
             vi.mocked(mockUserService.findByFederatedIdentity).mockResolvedValue(null);
-            vi.mocked(mockUserService.findByEmail).mockResolvedValue(null);
+            vi.mocked(mockUserService.findAllByEmail).mockResolvedValue([]);
 
             const createdUser = createMockUser({
               id: `new-user-${claims.sub}`,
@@ -384,7 +386,7 @@ describe('EntraIdService — User Provisioning Properties', () => {
             };
 
             vi.mocked(mockUserService.findByFederatedIdentity).mockResolvedValue(null);
-            vi.mocked(mockUserService.findByEmail).mockResolvedValue(null);
+            vi.mocked(mockUserService.findAllByEmail).mockResolvedValue([]);
 
             // Capture what createFederatedUser receives to verify username derivation
             let receivedClaims: IdTokenClaims | null = null;
@@ -447,7 +449,7 @@ describe('EntraIdService — User Provisioning Properties', () => {
             };
 
             vi.mocked(mockUserService.findByFederatedIdentity).mockResolvedValue(null);
-            vi.mocked(mockUserService.findByEmail).mockResolvedValue(null);
+            vi.mocked(mockUserService.findAllByEmail).mockResolvedValue([]);
             vi.mocked(mockUserService.createFederatedUser).mockImplementation(
               async (c: IdTokenClaims) => {
                 const username = c.email.split('@')[0]
@@ -491,7 +493,7 @@ describe('EntraIdService — User Provisioning Properties', () => {
             };
 
             vi.mocked(mockUserService.findByFederatedIdentity).mockResolvedValue(null);
-            vi.mocked(mockUserService.findByEmail).mockResolvedValue(null);
+            vi.mocked(mockUserService.findAllByEmail).mockResolvedValue([]);
             vi.mocked(mockUserService.createFederatedUser).mockImplementation(
               async (c: IdTokenClaims) => {
                 const username = c.email.split('@')[0]

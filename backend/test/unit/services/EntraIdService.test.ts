@@ -220,7 +220,7 @@ describe('EntraIdService', () => {
   describe('provisionUser()', () => {
     let mockUserService: {
       findByFederatedIdentity: ReturnType<typeof vi.fn>;
-      findByEmail: ReturnType<typeof vi.fn>;
+      findAllByEmail: ReturnType<typeof vi.fn>;
       createFederatedUser: ReturnType<typeof vi.fn>;
       linkFederatedIdentity: ReturnType<typeof vi.fn>;
     };
@@ -231,6 +231,8 @@ describe('EntraIdService', () => {
       username: 'testuser',
       email: 'test@example.com',
       passwordHash: 'hashed',
+      localAuthEnabled: 1,
+      displayName: null,
       firstName: 'Test',
       lastName: 'User',
       isActive: 1,
@@ -255,7 +257,7 @@ describe('EntraIdService', () => {
     beforeEach(() => {
       mockUserService = {
         findByFederatedIdentity: vi.fn().mockResolvedValue(null),
-        findByEmail: vi.fn().mockResolvedValue(null),
+        findAllByEmail: vi.fn().mockResolvedValue([]),
         createFederatedUser: vi.fn().mockResolvedValue(baseUser),
         linkFederatedIdentity: vi.fn().mockResolvedValue({
           id: 'fed-id-1',
@@ -308,11 +310,11 @@ describe('EntraIdService', () => {
       // Must not call create or link
       expect(mockUserService.createFederatedUser).not.toHaveBeenCalled();
       expect(mockUserService.linkFederatedIdentity).not.toHaveBeenCalled();
-      expect(mockUserService.findByEmail).not.toHaveBeenCalled();
+      expect(mockUserService.findAllByEmail).not.toHaveBeenCalled();
     });
 
     it('rejects an email collision without linking or creating an account', async () => {
-      mockUserService.findByEmail.mockResolvedValue(baseUser);
+      mockUserService.findAllByEmail.mockResolvedValue([baseUser]);
       await expect(provisionService.provisionUser(baseClaims)).rejects.toMatchObject({ code: 'IDENTITY_COLLISION' });
       expect(mockUserService.linkFederatedIdentity).not.toHaveBeenCalled();
       expect(mockUserService.createFederatedUser).not.toHaveBeenCalled();
@@ -320,7 +322,7 @@ describe('EntraIdService', () => {
 
     it('creates new federated user when no match found', async () => {
       mockUserService.findByFederatedIdentity.mockResolvedValue(null);
-      mockUserService.findByEmail.mockResolvedValue(null);
+      mockUserService.findAllByEmail.mockResolvedValue([]);
 
       const newUser = { ...baseUser, id: 'new-user-456' };
       mockUserService.createFederatedUser.mockResolvedValue(newUser);
@@ -333,7 +335,7 @@ describe('EntraIdService', () => {
 
     it('wraps createFederatedUser errors as PROVISIONING_FAILED', async () => {
       mockUserService.findByFederatedIdentity.mockResolvedValue(null);
-      mockUserService.findByEmail.mockResolvedValue(null);
+      mockUserService.findAllByEmail.mockResolvedValue([]);
       mockUserService.createFederatedUser.mockRejectedValue(
         new Error('UNIQUE constraint failed: users.username'),
       );
@@ -346,11 +348,11 @@ describe('EntraIdService', () => {
 
     it('proceeds to createFederatedUser when email is present but no email match', async () => {
       mockUserService.findByFederatedIdentity.mockResolvedValue(null);
-      mockUserService.findByEmail.mockResolvedValue(null);
+      mockUserService.findAllByEmail.mockResolvedValue([]);
 
       await provisionService.provisionUser(baseClaims);
 
-      expect(mockUserService.findByEmail).toHaveBeenCalledWith(baseClaims.email);
+      expect(mockUserService.findAllByEmail).toHaveBeenCalledWith(baseClaims.email);
       expect(mockUserService.createFederatedUser).toHaveBeenCalledWith(baseClaims);
     });
 
@@ -365,14 +367,14 @@ describe('EntraIdService', () => {
 
       await provisionService.provisionUser(claims);
 
-      // findByEmail should not be called with empty string
-      expect(mockUserService.findByEmail).not.toHaveBeenCalled();
+      // findAllByEmail should not be called with empty string
+      expect(mockUserService.findAllByEmail).not.toHaveBeenCalled();
       expect(mockUserService.createFederatedUser).toHaveBeenCalledWith(claims);
     });
 
     it('logs provisioning actions without exposing tokens or secrets', async () => {
       mockUserService.findByFederatedIdentity.mockResolvedValue(null);
-      mockUserService.findByEmail.mockResolvedValue(null);
+      mockUserService.findAllByEmail.mockResolvedValue([]);
 
       await provisionService.provisionUser(baseClaims);
 

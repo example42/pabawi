@@ -201,7 +201,7 @@ describe('Email Uniqueness Properties', () => {
 
           // Verify all users can still be retrieved by email
           for (const user of createdUsers) {
-            const retrieved = await userService.getUserByEmail(user.email);
+            const retrieved = await userService.findLocalByEmail(user.email!);
             expect(retrieved).not.toBeNull();
             expect(retrieved?.id).toBe(user.id);
             expect(retrieved?.email).toBe(user.email);

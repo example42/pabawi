@@ -221,7 +221,7 @@ describe('EntraIdService — Callback Validation Properties', () => {
 
     const mockUserService = {
       findByFederatedIdentity: vi.fn().mockResolvedValue(null),
-      findByEmail: vi.fn().mockResolvedValue(null),
+      findAllByEmail: vi.fn().mockResolvedValue([]),
       createFederatedUser: vi.fn().mockResolvedValue(mockUser),
       getUserById: vi.fn().mockResolvedValue(mockUser),
       toUserDTO: vi.fn().mockReturnValue({ id: mockUser.id, username: mockUser.username }),
@@ -295,6 +295,8 @@ describe('EntraIdService — Callback Validation Properties', () => {
             const expiredAt = new Date(now.getTime() - minutesAgo * 60 * 1000);
 
             (db.queryOne as ReturnType<typeof vi.fn>).mockResolvedValue({
+              id: 'identity',
+              userId: mockUser.id,
               state,
               nonce: 'test-nonce',
               code_verifier: 'test-verifier-value-that-is-long-enough',
@@ -337,6 +339,8 @@ describe('EntraIdService — Callback Validation Properties', () => {
     function setupValidStateEntry(): void {
       const future = new Date(Date.now() + 5 * 60 * 1000).toISOString();
       (db.queryOne as ReturnType<typeof vi.fn>).mockResolvedValue({
+        id: 'identity',
+        userId: mockUser.id,
         state: 'valid-state',
         nonce: storedNonce,
         code_verifier: 'valid-code-verifier-value-here-long',
@@ -420,6 +424,8 @@ describe('EntraIdService — Callback Validation Properties', () => {
           async ([storedNonce, tokenNonce], code) => {
             const future = new Date(Date.now() + 5 * 60 * 1000).toISOString();
             (db.queryOne as ReturnType<typeof vi.fn>).mockResolvedValue({
+              id: 'identity',
+              userId: mockUser.id,
               state: 'valid-state',
               nonce: storedNonce,
               code_verifier: 'valid-code-verifier-value-here-long',
@@ -460,6 +466,8 @@ describe('EntraIdService — Callback Validation Properties', () => {
     function setupValidState(): void {
       const future = new Date(Date.now() + 5 * 60 * 1000).toISOString();
       (db.queryOne as ReturnType<typeof vi.fn>).mockResolvedValue({
+        id: 'identity',
+        userId: mockUser.id,
         state: 'valid-state',
         nonce: storedNonce,
         code_verifier: 'valid-code-verifier-value-here-long',
@@ -556,6 +564,8 @@ describe('EntraIdService — Callback Validation Properties', () => {
           async (state, code) => {
             const future = new Date(Date.now() + 5 * 60 * 1000).toISOString();
             (db.queryOne as ReturnType<typeof vi.fn>).mockResolvedValue({
+              id: 'identity',
+              userId: mockUser.id,
               state,
               nonce: storedNonce,
               code_verifier: 'valid-code-verifier-value-here-long',
@@ -604,6 +614,8 @@ describe('EntraIdService — Callback Validation Properties', () => {
           async (state, code) => {
             const future = new Date(Date.now() + 5 * 60 * 1000).toISOString();
             (db.queryOne as ReturnType<typeof vi.fn>).mockResolvedValue({
+              id: 'identity',
+              userId: mockUser.id,
               state,
               nonce: storedNonce,
               code_verifier: 'valid-code-verifier-value-here-long',

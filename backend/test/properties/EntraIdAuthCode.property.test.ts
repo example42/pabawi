@@ -110,7 +110,7 @@ describe('EntraIdService — Property 16: Authorization code single-use and TTL'
 
     const mockUserService = {
       findByFederatedIdentity: vi.fn().mockResolvedValue(null),
-      findByEmail: vi.fn().mockResolvedValue(null),
+      findAllByEmail: vi.fn().mockResolvedValue([]),
       createFederatedUser: vi.fn().mockResolvedValue(mockUser),
       getUserById: vi.fn().mockResolvedValue(mockUser),
       toUserDTO: vi.fn().mockReturnValue({ id: mockUser.id, username: mockUser.username }),

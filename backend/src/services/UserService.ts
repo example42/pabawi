@@ -11,8 +11,10 @@ import type { IdTokenClaims } from './EntraIdService';
 export interface User {
   id: string;
   username: string;
-  email: string;
-  passwordHash: string;
+  email: string | null;
+  passwordHash: string | null;
+  localAuthEnabled: number;
+  displayName: string | null;
   firstName: string;
   lastName: string;
   isActive: number;
@@ -32,6 +34,8 @@ export interface User {
  */
 const USER_COLUMNS = `id, username, email,
   password_hash AS "passwordHash",
+  local_auth_enabled AS "localAuthEnabled",
+  display_name AS "displayName",
   first_name    AS "firstName",
   last_name     AS "lastName",
   is_active     AS "isActive",
@@ -65,7 +69,8 @@ const FEDERATED_IDENTITY_COLUMNS = `id,
 export interface UserDTO {
   id: string;
   username: string;
-  email: string;
+  email: string | null;
+  displayName: string | null;
   firstName: string;
   lastName: string;
   isActive: boolean;
@@ -188,6 +193,9 @@ export class UserService {
    * @throws Error if username or email already exists
    */
   public async createUser(data: CreateUserDTO): Promise<User> {
+    if (data.username.toLowerCase().startsWith('ldap:')) {
+      throw new Error('Username uses a reserved directory namespace');
+    }
     // Validate username uniqueness
     const existingUsername = await this.getUserByUsername(data.username);
     if (existingUsername) {
@@ -195,7 +203,7 @@ export class UserService {
     }
 
     // Validate email uniqueness
-    const existingEmail = await this.getUserByEmail(data.email);
+    const existingEmail = await this.findLocalByEmail(data.email);
     if (existingEmail) {
       throw new Error('Email already exists');
     }
@@ -280,14 +288,14 @@ export class UserService {
   }
 
   /**
-   * Get user by email
+   * Resolve only the unique local credential scope.
    *
    * @param email - Email address
    * @returns User or null if not found
    */
-  private async getUserByEmail(email: string): Promise<User | null> {
+  public async findLocalByEmail(email: string): Promise<User | null> {
     return this.db.queryOne<User>(
-      `SELECT ${USER_COLUMNS} FROM users WHERE email = ?`,
+      `SELECT ${USER_COLUMNS} FROM users WHERE email = ? AND local_auth_enabled = 1`,
       [email]
     );
   }
@@ -308,9 +316,9 @@ export class UserService {
     }
 
     // Validate email uniqueness if email is being updated
-    if (data.email && data.email !== user.email) {
-      const existingEmail = await this.getUserByEmail(data.email);
-      if (existingEmail) {
+    if (data.email && data.email !== user.email && user.localAuthEnabled === 1) {
+      const existingEmail = await this.findLocalByEmail(data.email);
+      if (existingEmail && existingEmail.id !== id) {
         throw new Error('Email already exists');
       }
     }
@@ -335,6 +343,15 @@ export class UserService {
     }
 
     if (data.password !== undefined) {
+      if (user.localAuthEnabled === 0) {
+        const entraIdentity = await this.db.queryOne<{ id: string }>(
+          `SELECT id FROM federated_identities WHERE user_id = ? AND provider = 'entra-id'
+           AND NOT EXISTS (SELECT 1 FROM federated_identities WHERE user_id = ? AND provider = 'ldap')`,
+          [id, id]
+        );
+        if (!entraIdentity) throw new Error('Directory accounts cannot have local passwords');
+        updates.push('local_auth_enabled = 1');
+      }
       // Validate password complexity
       const passwordValidation = validatePassword(data.password);
       if (!passwordValidation.valid) {
@@ -651,6 +668,7 @@ export class UserService {
       id: user.id,
       username: user.username,
       email: user.email,
+      displayName: user.displayName,
       firstName: user.firstName,
       lastName: user.lastName,
       isActive: user.isActive === 1,
@@ -696,6 +714,8 @@ export class UserService {
 
     // Use a transaction to ensure atomicity — no partial records
     return this.db.withTransaction(async () => {
+      // Serialize Entra collision checks across PostgreSQL provisioning writers.
+      await this.db.execute("UPDATE config SET value = value WHERE key = 'default_new_user_role'");
       // Check username uniqueness
       const existingUsername = await this.getUserByUsername(username);
       if (existingUsername) {
@@ -706,8 +726,8 @@ export class UserService {
 
       // Check email uniqueness (a separate user with this email should not exist;
       // collisions must never implicitly link the existing account)
-      const existingEmail = await this.getUserByEmail(claims.email);
-      if (existingEmail) {
+      const existingEmails = claims.email ? await this.findAllByEmail(claims.email) : [];
+      if (existingEmails.length > 0) {
         throw new Error(
           `Account creation failed: email "${claims.email}" already exists`
         );
@@ -718,12 +738,12 @@ export class UserService {
 
       // Insert user with null password_hash (federation-only)
       await this.db.execute(
-        `INSERT INTO users (id, username, email, password_hash, first_name, last_name, is_active, is_admin, created_at, updated_at)
-         VALUES (?, ?, ?, NULL, ?, ?, 1, 0, ?, ?)`,
+        `INSERT INTO users (id, username, email, password_hash, local_auth_enabled, first_name, last_name, is_active, is_admin, created_at, updated_at)
+         VALUES (?, ?, ?, NULL, 0, ?, ?, 1, 0, ?, ?)`,
         [
           userId,
           username,
-          claims.email,
+          claims.email || null,
           claims.given_name || '',
           claims.family_name || '',
           now,
@@ -841,14 +861,13 @@ export class UserService {
   }
 
   /**
-   * Public wrapper around the private getUserByEmail method.
-   * Used by EntraIdService for email-match account linking during SSO.
-   *
-   * @param email - Email address to search for
-   * @returns User or null if not found
+   * External contact email is not an identity key. Callers must handle all matches.
    */
-  public async findByEmail(email: string): Promise<User | null> {
-    return this.getUserByEmail(email);
+  public async findAllByEmail(email: string): Promise<User[]> {
+    return this.db.query<User>(
+      `SELECT ${USER_COLUMNS} FROM users WHERE email = ? ORDER BY id`,
+      [email]
+    );
   }
 
 }
