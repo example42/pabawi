@@ -28,7 +28,9 @@
     "precommit:update": "pre-commit autoupdate",
     "setup:hooks": "pre-commit install && pre-commit install --hook-type commit-msg",
     "install:approved": "node scripts/supply-chain/install-approved.mjs",
-    "test:ldap": "node scripts/acceptance/ldap.mjs"
+    "test:ldap": "node scripts/acceptance/ldap.mjs",
+    "test:ldap:ad": "node scripts/acceptance/ad.mjs",
+    "test:ldap:runner": "node --test scripts/acceptance/*.test.mjs"
   },
   "keywords": [
     "pabawi",

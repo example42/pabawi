@@ -1,6 +1,6 @@
 # LDAP authentication implementation plan
 
-**Status:** Packages 1 through 6 complete; package 7 local OpenLDAP/recovery and parser cleanup verified, blocked on actual AD
+**Status:** Packages 1 through 6 complete; package 7 CI integration, AD harness and runner failure checks implemented, blocked on actual AD
 **Date:** 2026-10-21  
 **Scope:** OpenLDAP and Active Directory authentication, directory group authorization, and provider-bound session revalidation
 
@@ -455,7 +455,7 @@ Update this table as work proceeds. Status values: `pending`, `in_progress`, `bl
 | 5A Provider context and wiring | complete | Commit `7f58092`, verified against current source | [2026-10-21 Codex](#handoff-2026-10-21-codex-package-5a) |
 | 5B LDAP login and transport enforcement | complete | Commit `56ea384`, verified against current source | [2026-10-21 Codex](#handoff-2026-10-21-codex-package-5b) |
 | 6 Frontend and operator documentation | complete | Commit `55c8107`, verified against current source | [2026-10-21 Codex](#handoff-2026-10-21-codex-package-6) |
-| 7 Interoperability and rollout | blocked | Branch `151`, base `55c8107`; local acceptance and approved parser cleanup complete; [acceptance evidence](ldap-acceptance.md) | [2026-10-21 Codex cleanup](#handoff-2026-10-21-codex-package-7-approved-cleanup) |
+| 7 Interoperability and rollout | blocked | Branch `151`, current base `7389784`; CI integration, opt-in AD harness and runner lifecycle regressions implemented; [acceptance evidence](ldap-acceptance.md) | [2026-10-21 Codex CI and harness](#handoff-2026-10-21-codex-package-7-ci-and-harness) |
 
 Append a record using the following fields after each implementation session. Use an actual commit hash when available, otherwise identify the branch/base and changed paths explicitly. Preserve prior records and correct outdated findings with a new entry.
 
@@ -1627,3 +1627,134 @@ closed.
 when available and complete every outstanding AD acceptance row. Keep package 7 blocked until that
 evidence exists. Use the reproducible acceptance runner for candidate changes and rehearse the target
 deployment's storage/service/secret procedures before deployment.
+
+
+## Handoff 2026-10-21 Codex package 7 CI and harness
+
+**Date and agent:** 2026-10-21, Codex.
+
+**Package and checkpoint:** Package 7 CI integration, opt-in AD harness and runner failure/interruption
+checks implemented. Package 7 remains blocked until actual AD evidence exists. No AD configuration
+was requested, no actual directory was accessed and no remote infrastructure was provisioned.
+
+**Branch, base commit, completion commit or uncommitted paths:** Branch `151`. Initial HEAD was
+`55c8107`; the existing package-7 work was committed concurrently as `7389784` during this session.
+Preserved the original staged changes, the concurrent commit and later staging activity. This agent
+created no commit and did not change the index. Additional changed/new paths:
+
+- `.github/workflows/ci.yml`, `package.json`, `playwright.ldap.config.ts`.
+- `scripts/acceptance/ldap.mjs`, `ldap-report.mjs`, `ldap.test.mjs`, `ci.test.mjs`, `ad.mjs`,
+  `ad-config.mjs` and `ad.test.mjs`, all under `scripts/acceptance/`.
+- `backend/test/fixtures/ldap/README.md`, `ad-lab.ts`, `ad-lab.example.json`, `tsconfig.ad.json`,
+  plus `backend/test/unit/ad-lab.test.ts`.
+- `docs/internal/plans/ldap-authentication.md` and `ldap-acceptance.md`.
+
+**Completed scope and changed interfaces:**
+
+CI uses a fail-fast=false PostgreSQL 15/17 matrix and the existing approved npm-install pattern.
+The owned acceptance runner builds OpenLDAP, exercises both TLS modes with SQLite/PostgreSQL and
+runs the separate LDAP Chromium configuration with `--focused --browser`. It checks actual server
+major version with `--postgres-major`, rejects missing/skipped/failed live and browser results, and
+retains JSON/JUnit, recovery archives/manifests, browser HTML and failure screenshots/traces on all
+outcomes. Upload scope is synthetic acceptance data only, with private keys, downloads and CA files
+excluded. No AD configuration or data enters this CI job.
+
+`npm run test:ldap:ad` provides strict explicit lab configuration and private local secret-file
+references. Absent configuration returns unavailable/not-run, adVerified=false, exit 1. Offline mode
+validates settings, CA, secret permissions/resolved paths and parsed OU boundaries without connecting.
+Only `--execute` opens a directory connection. The worker prepares both TLS modes, binary GUID
+queries, user/group rename/recreation, observable disabled/expired/password-expired/locked accounts,
+nested matching-rule/traversal, ranged large membership and controlled primary-transport failover to
+an equivalent actual controller. Mutations require generated-child scope, an ownership marker and
+unchanged GUID. Cleanup touches only owned objects and records incomplete work as failure. Synthetic
+ownership journals retain relative object names for manual investigation without directory topology
+or credentials. Actual execution and AD compatibility remain unverified.
+
+`npm run test:ldap:runner` automates scanner/readiness/subprocess/deadline failures and SIGINT/SIGTERM,
+including interrupted Docker creation and detached descendants that ignore SIGTERM. The optional
+LDAP_RUNNER_REAL_FAILURES=1 mode uses actual Docker containers. Fixes record attempted creation before
+Docker returns, give each readiness operation a separate deadline, preserve environment evidence on
+failure, stop new work after cancellation, terminate descendants across process groups and inspect
+shutdown. Signal exits are retained separately from numeric exit codes. Containers, volumes/data,
+archives and evidence are never removed automatically.
+
+**Verification: exact commands, outcomes, and external log reference:**
+
+Every mutation/network/verification command is recorded in `~/.agents/logs/pabawi.jsonl`, including
+runner child commands. The external `/tmp/pabawi-p7-command.py` wrapper logs literal multiline shell
+commands after completion. Documentation/source/status reads were read-only. No npm package was
+added or installed and no lockfile dependency changed. Actionlint 1.7.12 was downloaded from its
+upstream release, verified against the published SHA-256 and scanned with real ClamAV after execution.
+
+Commands from the repository root (supported Node prefix is explicit):
+
+~~~bash
+PATH=/tmp/pabawi-node24/node-v24.21.0-darwin-arm64/bin:$PATH npm run test:ldap -- --focused --browser --ldap-image pabawi-ldap-fixture:package3-verified --postgres-image postgres:15 --postgres-major 15 --output-root /tmp/pabawi-p7-candidate15 > /tmp/pabawi-p7-candidate15.log 2>&1
+PATH=/tmp/pabawi-node24/node-v24.21.0-darwin-arm64/bin:$PATH npm run test:ldap -- --focused --browser --ldap-image pabawi-ldap-fixture:package3-verified --postgres-image postgres:17 --postgres-major 17 --output-root /tmp/pabawi-p7-candidate17 > /tmp/pabawi-p7-candidate17.log 2>&1
+PATH=/tmp/pabawi-node24/node-v24.21.0-darwin-arm64/bin:$PATH npm run test:ldap -- --focused --browser --build-fixture --ldap-image pabawi-ldap-fixture:acceptance-ci-p7 --postgres-image postgres:17 --postgres-major 17 --output-root /tmp/pabawi-p7-built17 > /tmp/pabawi-p7-built17.log 2>&1
+PATH=/tmp/pabawi-node24/node-v24.21.0-darwin-arm64/bin:$PATH node --test scripts/acceptance/*.test.mjs > /tmp/pabawi-p7-runner-final.log 2>&1
+PATH=/tmp/pabawi-node24/node-v24.21.0-darwin-arm64/bin:$PATH LDAP_RUNNER_REAL_FAILURES=1 node --test scripts/acceptance/ldap.test.mjs > /tmp/pabawi-p7-runner-real-final.log 2>&1
+PATH=/tmp/pabawi-node24/node-v24.21.0-darwin-arm64/bin:$PATH npm run test --workspace=backend -- test/unit/ad-lab.test.ts > /tmp/pabawi-p7-ad-unit.log 2>&1
+PATH=/tmp/pabawi-node24/node-v24.21.0-darwin-arm64/bin:$PATH node backend/node_modules/typescript/bin/tsc --project backend/test/fixtures/ldap/tsconfig.ad.json > /tmp/pabawi-p7-ad-types.log 2>&1
+/tmp/pabawi-p7-actionlint/actionlint .github/workflows/ci.yml > /tmp/pabawi-p7-actionlint.log 2>&1
+PATH=/tmp/pabawi-node24/node-v24.21.0-darwin-arm64/bin:$PATH npm run build:backend > /tmp/pabawi-p7-next-build-backend.log 2>&1
+PATH=/tmp/pabawi-node24/node-v24.21.0-darwin-arm64/bin:$PATH npm run build:frontend > /tmp/pabawi-p7-next-build-frontend.log 2>&1
+PATH=/tmp/pabawi-node24/node-v24.21.0-darwin-arm64/bin:$PATH npm run lint > /tmp/pabawi-p7-next-lint.log 2>&1
+PATH=/tmp/pabawi-node24/node-v24.21.0-darwin-arm64/bin:$PATH npm run check:components > /tmp/pabawi-p7-next-components.log 2>&1
+PATH=/tmp/pabawi-node24/node-v24.21.0-darwin-arm64/bin:$PATH node --test scripts/documentation/contracts.test.mjs > /tmp/pabawi-p7-next-contracts.log 2>&1
+PATH=/Users/al/.cache/pre-commit/repovdso_3ip/py_env-python3/bin:$PATH bash scripts/quality/secret-scan.sh > /tmp/pabawi-p7-next-secrets.log 2>&1
+PATH=/Users/al/.cache/pre-commit/repovdso_3ip/py_env-python3/bin:$PATH python3 /tmp/pabawi-ldap-p7-final-scan.py > /tmp/pabawi-p7-next-secrets-changed.log 2>&1
+git diff HEAD --check
+~~~
+
+Each of the three live runs passes 252 cases, zero skipped, and all three dedicated browser cases.
+They used OpenLDAP 2.6.10 with PostgreSQL 15.17/17.11 and the supported Node 24.21.0 runtime. A later
+standalone ownership/cancellation regression increases the AD fixture-only suite to six passing cases.
+The default Node contracts cover 14 cases including a complete valid offline AD configuration, strict
+secret references, unavailable reporting, workflow wiring, report enforcement and lifecycle failures.
+Actual-Docker regressions additionally cover real fixture shutdown and interrupted creation. Test
+counts and retained case paths are in the final logs. Builds, workspace lint, component checks,
+fixture typechecking, actionlint and all seven documentation contracts pass. The tracked secret scan
+passes with 176 reviewed findings; the explicit changed/untracked-file scan finds zero new findings
+without modifying `.secrets.baseline`. Whitespace and external JSON Lines validation pass.
+
+Retained successful evidence:
+
+- `/tmp/pabawi-p7-candidate15/pabawi-ldap-acceptance-BP4dyF`.
+- `/tmp/pabawi-p7-candidate17/pabawi-ldap-acceptance-mmfqO5`.
+- `/tmp/pabawi-p7-built17/pabawi-ldap-acceptance-FMdXtp`.
+- `/tmp/pabawi-p7-session-evidence.json` indexes versions, image IDs and independent shutdown
+  verification. The real failure log contains exact additional `/var/folders/...` evidence paths;
+  synthetic CLI regression directories also remain retained there. No private keys were copied.
+- `/tmp/pabawi-p7-failure-clamav.log` records an independent real scan including intentionally
+  scanner-rejected downloads. Fixture copies are otherwise scanned by the runner itself.
+
+The workflow was validated locally, including fixture build, real protocols, browser commands and
+artifact generation. No GitHub-hosted Actions execution, remote workflow trigger or deployment occurred.
+
+**Pre-existing failures:** KiroGraph omitted the acceptance scripts and LDAP context, consistent with
+its previously stale/incomplete index; targeted source/caller inspection supplied context without
+reindexing. Direct ad-hoc tsc initially selected root TypeScript 6/Node 20 declarations; using the
+backend compiler and existing Node TLS declarations passes. The detached-grandchild red regression
+confirmed a real intermediate orchestration defect; its log is `/tmp/pabawi-p7-detached-red.log`.
+The first real failure-suite rerun used an unrealistically short normal readiness budget under load,
+so one subprocess case failed before its intended injection. Separating normal startup from the
+readiness-failure budget resolves it. Scanner findings on synthetic invalid-config vectors were
+reviewed and line-locally annotated. No unresolved repository gate reproduced on the final candidate.
+
+**Remaining work and blockers:** Actual Microsoft AD DS protocol/schema/policy/replication and
+large-directory evidence remain unavailable. The opt-in harness is prepared and locally tested,
+not actual AD acceptance. Target-environment staging and production operations remain separate work;
+real Proxmox interoperability is separately unverified. Package 7 stays blocked. No push, PR,
+deployment, remote workflow trigger, real-directory access, branch/file deletion or destructive
+repository cleanup was performed by this agent.
+
+**Decisions or discoveries affecting the next package:** The runtime authentication implementation,
+owned parser, migrations and dependency cleanup remain intact. Preserve all historical handoffs and
+this distinction between actual protocols, simulated provider/browser responses, harness safety and
+actual AD compatibility. Keep secret-bearing AD configuration outside CI artifacts and the repository.
+
+**Next action and acceptance criterion still to satisfy:** When separately authorized actual AD
+access exists, review the opt-in fixture guide and run the prepared matrix in that disposable lab.
+Keep actual AD evidence separate from mocks, OpenLDAP and Samba. Complete package 7 only when every
+required AD acceptance row has real passing evidence and the target deployment rehearsal is satisfied.
