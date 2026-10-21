@@ -1,3 +1,5 @@
+import { AuthenticationService } from "../../src/services/AuthenticationService";
+import { consoleAuthentication } from "../helpers/consoleUser";
 import { initializeTestSchema } from "../helpers/schema";
 import { ensureConsoleUser } from "../helpers/consoleUser";
 /**
@@ -133,8 +135,8 @@ async function insertSession(
     `INSERT INTO console_sessions (
       id, user_id, node_id, provider, transport, state,
       token, token_created_at, token_consumed, upstream_url,
-      started_at, last_heartbeat_at, session_version
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, 0)`,
+      started_at, last_heartbeat_at, session_version, auth_context
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, 0, ?)`,
     [
       params.sessionId,
       params.ownerUserId,
@@ -147,6 +149,7 @@ async function insertSession(
       params.consumed ? 1 : 0,
       now,
       now,
+      JSON.stringify((await consoleAuthentication(db, params.ownerUserId)).authContext),
     ],
   );
 }
@@ -164,6 +167,7 @@ describe("Feature: console-integration, Property 2: Session token validation cor
       CONSOLE_CONFIG,
       createMockLogger(),
       createMockAuditLogger(),
+      new AuthenticationService(db, "console-property-fixture-jwt-secret"),
     );
   });
 

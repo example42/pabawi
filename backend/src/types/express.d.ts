@@ -24,6 +24,7 @@ declare global {
       };
       mcpAuthMethod?: 'jwt' | 'static';
       authContext?: AuthenticationContext;
+      authSessionVersion?: string;
       revalidateAuth?: () => Promise<void>;
       /** Execution snapshot checked by the mutation authorization middleware. */
       authorizedExecution?: ExecutionRecord;

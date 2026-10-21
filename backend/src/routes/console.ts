@@ -132,7 +132,7 @@ export function createConsoleRouter(
     asyncHandler(rbacMiddleware("console", "access")),
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const userId = req.user?.userId;
-      if (!userId) {
+      if (!userId || !req.authContext || !req.authSessionVersion) {
         res.status(401).json({
           error: { code: "UNAUTHORIZED", message: "Authentication required" },
         });
@@ -209,6 +209,7 @@ export function createConsoleRouter(
       try {
         reservation = await sessionManager.reserveSession({
           userId, nodeId: resolvedNodeId, provider: providerName, transport,
+          authContext: req.authContext, sessionVersion: req.authSessionVersion,
         });
       } catch (error) {
         if (error instanceof ConsoleCapacityError) {

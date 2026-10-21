@@ -7,3 +7,9 @@ export async function ensureConsoleUser(db: DatabaseAdapter, userId: string): Pr
     [userId, userId, `${userId}@example.test`],
   );
 }
+
+export async function consoleAuthentication(db: DatabaseAdapter, userId: string) {
+  const row = await db.queryOne<{ sessionVersion: string }>('SELECT session_version AS "sessionVersion" FROM users WHERE id = ?', [userId]);
+  if (!row) throw new Error('Missing console fixture account');
+  return { authContext: { provider: 'local' as const, identityId: null }, sessionVersion: row.sessionVersion };
+}

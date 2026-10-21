@@ -174,9 +174,9 @@ for (const dialect of ['sqlite', 'postgres'] as const) {
         VALUES ('console', ?, 'node', 'proxmox', 'websocket-vnc', 'active', ?, ?)`, [user.id, now, (jwt.decode(local.token) as jwt.JwtPayload).sessionVersion]);
       const accountColumns = 'id, username, email, password_hash, local_auth_enabled, first_name, last_name, is_active, is_admin, created_at, updated_at';
       const account = await db.query(`SELECT ${accountColumns} FROM users`);
-      const tables = ['federated_identities', 'user_roles', 'effective_user_roles', 'console_sessions'];
+      const tables = ['federated_identities', 'user_roles', 'effective_user_roles'];
       const before = await Promise.all(tables.map(table => db.query(`SELECT * FROM ${table}`)));
-      expect(await new MigrationRunner(db).runPendingMigrations()).toBe(1);
+      expect(await new MigrationRunner(db).runPendingMigrations()).toBe(3);
       expect(await db.query(`SELECT ${accountColumns} FROM users`)).toEqual(account);
       expect(await Promise.all(tables.map(table => db.query(`SELECT * FROM ${table}`)))).toEqual(before);
       for (const pair of [local, federated, { token: legacy, refreshToken: legacyRefresh }]) {

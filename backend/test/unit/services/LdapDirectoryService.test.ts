@@ -125,7 +125,7 @@ describe('read-only LDAP directory transactions', () => {
     const bound = fixture();
     vi.mocked(bound.lookup.bind).mockRejectedValue(new InvalidCredentialsError('private lookup password'));
     const lookup = await bound.service.diagnose({});
-    expect(lookup.stages.at(-1)).toMatchObject({ stage: 'lookup', status: 'failed', code: 'INVALID_CREDENTIALS' });
+    expect(lookup.stages.at(-1)).toMatchObject({ stage: 'lookup', status: 'failed', code: 'UNAVAILABLE' });
     const limited = fixture([[user], [user], [group], new SizeLimitExceededError('private server message')]);
     const result = await limited.service.diagnose({ username: 'alice', groupSubjects: [groupId] });
     expect(result.groupSubjects).toBeUndefined();
@@ -216,7 +216,7 @@ describe('read-only LDAP directory transactions', () => {
 
   it('fails over connection establishment, but never retries lookup credentials', async () => {
     const f = fixture();
-    const connect = vi.fn<LdapConnector>().mockRejectedValueOnce(new Error('TCP unavailable'))
+    const connect = vi.fn<LdapConnector>().mockRejectedValueOnce(Object.assign(new Error('TCP unavailable'), { code: 'ECONNREFUSED' }))
       .mockResolvedValueOnce(f.lookup).mockResolvedValue(f.userConnection);
     const service = new LdapDirectoryService({ ...config, failoverEndpoints: [{ hostname: 'other.test', port: 636 }] }, f.logger, connect);
     await service.authenticate('alice', fixturePassword);
@@ -224,8 +224,22 @@ describe('read-only LDAP directory transactions', () => {
     expect(connect.mock.calls[2][1].hostname).toBe('other.test');
     vi.mocked(f.lookup.bind).mockRejectedValue(new InvalidCredentialsError());
     connect.mockClear().mockResolvedValue(f.lookup);
-    await expect(service.authenticate('alice', fixturePassword)).rejects.toMatchObject({ code: 'INVALID_CREDENTIALS' });
+    await expect(service.authenticate('alice', fixturePassword)).rejects.toMatchObject({ code: 'UNAVAILABLE' });
     expect(connect).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not fail over TLS or protocol validation failures', async () => {
+    const f = fixture();
+    const connect = vi.fn<LdapConnector>().mockRejectedValueOnce(Object.assign(new Error('private diagnostic'), { code: 'ERR_TLS_CERT_ALTNAME_INVALID' }))
+      .mockResolvedValue(f.lookup);
+    const service = new LdapDirectoryService({ ...config, failoverEndpoints: [{ hostname: 'other.test', port: 636 }] }, f.logger, connect);
+    await expect(service.authenticate('alice', fixturePassword)).rejects.toMatchObject({ code: 'UNAVAILABLE' });
+    expect(connect).toHaveBeenCalledOnce();
+  });
+
+  it('treats ambiguous immutable revalidation as incomplete evidence, not positive revocation', async () => {
+    const f = fixture([[user, user]]);
+    await expect(f.service.revalidate(subject)).rejects.toMatchObject({ code: 'INCOMPLETE_RESULT' });
   });
 
   it('revalidates by immutable subject without a user password or user bind', async () => {

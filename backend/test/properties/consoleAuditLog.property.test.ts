@@ -1,3 +1,5 @@
+import { AuthenticationService } from "../../src/services/AuthenticationService";
+import { consoleAuthentication } from "../helpers/consoleUser";
 import { ensureConsoleUser } from "../helpers/consoleUser";
 /**
  * Property-Based Tests for Console Audit Log Completeness
@@ -132,6 +134,7 @@ describe("Feature: console-integration, Property 9: Audit log completeness for s
       DEFAULT_CONSOLE_CONFIG,
       logger,
       auditLogger,
+      new AuthenticationService(db, "console-property-fixture-jwt-secret"),
     );
   });
 
@@ -149,7 +152,7 @@ describe("Feature: console-integration, Property 9: Audit log completeness for s
         await db.execute("DELETE FROM console_sessions");
 
         await ensureConsoleUser(db, data.userId);
-        const reservation = await sessionManager.reserveSession(data);
+        const reservation = await sessionManager.reserveSession({ ...data, ...await consoleAuthentication(db, data.userId) });
 
         expect(auditLogger.calls.length).toBe(1);
         const call = auditLogger.calls[0];
@@ -184,7 +187,7 @@ describe("Feature: console-integration, Property 9: Audit log completeness for s
 
           // First reserve the session so terminateSession can find it
           await ensureConsoleUser(db, data.userId);
-          const reservation = await sessionManager.reserveSession(data);
+          const reservation = await sessionManager.reserveSession({ ...data, ...await consoleAuthentication(db, data.userId) });
           await sessionManager.activateSession(reservation.sessionId);
 
           // Clear audit calls from the reservation

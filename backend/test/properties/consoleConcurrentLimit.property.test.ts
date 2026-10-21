@@ -1,3 +1,5 @@
+import { AuthenticationService } from "../../src/services/AuthenticationService";
+import { consoleAuthentication } from "../helpers/consoleUser";
 import { initializeTestSchema } from "../helpers/schema";
 import { ensureConsoleUser } from "../helpers/consoleUser";
 /**
@@ -65,7 +67,7 @@ describe("Feature: console-integration, Property 7: Concurrent session limit enf
   });
 
   function makeManager(maxConcurrent: number): ConsoleSessionManager {
-    return new ConsoleSessionManager(db, makeConfig(maxConcurrent), makeLogger(), makeAuditLogger());
+    return new ConsoleSessionManager(db, makeConfig(maxConcurrent), makeLogger(), makeAuditLogger(), new AuthenticationService(db, "console-property-fixture-jwt-secret"));
   }
 
   /** Reserve and activate one session, the shape the create route produces. */
@@ -76,7 +78,7 @@ describe("Feature: console-integration, Property 7: Concurrent session limit enf
   ): Promise<string> {
     await ensureConsoleUser(db, userId);
     const reservation = await manager.reserveSession({
-      userId, nodeId: `node-${String(index)}`, provider: "proxmox", transport: "websocket-vnc",
+      ...await consoleAuthentication(db, userId), userId, nodeId: `node-${String(index)}`, provider: "proxmox", transport: "websocket-vnc",
     });
     await manager.activateSession(reservation.sessionId);
     return reservation.sessionId;
@@ -117,7 +119,7 @@ describe("Feature: console-integration, Property 7: Concurrent session limit enf
           }
 
           await expect(manager.reserveSession({
-            userId, nodeId: "node-over", provider: "proxmox", transport: "websocket-vnc",
+            ...await consoleAuthentication(db, userId), userId, nodeId: "node-over", provider: "proxmox", transport: "websocket-vnc",
           })).rejects.toThrow(ConsoleCapacityError);
 
           // The refusal admits nothing: no extra row, so no provider resource
@@ -139,14 +141,14 @@ describe("Feature: console-integration, Property 7: Concurrent session limit enf
 
           const manager = makeManager(1);
           await manager.reserveSession({
-            userId, nodeId: "node-1", provider: "proxmox", transport: "websocket-vnc",
+            ...await consoleAuthentication(db, userId), userId, nodeId: "node-1", provider: "proxmox", transport: "websocket-vnc",
           });
 
           // Still 'creating': the slot is held while the provider works, which
           // is what stops a second request from racing into the same slot.
           expect(await manager.getActiveSessionCount(userId)).toBe(0);
           await expect(manager.reserveSession({
-            userId, nodeId: "node-2", provider: "proxmox", transport: "websocket-vnc",
+            ...await consoleAuthentication(db, userId), userId, nodeId: "node-2", provider: "proxmox", transport: "websocket-vnc",
           })).rejects.toThrow(ConsoleCapacityError);
         },
       ),
@@ -166,8 +168,8 @@ describe("Feature: console-integration, Property 7: Concurrent session limit enf
           const manager = makeManager(maxConcurrent);
           const attempts = maxConcurrent + 3;
           const outcomes = await Promise.allSettled(
-            Array.from({ length: attempts }, (_, index) => manager.reserveSession({
-              userId, nodeId: `node-${String(index)}`, provider: "proxmox", transport: "websocket-vnc",
+            Array.from({ length: attempts }, async (_, index) => manager.reserveSession({
+              ...await consoleAuthentication(db, userId), userId, nodeId: `node-${String(index)}`, provider: "proxmox", transport: "websocket-vnc",
             })),
           );
 
@@ -211,7 +213,7 @@ describe("Feature: console-integration, Property 7: Concurrent session limit enf
 
           // Terminated sessions released their slots, so the cap admits again.
           await expect(manager.reserveSession({
-            userId, nodeId: "node-next", provider: "proxmox", transport: "websocket-vnc",
+            ...await consoleAuthentication(db, userId), userId, nodeId: "node-next", provider: "proxmox", transport: "websocket-vnc",
           })).resolves.toBeDefined();
         },
       ),

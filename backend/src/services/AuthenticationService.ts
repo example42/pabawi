@@ -5,6 +5,7 @@ import crypto from 'crypto';
 import type { AuditLoggingService } from './AuditLoggingService';
 import { performanceMonitor } from './PerformanceMonitor';
 import { LoggerService } from './LoggerService';
+import { ldapAuthenticationFailure } from './LdapAuthenticationService';
 
 /**
  * Authentication result returned after successful authentication
@@ -15,11 +16,17 @@ export interface AuthResult {
   refreshToken?: string;
   user?: UserDTO;
   error?: string;
+  errorStatus?: number;
+  errorCode?: string;
 }
 
 export type AuthenticationContext =
   | { provider: 'local'; identityId: null }
-  | { provider: 'entra-id'; identityId: string };
+  | { provider: 'entra-id'; identityId: string }
+  | { provider: 'ldap'; identityId: string; directoryId: string };
+
+export type LdapSessionEligibility = (userId: string, identityId: string, directoryId: string,
+  expectedVersion: string, force: boolean) => Promise<void>;
 
 export class InvalidAuthenticationContextError extends Error {
   readonly code = 'INVALID_TOKEN';
@@ -30,9 +37,12 @@ export class InvalidAuthenticationContextError extends Error {
   }
 }
 
-function isAuthenticationContext(value: unknown): value is AuthenticationContext {
+export function isAuthenticationContext(value: unknown): value is AuthenticationContext {
   if (typeof value !== 'object' || value === null) return false;
   const context = value as Record<string, unknown>;
+  if (context.provider === 'ldap') return Object.keys(context).length === 3 &&
+    typeof context.identityId === 'string' && context.identityId.length > 0 &&
+    typeof context.directoryId === 'string' && /^[a-zA-Z0-9_-]{1,128}$/.test(context.directoryId);
   if (Object.keys(context).length !== 2) return false;
   return (context.provider === 'local' && context.identityId === null) ||
     (context.provider === 'entra-id' && typeof context.identityId === 'string' && context.identityId.length > 0);
@@ -140,6 +150,7 @@ export class AuthenticationService {
     jwtSecret?: string,
     auditLogger?: AuditLoggingService,
     bcryptCostFactor?: number,
+    private readonly ldapEligibility?: LdapSessionEligibility,
   ) {
     this.db = db;
     this.auditLogger = auditLogger;
@@ -475,7 +486,7 @@ export class AuthenticationService {
         return { success: false, error: 'Invalid refresh token' };
       }
 
-      await this.assertSessionEligible(payload.userId, payload.authContext, payload.sessionVersion);
+      await this.assertSessionEligible(payload.userId, payload.authContext, payload.sessionVersion, true);
 
       // Reuse detection: a revoked refresh token being presented is treated
       // as compromise — revoke the entire token family for this user.
@@ -517,6 +528,8 @@ export class AuthenticationService {
       if (error instanceof Error && error.message === 'Token has been revoked') {
         return { success: false, error: 'Refresh token has been revoked' };
       }
+      const failure = ldapAuthenticationFailure(error);
+      if (failure) return { success: false, error: failure.message, errorStatus: failure.status, errorCode: failure.code };
       return { success: false, error: error instanceof Error && error.message === 'User not found or inactive' ? error.message : 'Token refresh failed' };
     }
   }
@@ -596,7 +609,7 @@ export class AuthenticationService {
   }
 
   /** Common account/provider eligibility boundary for token and transport checks. */
-  public async assertSessionEligible(userId: string, context: AuthenticationContext, expectedVersion?: string): Promise<string> {
+  public async assertSessionEligible(userId: string, context: AuthenticationContext, expectedVersion?: string, force = false): Promise<string> {
     if (!isAuthenticationContext(context)) throw new InvalidAuthenticationContextError();
     const user = await this.db.queryOne<{ isActive: number; sessionVersion: string; localAuthEnabled: number }>(
       'SELECT is_active AS "isActive", session_version AS "sessionVersion", local_auth_enabled AS "localAuthEnabled" FROM users WHERE id = ?',
@@ -612,6 +625,13 @@ export class AuthenticationService {
         [context.identityId, userId, context.provider],
       );
       if (!identity) throw new InvalidAuthenticationContextError();
+      if (context.provider === 'ldap') {
+        if (!this.ldapEligibility) throw new InvalidAuthenticationContextError();
+        await this.ldapEligibility(userId, context.identityId, context.directoryId, user.sessionVersion, force);
+        const current = await this.db.queryOne<{ sessionVersion: string; isActive: number }>(
+          'SELECT session_version AS "sessionVersion", is_active AS "isActive" FROM users WHERE id = ?', [userId]);
+        if (current?.isActive !== 1 || current.sessionVersion !== user.sessionVersion) throw new Error('Token has been revoked');
+      }
     }
     return user.sessionVersion;
   }
@@ -824,6 +844,20 @@ export class AuthenticationService {
       // Fail secure: don't lock account on error
       return { isLocked: false };
     }
+  }
+
+  private ldapLoginKey(directoryId: string, login: string): string {
+    return 'ldap:' + crypto.createHash('sha256').update(JSON.stringify(['ldap', directoryId, login])).digest('hex');
+  }
+
+  public async isLdapLoginLocked(directoryId: string, login: string): Promise<boolean> {
+    return (await this.checkAccountLockout(this.ldapLoginKey(directoryId, login))).isLocked;
+  }
+
+  public async recordLdapLoginOutcome(directoryId: string, login: string, success: boolean, ip?: string): Promise<void> {
+    const key = this.ldapLoginKey(directoryId, login);
+    if (success) await this.clearFailedLoginAttempts(key);
+    else await this.recordFailedLoginAttempt(key, 'INVALID_CREDENTIALS', ip);
   }
 
   /**

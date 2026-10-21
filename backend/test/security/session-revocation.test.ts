@@ -1,3 +1,4 @@
+import { consoleAuthentication } from "../helpers/consoleUser";
 import { beforeAll, afterAll, beforeEach, afterEach, describe, it, expect, vi } from 'vitest';
 import express from 'express';
 import request from 'supertest';
@@ -180,7 +181,7 @@ describe('A05: token purpose and durable revocation', () => {
     await users.updateUser(user.id, { isAdmin: true });
     const config = ConsoleConfigSchema.parse({});
     const broker = new ConsoleConnectionBroker(new LoggerService());
-    const manager = new ConsoleSessionManager(database.getAdapter(), config, new LoggerService(), new AuditLoggingService(database.getAdapter()), broker);
+    const manager = new ConsoleSessionManager(database.getAdapter(), config, new LoggerService(), new AuditLoggingService(database.getAdapter()), auth, broker);
     const termination = vi.spyOn(manager, "terminateSession");
     const upstream = new WebSocketServer({ host: '127.0.0.1', port: 0 });
     await once(upstream, 'listening');
@@ -189,7 +190,7 @@ describe('A05: token purpose and durable revocation', () => {
     const local = await createHttpHarness();
     const server = local.use(express());
     new ConsoleWebSocketProxy(server, manager, { allowedOrigins: ['http://localhost'], console: config }, new LoggerService(), broker);
-    const reservation = await manager.reserveSession({ userId: user.id, nodeId: 'node', provider: 'proxmox', transport: 'websocket-vnc' });
+    const reservation = await manager.reserveSession({ ...await consoleAuthentication(database.getAdapter(), user.id), userId: user.id, nodeId: 'node', provider: 'proxmox', transport: 'websocket-vnc' });
     // Connection material reaches the proxy through the broker, never the database.
     broker.offer(reservation.sessionId, `ws://127.0.0.1:${upstreamAddress.port}`);
     await manager.activateSession(reservation.sessionId);
@@ -205,7 +206,7 @@ describe('A05: token purpose and durable revocation', () => {
       await Promise.all([clientClosed, peerClosed]);
       // The token was consumed by this upgrade, so a fresh one for the same
       // revoked account is what proves no second console can be opened.
-      await expect(manager.reserveSession({ userId: user.id, nodeId: 'node', provider: 'proxmox', transport: 'websocket-vnc' }))
+      await expect(manager.reserveSession({ ...await consoleAuthentication(database.getAdapter(), user.id), userId: user.id, nodeId: 'node', provider: 'proxmox', transport: 'websocket-vnc' }))
         .rejects.toThrow('User not found or inactive');
     } finally {
       client.terminate();

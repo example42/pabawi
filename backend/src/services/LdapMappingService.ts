@@ -45,13 +45,18 @@ export class LdapMappingService {
   // Callers supply only database work; directory I/O must finish before acquiring this lock.
   public async withRevision<T>(revision: LdapMappingRevision, work: () => Promise<T>): Promise<T> {
     return this.db.withTransaction(async () => {
-      if (revision.directoryId !== this.directoryId) throw new LdapAdministrationError('STALE_REVISION');
-      const locked = await this.db.execute(`UPDATE ldap_directory_state SET mapping_revision = mapping_revision
-        WHERE directory_id = ? AND mapping_revision = ? AND config_revision = ?`,
-      [this.directoryId, revision.mappingRevision, revision.configRevision]);
-      if (locked.changes !== 1) throw new LdapAdministrationError('STALE_REVISION');
+      await this.lockRevision(revision);
       return work();
     });
+  }
+
+  /** Caller owns the surrounding transaction, including provisioning and lease fencing. */
+  public async lockRevision(revision: LdapMappingRevision): Promise<void> {
+    if (revision.directoryId !== this.directoryId) throw new LdapAdministrationError('STALE_REVISION');
+    const locked = await this.db.execute(`UPDATE ldap_directory_state SET mapping_revision = mapping_revision
+      WHERE directory_id = ? AND mapping_revision = ? AND config_revision = ?`,
+    [this.directoryId, revision.mappingRevision, revision.configRevision]);
+    if (locked.changes !== 1) throw new LdapAdministrationError('STALE_REVISION');
   }
 
   public async list(): Promise<LdapMapping[]> {

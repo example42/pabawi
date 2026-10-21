@@ -20,6 +20,8 @@ import { ZodError } from "zod";
 import { createAuthMiddleware } from "../middleware/authMiddleware";
 import { type DIContainer, createDefaultContainer, resolveAuthenticationService } from "../container/DIContainer";
 import type { EntraIdService } from "../services/EntraIdService";
+import { ldapAuthenticationFailure } from "../services/LdapAuthenticationService";
+import { AuditLoggingService } from "../services/AuditLoggingService";
 
 /**
  * Zod schema for user registration
@@ -114,10 +116,48 @@ export function createAuthRouter(
       if (entraIdService) {
         providers.entraId = entraIdService.getProviderInfo();
       }
+      if (container.has('ldapAuthentication')) {
+        const config = container.resolve('config').getLdapConfig();
+        if (config) providers.ldap = { enabled: true, name: config.displayName, loginHelpUrl: config.loginHelpUrl };
+      }
 
       res.status(200).json(providers);
     }),
   );
+
+  const ldapLoginSchema = z.object({
+    username: z.string().min(1).max(1024).refine(value => Buffer.byteLength(value) <= 1024),
+    password: z.string().min(1).max(4096).refine(value => Buffer.byteLength(value) <= 4096),
+  }).strict();
+  router.post('/ldap/login', asyncHandler(async (req, res): Promise<void> => {
+    res.setHeader('Cache-Control', 'no-store');
+    const ldap = container.has('ldapAuthentication') ? container.resolve('ldapAuthentication') : undefined;
+    const config = ldap ? container.resolve('config').getLdapConfig() : undefined;
+    if (!ldap || !config) { res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Not found' } }); return; }
+    const parsed = ldapLoginSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: { code: 'VALIDATION_ERROR', message: 'Invalid LDAP login request' } }); return;
+    }
+    const { username, password } = parsed.data;
+    const audit = new AuditLoggingService(databaseService.getAdapter());
+    if (await authService.isLdapLoginLocked(config.directoryId, username)) {
+      res.status(429).json({ error: { code: 'RATE_LIMITED', message: 'Too many authentication attempts' } }); return;
+    }
+    try {
+      const proof = await ldap.authenticate(username, password);
+      const tokens = await authService.generateTokenPair(proof.user,
+        { provider: 'ldap', identityId: proof.identityId, directoryId: proof.directoryId }, proof.sessionVersion);
+      await authService.recordLdapLoginOutcome(config.directoryId, username, true);
+      await audit.logAuthenticationAttempt('ldap:' + config.directoryId, true, proof.user.id, req.ip, req.headers['user-agent']);
+      res.json({ ...tokens, user: userService.toUserDTO(proof.user) });
+    } catch (error) {
+      const failure = ldapAuthenticationFailure(error);
+      if (failure?.code === 'INVALID_CREDENTIALS') await authService.recordLdapLoginOutcome(config.directoryId, username, false, req.ip);
+      await audit.logAuthenticationAttempt('ldap:' + config.directoryId, false, null, req.ip, req.headers['user-agent'], failure?.code ?? 'INTERNAL_ERROR');
+      if (!failure) throw error;
+      res.status(failure.status).json({ error: { code: failure.code, message: failure.message } });
+    }
+  }));
 
   /**
    * POST /api/auth/register
@@ -539,9 +579,9 @@ export function createAuthRouter(
           }
 
           // Return error response
-          res.status(statusCode).json({
+          res.status(authResult.errorStatus ?? statusCode).json({
             error: {
-              code: statusCode === 400 ? "INVALID_REFRESH_TOKEN" : "REFRESH_TOKEN_EXPIRED",
+              code: authResult.errorCode ?? (statusCode === 400 ? "INVALID_REFRESH_TOKEN" : "REFRESH_TOKEN_EXPIRED"),
               message: authResult.error ?? "Token refresh failed",
             },
           });

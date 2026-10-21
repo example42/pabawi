@@ -45,4 +45,10 @@ export class SessionAuthorization {
     this.closed = true;
     clearInterval(this.timer);
   }
+
+  async finish(action: () => void): Promise<void> {
+    await this.pending;
+    this.deliver(action);
+    this.close();
+  }
 }

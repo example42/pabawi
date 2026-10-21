@@ -1,3 +1,4 @@
+import { consoleAuthentication } from "../helpers/consoleUser";
 /**
  * Console session lifecycle against a live fake upstream (A15 / I06, S08, S09).
  *
@@ -133,7 +134,7 @@ describe('A15: console session lifecycle', () => {
     broker = new ConsoleConnectionBroker(new LoggerService());
     attachments = vi.spyOn(broker, 'attach');
     manager = new ConsoleSessionManager(
-      db, consoleConfig, new LoggerService(), new AuditLoggingService(db), broker,
+      db, consoleConfig, new LoggerService(), new AuditLoggingService(db), auth, broker,
       // The same bridge server.ts wires: the manager owns the transitions and
       // has no plugin registry, so provider cleanup arrives from outside.
       (providerName: string, sessionId: string): Promise<boolean> => {
@@ -313,7 +314,7 @@ describe('A15: console session lifecycle', () => {
 
     it('refuses a session whose provider produced no upstream', async () => {
       const reservation = await manager.reserveSession({
-        userId: owner.id, nodeId: 'proxmox:pve:101', provider: 'proxmox', transport: 'websocket-vnc',
+        ...await consoleAuthentication(database.getAdapter(), owner.id), userId: owner.id, nodeId: 'proxmox:pve:101', provider: 'proxmox', transport: 'websocket-vnc',
       });
       await manager.activateSession(reservation.sessionId);
 
@@ -518,7 +519,7 @@ describe('A15: console session lifecycle', () => {
 
       try {
         const reservation = await manager.reserveSession({
-          userId: owner.id, nodeId: 'proxmox:pve:102', provider: 'proxmox', transport: 'websocket-vnc',
+          ...await consoleAuthentication(database.getAdapter(), owner.id), userId: owner.id, nodeId: 'proxmox:pve:102', provider: 'proxmox', transport: 'websocket-vnc',
         });
         broker.offer(reservation.sessionId, `ws://127.0.0.1:${String(slowPort)}`);
         await manager.activateSession(reservation.sessionId);

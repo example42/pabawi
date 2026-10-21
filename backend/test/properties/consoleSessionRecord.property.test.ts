@@ -1,3 +1,5 @@
+import { AuthenticationService } from "../../src/services/AuthenticationService";
+import { consoleAuthentication } from "../helpers/consoleUser";
 import { initializeTestSchema } from "../helpers/schema";
 import { ensureConsoleUser } from "../helpers/consoleUser";
 /**
@@ -108,6 +110,7 @@ describe("Feature: console-integration, Property 8: Session record completeness"
       defaultConfig,
       createMockLogger(),
       createMockAuditLogger(),
+      new AuthenticationService(db, "console-property-fixture-jwt-secret"),
     );
   });
 
@@ -120,7 +123,7 @@ describe("Feature: console-integration, Property 8: Session record completeness"
       fc.asyncProperty(reservationRequestArb, async (request) => {
         await db.execute("DELETE FROM console_sessions");
         await ensureConsoleUser(db, request.userId);
-        const reservation = await sessionManager.reserveSession(request);
+        const reservation = await sessionManager.reserveSession({ ...request, ...await consoleAuthentication(db, request.userId) });
 
         const row = await db.queryOne<{
           id: string | null;
@@ -152,7 +155,7 @@ describe("Feature: console-integration, Property 8: Session record completeness"
       fc.asyncProperty(reservationRequestArb, async (request) => {
         await db.execute("DELETE FROM console_sessions");
         await ensureConsoleUser(db, request.userId);
-        const reservation = await sessionManager.reserveSession(request);
+        const reservation = await sessionManager.reserveSession({ ...request, ...await consoleAuthentication(db, request.userId) });
 
         const row = await db.queryOne<{
           id: string;

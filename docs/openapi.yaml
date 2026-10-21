@@ -3127,6 +3127,45 @@ paths:
                 $ref: '#/components/schemas/Error'
       security: []
 
+  /auth/ldap/login:
+    post:
+      summary: Authenticate explicitly with the configured LDAP directory
+      description: Available when LDAP is enabled. Preserves submitted credentials, applies provider/directory/login
+        and IP throttling, and never falls through to another provider. Requires a successful user bind,
+        complete eligibility validation and at least one explicit role before issuing tokens. UTF-8 byte
+        limits are 1024 for username and 4096 for password. No automatic role is assigned.
+      tags: [Auth]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [username, password]
+              properties:
+                username: { type: string, minLength: 1, maxLength: 1024 }
+                password: { type: string, format: password, minLength: 1, maxLength: 4096 }
+      responses:
+        '200':
+          description: Provider-bound token pair and current directory-owned profile
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthenticationResult' }
+        '400':
+          description: Invalid login payload
+        '401':
+          description: Invalid or ambiguous credentials, without account-existence details
+        '403':
+          description: Proven account has no explicit access grant or is suspended
+        '404':
+          description: LDAP authentication is not enabled
+        '429':
+          description: IP, provider-login or directory capacity limit reached
+        '503':
+          description: Directory validation unavailable or incomplete; no tokens issued
+
   /auth/permissions:
     get:
       summary: Get the caller's effective permissions
@@ -3907,7 +3946,9 @@ paths:
   /auth/refresh:
     post:
       summary: Rotate token pair
-      description: Accepts only a refresh token; revocation and account status are checked. Store both returned
+      description: Accepts only a refresh token; revocation and account status are checked. LDAP forces fresh
+        directory eligibility and explicit role validation while retaining exact authentication context.
+        A temporary failure preserves the inbound token for retry and does not extend freshness. Store both returned
         tokens.
       tags:
       - Auth
@@ -3922,6 +3963,12 @@ paths:
           description: Invalid body
         '401':
           description: Invalid or revoked refresh token
+        '403':
+          description: LDAP eligibility or explicit access was positively revoked
+        '429':
+          description: LDAP validation capacity limit reached
+        '503':
+          description: LDAP validation temporarily unavailable; the inbound refresh remains available for retry
       security: []
       requestBody:
         required: true
@@ -3938,7 +3985,8 @@ paths:
   /auth/providers:
     get:
       summary: Discover authentication methods
-      description: Public provider discovery.
+      description: Public provider discovery. LDAP remains advertised during outages. No connection, directory
+        identifier, search configuration or credentials are exposed.
       tags:
       - Auth
       responses:
@@ -3953,6 +4001,14 @@ paths:
                     type: boolean
                   entraId:
                     type: object
+                  ldap:
+                    type: object
+                    required: [enabled, name, loginHelpUrl]
+                    additionalProperties: false
+                    properties:
+                      enabled: { type: boolean, enum: [true] }
+                      name: { type: string }
+                      loginHelpUrl: { type: string }
       security: []
 
   /auth/register:

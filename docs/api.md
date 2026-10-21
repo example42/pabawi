@@ -24,12 +24,19 @@ exchange. Generic inventory lifecycle requests also accept the scoped machine
 credential described below. `/mcp` has its own [authentication policy](mcp.md).
 
 Access and refresh JWTs carry signed `authContext`: `{ "provider": "local", "identityId": null }`
-or `{ "provider": "entra-id", "identityId": "<federated-identity-id>" }`. The server checks local
+or `{ "provider": "entra-id", "identityId": "<federated-identity-id>" }`, or
+`{ "provider": "ldap", "identityId": "<federated-identity-id>", "directoryId": "<configured-directory>" }`. The server checks local
 authentication scope or exact identity ownership on issuance, verification and rotation.
 Refresh preserves the authenticating identity even for an account enrolled in multiple providers.
 Migration 032 intentionally invalidates existing account sessions, console credentials and pending
 OAuth state/code exchanges once. Users must sign in again; legacy tokens without context are rejected.
-LDAP discovery, login and token issuance remain unavailable until session enforcement is complete.
+LDAP sessions require current directory eligibility and at least one explicit role. Successful directory reads
+remain usable for at most `LDAP_REVALIDATION_INTERVAL_SECONDS` from their start; every refresh forces a new
+check, coalescing only overlapping work. REST, execution/journal SSE, MCP and console websockets use the same
+eligibility boundary. Transient failures preserve grants and tokens but block stale access; recovery permits
+valid tokens to resume. Confirmed ineligibility or loss of every role revokes existing LDAP sessions permanently.
+Migration 034 preserves console rows and adds their exact authentication context. Legacy console rows lacking
+that context cannot upgrade. Local and Entra sessions do not depend on directory availability.
 
 The [OpenAPI contract](openapi.yaml) describes the REST subset tracked by
 [contract coverage](api-contract-coverage.md), including intentional omissions.
@@ -838,10 +845,28 @@ managed in Pabawi. LDAP login is not yet available.
 | Method | Endpoint | Description |
 |---|---|---|
 | `POST` | `/api/auth/login` | Login, returns token, refreshToken and user |
+| `POST` | `/api/auth/ldap/login` | Explicit LDAP password login; same successful DTO as local login |
 | `POST` | `/api/auth/refresh` | Rotate token pair using refreshToken in the body |
 | `POST` | `/api/auth/register` | Register when self-registration is enabled |
 | `POST` | `/api/auth/logout` | Logout (includes `entraIdLogoutUrl` for SSO sessions) |
 | `GET` | `/api/auth/providers` | Available auth methods (public, no auth required) |
+
+LDAP login is available when `LDAP_ENABLED=true`; otherwise it returns 404. Submit
+`{ "username": "<directory login>", "password": "<directory password>" }`.
+Both fields must be nonempty, with UTF-8 limits of 1024 and 4096 bytes respectively.
+The submitted case, login whitespace and password are preserved. Requests never fall through
+to another provider. A failed or ambiguous credential check returns generic 401; a proven account
+without access returns 403. Capacity or throttling returns 429, and unavailable/incomplete directory
+validation returns 503 with safe error codes. Refresh and protected REST checks use the same temporary
+unavailability semantics. Failed refresh validation leaves the inbound refresh token available for retry.
+
+The existing IP authentication limit includes LDAP. Failed credential counters use a separate
+`ldap:` namespace with SHA-256 over the structured tuple `["ldap", directoryId, submittedLogin]`.
+Five failed credentials in fifteen minutes temporarily lock that key for fifteen minutes.
+Local usernames and other directories use independent account counters. Credential failures never
+replay a user bind against another endpoint. Proven accounts receive no automatic role; an account
+with no grants remains visible for manual role assignment and receives no tokens.
+Rejected lookup-account credentials return temporary unavailability and do not increment user credential counters.
 
 ### Azure Entra ID SSO
 
@@ -861,9 +886,13 @@ State and final codes are single-use. Enrollment requires both `rbac:admin` and
 ```json
 {
   "local": true,
-  "entraId": { "enabled": true, "name": "Microsoft Entra ID" }
+  "entraId": { "enabled": true, "name": "Microsoft Entra ID" },
+  "ldap": { "enabled": true, "name": "Corporate directory", "loginHelpUrl": "" }
 }
 ```
+
+Optional provider entries appear only when configured. LDAP remains advertised during directory outages;
+discovery contains no directory ID, endpoints, search settings or credentials.
 
 **`POST /api/auth/entra-id/token` request:**
 
@@ -887,8 +916,8 @@ State and final codes are single-use. Enrollment requires both `rbac:admin` and
 
 Available when `LDAP_ENABLED=true`. Every endpoint requires a Pabawi access JWT
 and `rbac:admin`, independently of page-level controls. An authorized request gets
-404 when LDAP is disabled. Public LDAP discovery and login remain unavailable
-until the authentication/session package is complete.
+404 when LDAP is disabled. Public discovery and password authentication use the
+separate exchanges described under [Auth](#auth).
 
 | Method | Endpoint | Description |
 |---|---|---|

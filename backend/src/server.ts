@@ -19,6 +19,7 @@ import { createConfigRouter } from "./routes/config";
 import { asyncHandler } from "./routes/asyncHandler";
 import { createAuthRouter } from "./routes/auth";
 import { createLdapAdministrationRouter } from "./routes/ldapAdministration";
+import { LdapAuthenticationService } from "./services/LdapAuthenticationService";
 import { LdapDirectoryService } from "./services/LdapDirectoryService";
 import { LdapMappingService } from "./services/LdapMappingService";
 import { createSetupRouter } from "./routes/setup";
@@ -618,7 +619,12 @@ async function startServer(): Promise<Express> {
     if (ldapConfig) {
       const directory = new LdapDirectoryService(ldapConfig, logger);
       container.register("ldapDirectory", directory);
-      container.register("ldapMappings", new LdapMappingService(databaseService.getAdapter(), ldapConfig.directoryId, directory));
+      const mappings = new LdapMappingService(databaseService.getAdapter(), ldapConfig.directoryId, directory);
+      container.register("ldapMappings", mappings);
+      const ldapAuthentication = new LdapAuthenticationService(databaseService.getAdapter(), ldapConfig, directory,
+        mappings, new UserService(databaseService.getAdapter(), authService));
+      await ldapAuthentication.initialize();
+      container.register('ldapAuthentication', ldapAuthentication);
     }
     app.use("/api/auth/ldap", createLdapAdministrationRouter(databaseService, container));
 
@@ -886,6 +892,7 @@ async function startServer(): Promise<Express> {
       consoleConfig,
       logger,
       auditLoggingService,
+      authService,
       consoleConnectionBroker,
       // Every termination path goes through the manager, which has no plugin
       // registry of its own; without this bridge a provider keeps its session
