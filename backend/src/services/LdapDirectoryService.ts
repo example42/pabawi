@@ -1,4 +1,4 @@
-import { DN } from '@ldapjs/dn';
+import { ldapDnEquals, ldapDnWithinScope, parseLdapDn } from '../config/ldapDn';
 import {
   AndFilter, OrFilter, EqualityFilter, ExtensibleFilter, SubstringFilter,
   InappropriateMatchingError, InvalidCredentialsError,
@@ -78,7 +78,7 @@ export class LdapDirectoryService {
         throw error;
       }
       if (before.subject !== after.subject || before.loginName !== after.loginName ||
-          !DN.fromString(before.dn).equals(DN.fromString(after.dn))) {
+          !ldapDnEquals(before.dn, after.dn)) {
         throw new LdapDirectoryError('IDENTITY_CHANGED');
       }
       return { user: after, groupSubjects: await this.memberships(tx, after.dn, mappedGroups) };
@@ -309,9 +309,7 @@ export class LdapDirectoryService {
   }
 
   private inScope(dn: string, base: string): boolean {
-    const parsed = DN.fromString(dn);
-    const scope = DN.fromString(base);
-    return !parsed.isEmpty() && (parsed.equals(scope) || parsed.childOf(scope));
+    return ldapDnWithinScope(dn, base);
   }
 
   private group(entry: Entry): LdapDirectoryGroup {
@@ -321,7 +319,7 @@ export class LdapDirectoryService {
         if (typeof member !== 'string' || /#'[01]*'B$/i.test(member)) {
           throw new LdapDirectoryError('INCOMPLETE_RESULT');
         }
-        try { if (DN.fromString(member).isEmpty()) throw new LdapDirectoryError('INCOMPLETE_RESULT'); }
+        try { if (parseLdapDn(member).length === 0) throw new LdapDirectoryError('INCOMPLETE_RESULT'); }
         catch { throw new LdapDirectoryError('INCOMPLETE_RESULT'); }
       }
     }
@@ -353,7 +351,7 @@ export class LdapDirectoryService {
       for (const entry of parents) {
         const group = this.group(entry);
         if (visitedSubjects.has(group.subject)) {
-          if (!visited.some(previous => previous.subject === group.subject && DN.fromString(previous.dn).equals(DN.fromString(group.dn)))) {
+          if (!visited.some(previous => previous.subject === group.subject && ldapDnEquals(previous.dn, group.dn))) {
             throw new LdapDirectoryError('IDENTITY_CHANGED');
           }
           continue;

@@ -52,7 +52,7 @@ test('administrator manages mappings, sees failed diagnostic stages and reads nu
   await panel.getByRole('checkbox', { name: 'Operators', exact: true }).check();
   await panel.getByRole('button', { name: 'Run directory diagnostics', exact: true }).click();
   await expect(panel.getByText('Matched selected groups: 1')).toBeVisible();
-  await page.screenshot({ path: '/tmp/pabawi-ldap-p6-mappings.png', fullPage: true });
+  await page.screenshot({ path: test.info().outputPath('mappings.png'), fullPage: true });
 
   const operator = panel.getByRole('listitem').filter({ hasText: 'Operators to Operator: Enabled' });
   await operator.getByRole('button', { name: /Disable mapping/ }).click();
@@ -69,7 +69,7 @@ test('administrator manages mappings, sees failed diagnostic stages and reads nu
   await expect(page.getByRole('region', { name: 'Authentication source' })).toContainText('Corporate directory / browser-directory: a');
   await expect(page.getByText(/Directory profile fields are read-only/)).toBeVisible();
   await expect(page.getByLabel('Password', { exact: true })).toHaveCount(0);
-  await page.screenshot({ path: '/tmp/pabawi-ldap-p6-profile.png', fullPage: true });
+  await page.screenshot({ path: test.info().outputPath('profile.png'), fullPage: true });
 });
 
 test('non-administrator cannot enter the role management page', async ({ page }) => {

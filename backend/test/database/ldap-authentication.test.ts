@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { randomUUID } from 'node:crypto';
+import { fork, type ChildProcess } from 'node:child_process';
+import { once } from 'node:events';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -35,6 +37,8 @@ function deferred<T>() {
 for (const dialect of ['sqlite', 'postgres'] as const) {
   describe.skipIf(dialect === 'postgres' && !process.env.TEST_DATABASE_URL)(`${dialect} atomic LDAP authentication and freshness`, () => {
     let folder: string;
+    let databaseUrl: string;
+    const children: ChildProcess[] = [];
     let schema: string;
     let control: PostgresAdapter | undefined;
     let database: DatabaseService;
@@ -59,6 +63,7 @@ for (const dialect of ['sqlite', 'postgres'] as const) {
         scoped.searchParams.set('options', `-csearch_path=${schema}`);
         url = scoped.toString();
       }
+      databaseUrl = url;
       const file = join(folder, 'live.db');
       database = new DatabaseService(file, dialect, url);
       await database.initialize();
@@ -82,6 +87,13 @@ for (const dialect of ['sqlite', 'postgres'] as const) {
     });
 
     afterEach(async () => {
+      for (const child of children.splice(0)) {
+        if (child.exitCode === null && child.signalCode === null) {
+          const exited = once(child, 'exit');
+          child.kill();
+          await exited;
+        }
+      }
       vi.restoreAllMocks();
       await reader?.close();
       await database?.close();
@@ -212,6 +224,82 @@ for (const dialect of ['sqlite', 'postgres'] as const) {
       await expect(validate(proof)).rejects.toMatchObject({ code: 'DENIED' });
       await expect(validate(proof)).rejects.toMatchObject({ code: 'INVALID_CONTEXT' });
     });
+
+
+    function validationWorker(proof: LdapAuthenticationProof, response = result) {
+      const child = fork(join(__dirname, '../fixtures/ldap/validation-worker.ts'), [], {
+        execArgv: ['--import', 'tsx'], stdio: ['ignore', 'ignore', 'pipe', 'ipc'],
+      });
+      children.push(child);
+      const exited = once(child, 'exit');
+      let stderr = '';
+      child.stderr!.on('data', chunk => { stderr += String(chunk); });
+      let readingResolve!: (pid: number) => void;
+      let doneResolve!: (code: string) => void;
+      let readingReject!: (error: Error) => void;
+      let doneReject!: (error: Error) => void;
+      const reading = new Promise<number>((resolve, reject) => { readingResolve = resolve; readingReject = reject; });
+      const done = new Promise<string>((resolve, reject) => { doneResolve = resolve; doneReject = reject; });
+      child.on('message', (message: { type: string; pid: number; code: string }) => {
+        if (message.type === 'reading') readingResolve(message.pid);
+        if (message.type === 'done') doneResolve(message.code);
+      });
+      child.on('error', error => { readingReject(error); doneReject(error); });
+      child.on('exit', () => {
+        const error = new Error('Validation worker exited before its expected message: ' + stderr);
+        readingReject(error);
+        doneReject(error);
+      });
+      // Attach handlers immediately so a failed worker cannot produce an unhandled rejection.
+      void reading.catch(() => undefined);
+      void done.catch(() => undefined);
+      child.send({ databasePath: join(folder, 'live.db'), dialect, databaseUrl, config, proof, result: response });
+      return { child, reading, done: done.then(async code => { await exited; return code; }) };
+    }
+
+    it('coalesces an overlapping forced check with a separate operating-system process', async () => {
+      const proof = await login();
+      const worker = validationWorker(proof);
+      expect(await worker.reading).not.toBe(process.pid);
+      const sequence = await db.queryOne<{ validation_sequence: string | number }>('SELECT validation_sequence FROM ldap_directory_state');
+      const local = validate(proof, true);
+      await vi.waitFor(async () => {
+        const current = await db.queryOne<{ validation_sequence: string | number }>('SELECT validation_sequence FROM ldap_directory_state');
+        expect(BigInt(current!.validation_sequence)).toBeGreaterThan(BigInt(sequence!.validation_sequence));
+      });
+      expect(directory.revalidate).not.toHaveBeenCalled();
+      worker.child.send('release');
+      expect(await worker.done).toBe('ok');
+      await local;
+      expect(directory.revalidate).not.toHaveBeenCalled();
+      expect(Number((await state() as { last_validated_at: string | number }).last_validated_at)).toBeGreaterThan(0);
+    }, 15000);
+
+    it('fences a delayed result from a separate process after lease replacement', async () => {
+      const proof = await login();
+      const worker = validationWorker(proof, { ...result, user: { ...result.user, displayName: 'Stale worker' }, groupSubjects: [] });
+      await worker.reading;
+      await db.execute('UPDATE ldap_validation_leases SET lease_expires_at = 1');
+      await validate(proof, true);
+      const before = await state();
+      worker.child.send('release');
+      expect(await worker.done).toBe('STALE_VALIDATION');
+      expect(await state()).toEqual(before);
+      expect((await users.getUserById(proof.user.id))?.displayName).toBe('A');
+      expect(await db.query('SELECT * FROM federated_user_roles')).toHaveLength(1);
+    }, 15000);
+
+    it('rejects a separate-process result after a mapping revision changes', async () => {
+      const proof = await login();
+      const worker = validationWorker(proof);
+      await worker.reading;
+      await mappings.update((await mappings.list())[0].id, { enabled: false }, { userId: 'administrator' });
+      const before = await state();
+      worker.child.send('release');
+      expect(await worker.done).toBe('STALE_REVISION');
+      expect(await state()).toEqual(before);
+      expect(await db.query('SELECT * FROM federated_user_roles')).toEqual([]);
+    }, 15000);
 
     it('coalesces simultaneous validation and refresh checks inside a process', async () => {
       const proof = await login();

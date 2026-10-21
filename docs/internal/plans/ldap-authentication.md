@@ -1,6 +1,6 @@
 # LDAP authentication implementation plan
 
-**Status:** Packages 1 through 6 complete; package 7 pending
+**Status:** Packages 1 through 6 complete; package 7 local OpenLDAP/recovery and parser cleanup verified, blocked on actual AD
 **Date:** 2026-10-21  
 **Scope:** OpenLDAP and Active Directory authentication, directory group authorization, and provider-bound session revalidation
 
@@ -454,8 +454,8 @@ Update this table as work proceeds. Status values: `pending`, `in_progress`, `bl
 | 4 RBAC mapping administration | complete | Commit `4a5c2b4`, verified against current source | [2026-10-21 Codex](#handoff-2026-10-21-codex-package-4) |
 | 5A Provider context and wiring | complete | Commit `7f58092`, verified against current source | [2026-10-21 Codex](#handoff-2026-10-21-codex-package-5a) |
 | 5B LDAP login and transport enforcement | complete | Commit `56ea384`, verified against current source | [2026-10-21 Codex](#handoff-2026-10-21-codex-package-5b) |
-| 6 Frontend and operator documentation | complete | Branch `151`, base `56ea384`, uncommitted paths in handoff | [2026-10-21 Codex](#handoff-2026-10-21-codex-package-6) |
-| 7 Interoperability and rollout | pending | Not started | None |
+| 6 Frontend and operator documentation | complete | Commit `55c8107`, verified against current source | [2026-10-21 Codex](#handoff-2026-10-21-codex-package-6) |
+| 7 Interoperability and rollout | blocked | Branch `151`, base `55c8107`; local acceptance and approved parser cleanup complete; [acceptance evidence](ldap-acceptance.md) | [2026-10-21 Codex cleanup](#handoff-2026-10-21-codex-package-7-approved-cleanup) |
 
 Append a record using the following fields after each implementation session. Use an actual commit hash when available, otherwise identify the branch/base and changed paths explicitly. Preserve prior records and correct outdated findings with a new entry.
 
@@ -1248,3 +1248,382 @@ PATH=/tmp/pabawi-node24/node-v24.21.0-darwin-arm64/bin:$PATH node_modules/.bin/p
 **Decisions or discoveries affecting the next package:** Keep provider discovery separate from directory availability and asynchronously loaded permissions. Use server-provided administration metadata, never infer account source from reserved usernames or email. Preserve manual and mapped grant provenance when rendering or editing users. Temporary client refresh failure must not discard the server-retryable credential or imply new eligibility. The browser fixture deliberately tests HTTP/UI contracts with synthetic directory responses; real LDAP and AD evidence must remain separate.
 
 **Next action and acceptance criterion still to satisfy:** Start package 7. Audit every acceptance row, rerun real OpenLDAP in both TLS modes, obtain real AD access for GUID/account-policy/nested/large-membership/failover cases, verify both adapters and worker/transport races on the final release candidate, resolve dependency maintenance, and finish the observed deployment procedure. Missing real AD evidence is an explicit blocker, not a waived test.
+
+
+## Handoff 2026-10-21 Codex package 7
+
+**Date and agent:** 2026-10-21, Codex.
+
+**Package and checkpoint:** Package 7, interoperability and rollout, partially implemented and verified.
+Status is `blocked`: real AD evidence, DN-parser maintenance and deployment-environment restore/rollout
+rehearsal remain open. Passing local acceptance does not complete package 7 or authorize release.
+
+**Branch, base commit, completion commit or uncommitted paths:** Branch `151`, base
+`55c8107a43401a5709bb0f1635da666c1c01bf86`. Starting tree was clean. Package 6 is committed as
+`55c8107`; its previous uncommitted reference in the progress table was corrected. Read AGENTS.md,
+code-change/git/Context7 instructions, the progress table, package-7 scope and latest handoffs.
+Verified the shared container composition, provider discovery/UI, account/source ownership, schema,
+mapping and session contracts against current source and tests. KiroGraph has 225 pending files and
+does not index LDAP symbols; used filesystem inspection without changing its index.
+No completion commit was created. Changed/new paths:
+
+~~~text
+backend/src/services/AuthenticationService.ts
+backend/test/database/ldap-authentication.test.ts
+backend/test/database/provider-bound-sessions.test.ts
+backend/test/fixtures/ldap/README.md
+backend/test/fixtures/ldap/validation-worker.ts
+backend/test/integration/ldap-rollout.test.ts
+docs/integrations/ldap.md
+docs/internal/plans/ldap-acceptance.md
+docs/internal/plans/ldap-authentication.md
+~~~
+
+**Completed scope and changed interfaces:**
+
+- Added [acceptance evidence](ldap-acceptance.md), mapping all fourteen plan rows to executable cases,
+  separating live OpenLDAP, synthetic AD/protocol, actual worker-process and browser evidence.
+- Added live HTTP rollout cases for SQLite/PostgreSQL and LDAPS/StartTLS. Each creates only uniquely
+  named synthetic directory entries and removes its own entries at teardown, preserving seed data.
+  Real bind/provisioning/mapping/refresh code proves zero-role enrollment without tokens, manual
+  enrollment, mapped-role preservation after manual withdrawal, user move/rename with the same
+  immutable account, profile refresh/null contacts, terminal policy revocation, group rename/recreation,
+  remapping by new immutable subject and separate identity after user DN/login recreation.
+- Added a separate Node worker fixture and six both-adapter process-boundary cases. These exercise
+  the unchanged production authentication algorithm through distinct OS processes and independent
+  database connections, proving overlapping forced-check coalescing, expired-lease fencing and
+  mapping-revision rejection. Worker directory responses are controlled synthetic data. They provide
+  real process coordination evidence, separate from LDAP protocol evidence.
+- The live rollout exposed an existing PostgreSQL security defect: the shared failed-login upsert
+  used an ambiguous unqualified counter. PostgreSQL rejected the statement before temporary-lockout
+  enforcement, affecting both local and provider-scoped LDAP login. The new both-adapter regression
+  reproduced the failure on starting production source, then passed after qualifying
+  `login_attempt_counters.cumulative_failed_attempts`. SQLite behavior is preserved. No migration,
+  dependency version, public API, environment setting or token contract changed.
+- Expanded the fixture guide and operator staged upgrade procedure. It explains consistent backups
+  including SQLite WAL contents, coordinated worker replacement, automatic migrations through 034,
+  provider reauthentication, mapping/policy tests, outage/recovery, equivalent endpoint failover,
+  matched backup/artifact restoration and the deployment rehearsal still required.
+- Rechecked pinned primary registry metadata: `@ldapjs/dn@1.1.0` and transitive
+  `@ldapjs/asn1@2.0.0` remain explicitly decommissioned. The installed `ldapts@9.2.0`
+  DN export is a builder/equality class without the current string-parser/scope API; replacing it
+  directly would change the security contract. No dependency-maintenance exception was accepted.
+  A maintained replacement or explicit maintenance ownership, with DN-semantics regression coverage,
+  remains required before release.
+
+**Verification: exact commands, outcomes, and external log reference:**
+
+All mutating, fixture, network metadata and verification commands are in append-only
+`~/.agents/logs/pabawi.jsonl`. Evidence is retained under `/tmp/pabawi-ldap-p7-*`.
+Used the retained supported Node 24.21.0 runtime, PostgreSQL 17.11 and OpenLDAP
+2.6.10+dfsg-1. Fixture image:
+`sha256:69cef797be2e96d15304a4f632d34639d8c5caa47a61bbd307c7c49bd99377dc`.
+No package, archive or image was downloaded. Primary registry JSON metadata was downloaded;
+ClamAV 1.5.4 scanned it and the copied public fixture CA, two files, zero infections.
+
+Fixture commands:
+
+~~~bash
+docker start pabawi-ldap-p1-postgres
+docker exec pabawi-ldap-p1-postgres createdb -U postgres ldap_package7_verified
+docker run --detach --name pabawi-ldap-p7-openldap --pull never -p 127.0.0.1::1389 -p 127.0.0.1::1636 pabawi-ldap-fixture:package3-verified
+mkdir -p /tmp/pabawi-ldap-p7-tls && docker cp pabawi-ldap-p7-openldap:/fixture/tls/ca.pem /tmp/pabawi-ldap-p7-tls/ca.pem && docker port pabawi-ldap-p7-openldap && docker port pabawi-ldap-p1-postgres
+~~~
+
+Acceptance endpoints were PostgreSQL 61764, LDAP StartTLS 61777 and LDAPS 61778 on loopback.
+Use another fresh OpenLDAP container for the next session; its seed-on-start entrypoint does not
+support reusing a populated fixture database. The old historical PostgreSQL database with migration
+checksum drift was not reused.
+
+- Prerequisite run: five files, all 85 cases passed with real TLS endpoints and both adapters.
+- Live mutation matrix: all four adapter/TLS combinations passed.
+- Lockout regression: starting PostgreSQL source failed and allowed a correct local password after
+  five failures, with the ambiguous-column error in `lockout-red.log`. After the fix, both-adapter
+  counter plus live mutation run passed all 18 cases (`lockout-green.log`).
+- Focused database authentication passed all 50 cases, including the six actual process-boundary
+  cases (`workers.log`).
+- Final full backend acceptance passed: 252 files passed, one skipped; 4100 tests passed, two skipped,
+  one todo. Includes live directory/HTTP mutation, both database adapters, upgrades, shared local/Entra
+  regressions, races and every protected transport fixture.
+- Full frontend regression passed all 63 files and 1079 tests. All three isolated Chromium UI/HTTP
+  cases passed. Browser fixture setup built the production frontend; backend production build passed.
+  Separate build commands preserve the established package-6 approach.
+- Both workspace linters passed with zero warnings; component check reported zero errors and an
+  unchanged zero baseline.
+
+Final commands:
+
+~~~bash
+PATH=/tmp/pabawi-node24/node-v24.21.0-darwin-arm64/bin:$PATH TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:61764/ldap_package7_verified TEST_LDAP_LDAPS_PORT=61778 TEST_LDAP_STARTTLS_PORT=61777 TEST_LDAP_CA_FILE=/tmp/pabawi-ldap-p7-tls/ca.pem npm run test --workspace=backend > /tmp/pabawi-ldap-p7-backend.log 2>&1
+PATH=/tmp/pabawi-node24/node-v24.21.0-darwin-arm64/bin:$PATH npm run test --workspace=frontend > /tmp/pabawi-ldap-p7-frontend.log 2>&1
+PATH=/tmp/pabawi-node24/node-v24.21.0-darwin-arm64/bin:$PATH npm run build:backend > /tmp/pabawi-ldap-p7-build-backend.log 2>&1
+PATH=/tmp/pabawi-node24/node-v24.21.0-darwin-arm64/bin:$PATH npm run lint > /tmp/pabawi-ldap-p7-lint.log 2>&1
+PATH=/tmp/pabawi-node24/node-v24.21.0-darwin-arm64/bin:$PATH npm run check:components > /tmp/pabawi-ldap-p7-components.log 2>&1
+PATH=/tmp/pabawi-node24/node-v24.21.0-darwin-arm64/bin:$PATH node_modules/.bin/playwright test --config playwright.ldap.config.ts > /tmp/pabawi-ldap-p7-browser.log 2>&1
+PATH=/tmp/pabawi-node24/node-v24.21.0-darwin-arm64/bin:$PATH node --test scripts/documentation/contracts.test.mjs > /tmp/pabawi-ldap-p7-contracts.log 2>&1
+PATH=/Users/al/.cache/pre-commit/repovdso_3ip/py_env-python3/bin:$PATH bash scripts/quality/secret-scan.sh > /tmp/pabawi-ldap-p7-secrets.log 2>&1
+PATH=/Users/al/.cache/pre-commit/repovdso_3ip/py_env-python3/bin:$PATH python3 /tmp/pabawi-ldap-p7-final-scan.py > /tmp/pabawi-ldap-p7-secrets-changed.log 2>&1
+~~~
+
+All seven documentation contracts passed. Standard tracked secret scan passes with 176 reviewed
+findings. Explicit all-files scanning covers all nine changed/new files and reports zero new findings
+without changing `.secrets.baseline`. Unlike earlier sessions, this change does not touch the
+environment example containing the previously recorded synthetic URL, so that unrelated finding is
+outside its explicit changed-file scan.
+
+Fixture shutdown completed successfully:
+
+~~~bash
+docker stop pabawi-ldap-p7-openldap pabawi-ldap-p1-postgres
+~~~
+
+Containers, the fresh database, public CA, image and logs are retained. Final `git diff --check` and
+external JSON Lines validation pass. Initial fixture-only failures (missing accepted test signing key
+and reuse of a rotated refresh credential) were corrected before final acceptance; they were not
+production authentication regressions.
+
+**Pre-existing failures:** The PostgreSQL counter defect was reproduced and fixed in scope.
+No repository-wide blocking gate reproduced on final source. Existing frontend jsdom navigation
+notices remain; the earlier logger property defect did not reproduce. Historic AD/parser release
+blockers remain unresolved. No baseline entry, historical migration or unrelated logging code changed.
+
+**Remaining work and blockers:** No authorized real AD environment/configuration was supplied or used.
+Real AD TLS and equivalent-controller failover, binary GUID queries, policy/status visibility,
+nested matching rules and large/ranged membership remain mandatory acceptance blockers.
+The DN-parser maintenance gate remains open after current metadata review. Deployment-environment
+backup restoration and the complete staged rollout have not been rehearsed; no production procedure
+is claimed as observed. Real Proxmox provider compatibility remains separately unverified.
+No remote push, PR, production deployment, real-directory access or destructive repository cleanup occurred.
+
+**Decisions or discoveries affecting the next package:** Shared PostgreSQL counter SQL must remain
+qualified to preserve both local and LDAP throttling. Actual OS-process tests now supplement the
+earlier independent-connection evidence. Live mutation fixtures must preserve shared seed objects and
+use unique records. Keep AD evidence separate from OpenLDAP, protocol mocks and browser fixtures.
+The new acceptance report is the current audit index, not a release waiver.
+
+**Next action and acceptance criterion still to satisfy:** Resume package 7 from its blocked gates.
+Obtain an authorized actual AD test environment through local secret references; complete its
+matrix without exporting personal directory data. Resolve parser maintenance with preserved parsed-DN
+semantics, rerun the current candidate checks after any source/dependency change, and rehearse
+backup/restore and coordinated upgrade in the target staging environment. Mark complete only when
+every acceptance row has the required real evidence and the operational rehearsal passes.
+
+
+## Handoff 2026-10-21 Codex package 7 continuation
+
+**Date and agent:** 2026-10-21, Codex.
+
+**Package and checkpoint:** Package 7 continuation. Available local work is implemented and verified:
+owned DN parsing, populated backup/restore/upgrade rehearsals, real LDAP transport outages on both
+adapters/TLS modes and an executable acceptance runner. Package 7 remains blocked on actual AD.
+Packaging cleanup also awaits the explicit deletion confirmation described below.
+
+**Branch, base commit, completion commit or uncommitted paths:** Branch 151, base
+55c8107a43401a5709bb0f1635da666c1c01bf86. This session started with the preceding package-7 working
+tree and preserved it. No commit was created. Current changed/new files are the preceding handoff's
+paths plus:
+
+~~~text
+backend/src/config/ldap.ts
+backend/src/config/ldapDn.ts
+backend/src/services/LdapDirectoryService.ts
+backend/test/config/LdapDn.test.ts
+backend/test/database/ldap-upgrade-recovery.test.ts
+backend/test/helpers/ldapAuthentication.ts
+backend/test/helpers/ldapTransport.ts
+backend/test/security/ldap-transports.test.ts
+e2e/ldap-ui/ldap.spec.ts
+package.json
+playwright.ldap.config.ts
+scripts/acceptance/ldap.mjs
+~~~
+
+The combined working tree has 21 changed/new files. Read current AGENTS.md, the progress/acceptance
+tables, latest handoffs, code discipline and Context7 instructions. The existing graph remains
+incomplete for LDAP; direct source inspection covered every changed production caller.
+
+**Completed scope and changed interfaces:**
+
+- Runtime configuration, bind locator comparisons, scope checks and nested-group identity checks
+  now use project-owned config/ldapDn.ts. Reviewed current primary standards, registry metadata,
+  pinned ldapts source and a community fork before choosing a narrow owned module rather than a
+  second complete LDAP stack. No new npm package was installed.
+- The parser bounds input to 8192 bytes, validates attribute descriptors/OIDs and escaped UTF-8,
+  preserves empty values and unordered multi-valued RDN assertions, rejects duplicates/malformed
+  syntax and compares parsed suffixes. Descriptor case normalizes; values remain exact, without
+  guessing schema matching, OID aliases or broad case folding. Complete definite-length BER with
+  single-octet tags stays opaque and is never guessed to equal text; unsupported encodings fail
+  closed. Tests include RFC-style vectors, invalid Unicode/BER/syntax, escaped scope injection and
+  200 randomized Unicode cases. This is conservative locator equality, not a full directory schema
+  matching engine. Pabawi owns maintenance of this module.
+- The obsolete @ldapjs/dn dependency/lock entries and backend/src/types/ldapjs-dn.d.ts are deliberately
+  unchanged pending confirmation. The user-supplied instructions explicitly require confirmation
+  before deleting files. A concrete asynchronous approval request named the file and dependency;
+  no affirmative reply has arrived. Do not infer approval from elapsed time. Runtime imports are
+  removed, but do not report dependency cleanup or its release gate complete yet.
+- Added ldap-upgrade-recovery.test.ts. Populated migration-030 SQLite state includes committed data
+  in a nonempty WAL and uses VACUUM INTO; PostgreSQL uses matching-version pg_dump custom format and
+  pg_restore with exit-on-error/single-transaction into another fresh database. The cases preserve
+  identities, explicit Entra enrollment, roles, group membership and audit links; verify upgrades
+  through 034, legacy reauthentication, local login, Entra-bound issuance/rotation, and restart
+  without repeated session invalidation. They prove rollback of an intentionally failing fixture-only
+  migration, restore the exact original snapshot, then successfully repeat the upgrade.
+  Backups, databases and evidence are retained. No shipped migration changed.
+- The transport suite now runs nine scenarios in five configurations: synthetic SQLite plus actual
+  LDAPS/StartTLS on SQLite/PostgreSQL. The new helper uses a loopback TCP relay for actual connection
+  interruption and creates unique directory entries for positive-policy mutations. Eligibility is
+  not mocked in live cases. REST/refresh, execution/journal SSE, delayed MCP results, VNC/terminal
+  delivery and idle/upgrade checks fail closed. It verifies unchanged failed freshness, retained
+  retryable refresh credentials, local emergency login and transient recovery. Infrastructure
+  payloads/upstream adapters remain local fixtures; no real Proxmox claim is made.
+- Added npm run test:ldap and scripts/acceptance/ldap.mjs. The runner creates unique isolated local
+  containers, discovers loopback ports, scans retained fixture artifacts, records image IDs/versions,
+  runs backend/frontend/browser/build/lint/component/contracts/secrets, appends exact commands to
+  the external log and stops its own fixtures in finally without deleting containers or data.
+  --focused supports iterations; --build-fixture is an explicit source build. Existing local images
+  are used without pull by default. Playwright screenshots/results now live with runner evidence.
+- Updated fixture/operator documentation and the acceptance matrix with actual local recovery
+  instructions, parser semantics and remaining release boundaries.
+
+**Verification: exact commands, outcomes, and external log reference:**
+
+Append-only command log: ~/.agents/logs/pabawi.jsonl. Subcommands started by the runner and PostgreSQL
+backup/restore tests also append there. No pushes, PRs, production deployment or personal-directory
+access occurred.
+
+Focused parser/configuration/service acceptance passed 111 cases, including randomized Unicode.
+The first runner passed 210 focused checks; the first live TLS transport expansion passed 226.
+Both adapter recovery result manifests report all nine rehearsal stages passed.
+
+The final complete runner command was:
+
+~~~bash
+PATH=/tmp/pabawi-node24/node-v24.21.0-darwin-arm64/bin:$PATH:/Users/al/.cache/pre-commit/repovdso_3ip/py_env-python3/bin npm run test:ldap -- --ldap-image pabawi-ldap-fixture:package3-verified --output-root /tmp > /tmp/pabawi-ldap-p7b-full-run.log 2>&1
+~~~
+
+Result: passed=true in /tmp/pabawi-ldap-acceptance-sGktn2/result.json.
+
+- Full backend: 254 files passed, one skipped; 4176 tests passed, two skipped and one todo.
+  Includes both adapters, live TLS/HTTP/mutations, all 45 transport cases, independent OS workers,
+  populated upgrades and actual backup/restore. Evidence: 015-npm.log.
+- Full frontend: 63 files and 1079 cases passed (016-npm.log).
+- All three Chromium cases and the production frontend build passed; screenshots are retained
+  under browser-results in that evidence directory (017-node.log).
+- Backend production build, both workspace linters, zero-error component gate, all seven
+  documentation contracts and tracked-tree secret scan passed (018 through 022 logs).
+- Environment manifest records Node 24.21.0, OpenLDAP 2.6.10+dfsg-1 and PostgreSQL 17.11.
+  LDAP image ID remains sha256:69cef797be2e96d15304a4f632d34639d8c5caa47a61bbd307c7c49bd99377dc;
+  PostgreSQL image ID is sha256:2d2b8998d31037bf721cfdf764d76ba74171b4fab3431b7f72c27c56ddbdf9e3.
+  Dynamic ports and retained container/database names are in environment.json and the recovery
+  result manifests. Historical PostgreSQL data with checksum drift was never reused.
+- Runner startup scanned 20 retained fixture/package/CA files with ClamAV 1.5.4, zero infections.
+  Only primary registry JSON metadata was downloaded this session, no new npm archives/images.
+  Its two retained JSON files also pass real ClamAV scanning.
+- Failure cleanup was tested with an isolated temporary scanner returning 19. The runner exited 1,
+  retained a failed result, ran no acceptance tests and stopped both of its fixtures. Expected
+  rejection evidence: /tmp/pabawi-ldap-acceptance-IjDzAQ/result.json and
+  /tmp/pabawi-ldap-p7b-failure-cleanup.log. Real ClamAV subsequently scanned those copied artifacts
+  successfully. Docker inspection confirmed all normal/failure-path containers are exited.
+- Explicit all-files scanning over all 21 changed/new files reports no new findings; baseline
+  remains unchanged. Final documentation/whitespace/log checks and scans are in the external log
+  and /tmp/pabawi-ldap-p7b-* artifacts.
+
+**Pre-existing failures:** No blocking repository gate reproduced. Existing jsdom navigation notices
+and browser color-environment warnings remain. The first parser fixture had an incorrectly written
+dangling-escape literal, and initial lint rejected a non-null assertion; both were corrected before
+the final full run. The intentional scanner rejection is expected failure-path evidence, not malware
+or a release-candidate test failure. Previously recorded logger intermittency did not reproduce.
+
+**Remaining work and blockers:** Actual AD is unavailable, as the user explicitly confirmed.
+Its GUID, policy/status visibility, nested matching-rule, large membership and equivalent-controller
+failover evidence remains mandatory for the original plan. Dependency/declaration removal awaits
+explicit deletion approval. Local database recovery and actual LDAP transport rehearsals now pass;
+target-environment storage/service/secret handling still requires its own staging validation before
+any deployment. Actual Proxmox provider compatibility remains separately unverified.
+
+**Decisions or discoveries affecting the next package:** Keep client DN values exact and directory
+identity immutable; do not replace parsed scope with lowercased strings or assume unknown BER matches
+text. The maintained code is intentionally narrow and has no new package graph. The runner retains
+its containers/databases and uses fresh names every run, avoiding seed-on-restart and checksum drift.
+An expected readiness probe can be nonzero before success; result.json distinguishes final acceptance
+status. Both normal shutdown and scanner-failure shutdown are now observed.
+
+**Next action and acceptance criterion still to satisfy:** On explicit approval, remove only the named
+obsolete type declaration and unused @ldapjs/dn dependency/lock entries, confirm its transitive packages
+are no longer required, and verify the resulting package graph plus parser/build/LDAP regressions.
+Then update this approval gate in the progress/evidence documents. Obtain actual AD later and complete
+every outstanding AD matrix row. Do not mark package 7 complete or claim real AD support until that
+evidence exists. Production deployment still requires the repository's separate confirmation.
+
+
+## Handoff 2026-10-21 Codex package 7 approved cleanup
+
+**Date and agent:** 2026-10-21, Codex.
+
+**Package and checkpoint:** Package 7 approved parser packaging cleanup, complete. The user replied
+"approved" to removal of the obsolete declaration and unused dependency. This supersedes the pending
+approval statements in earlier handoffs. Package 7 remains blocked on real AD interoperability;
+local OpenLDAP, transport, worker and recovery evidence remains passing.
+
+**Branch, base commit, completion commit or uncommitted paths:** Branch 151, base 55c8107.
+Preserved all earlier uncommitted work. This cleanup additionally changes backend/package.json
+and package-lock.json, deletes backend/src/types/ldapjs-dn.d.ts, and updates the current acceptance,
+operator and progress documents. No commit was created.
+
+**Completed scope and changed interfaces:** Removed @ldapjs/dn, its unused @ldapjs/asn1 and
+process-warning transitives, and the obsolete declaration. Runtime code already uses the owned
+bounded parser and did not change in this cleanup. The before/after lockfile assertion proves exactly
+those three package entries were removed, no package was added, and the only surviving entry change
+is removal of @ldapjs/dn from the backend workspace dependencies. Every remaining package entry is
+byte-for-byte equivalent as parsed JSON. The three unused installed package directories are absent.
+No historic migration, provider/session contract or parser semantics changed.
+
+**Verification: exact commands, outcomes, and external log reference:**
+
+All mutation and verification commands append to ~/.agents/logs/pabawi.jsonl. Before snapshots and
+the structural graph comparison are retained in /tmp/pabawi-ldap-p7c-*.
+
+~~~bash
+PATH=/tmp/pabawi-node24/node-v24.21.0-darwin-arm64/bin:$PATH npm uninstall @ldapjs/dn --workspace=backend --ignore-scripts --offline --no-audit --no-fund > /tmp/pabawi-ldap-p7c-uninstall.log 2>&1
+PATH=/tmp/pabawi-node24/node-v24.21.0-darwin-arm64/bin:$PATH npm run test:ldap -- --focused --ldap-image pabawi-ldap-fixture:package3-verified --output-root /tmp > /tmp/pabawi-ldap-p7c-acceptance.log 2>&1
+PATH=/tmp/pabawi-node24/node-v24.21.0-darwin-arm64/bin:$PATH npm run build:backend > /tmp/pabawi-ldap-p7c-build.log 2>&1
+PATH=/tmp/pabawi-node24/node-v24.21.0-darwin-arm64/bin:$PATH npm run lint > /tmp/pabawi-ldap-p7c-lint.log 2>&1
+~~~
+
+- Offline removal reports exactly three packages removed. No downloads or lifecycle scripts ran.
+  Graph proof: /tmp/pabawi-ldap-p7c-lock-verified.json.
+- Focused post-removal acceptance passes all ten files and 247 cases. Includes owned parser/config,
+  real OpenLDAP in both TLS modes, both database adapters, all transport scenarios, independent
+  worker processes and populated backup/restore/upgrade rehearsals.
+  /tmp/pabawi-ldap-acceptance-3jP2T7/result.json reports passed=true; command and case outputs,
+  actual environment, image IDs and recovery backups are retained in that directory.
+- Backend production build and both workspace linters pass without the obsolete declaration or
+  installed packages. Frontend source is unchanged; its preceding 1079-test/three-browser-case
+  full-run evidence remains applicable and was not needlessly rerun.
+- The runner scanned 20 retained fixture/CA files with ClamAV and stopped both isolated containers
+  successfully. Containers and databases remain retained; no new image or archive was downloaded.
+- Final documentation contracts, whitespace checks, tracked-tree scan, changed-file scan and
+  external JSON Lines validation pass. The generated lockfile has removal-only changes and is
+  covered by the exact structural graph assertion; the explicit content scanner covers the other
+  22 existing changed/new files. The deleted declaration has no remaining content to scan.
+  No reviewed secret-baseline entry was added or changed.
+
+**Pre-existing failures:** No repository verification blocker reproduced. KiroGraph context returned
+an FTS syntax error for the task description; the already known stale LDAP index was not changed,
+and targeted source/manifest inspection supplied the required context.
+
+**Remaining work and blockers:** Parser maintenance/packaging approval is resolved. Actual AD
+GUID/account-state/nested/large-membership/failover evidence remains unavailable and blocks completing
+the original plan. Target-environment staging and production deployment remain separate operational
+work. Real Proxmox provider compatibility remains unverified. No push, PR, deployment or unrelated
+deletion occurred.
+
+**Decisions or discoveries affecting the next package:** Keep the project-owned parser and its
+regressions. Do not reinstall the decommissioned packages as a workaround. Existing earlier handoffs
+describe the former approval gate for history; current progress and acceptance documents record it
+closed.
+
+**Next action and acceptance criterion still to satisfy:** Obtain an authorized real AD environment
+when available and complete every outstanding AD acceptance row. Keep package 7 blocked until that
+evidence exists. Use the reproducible acceptance runner for candidate changes and rehearse the target
+deployment's storage/service/secret procedures before deployment.

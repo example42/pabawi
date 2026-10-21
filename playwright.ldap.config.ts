@@ -1,11 +1,12 @@
 import { defineConfig, devices } from '@playwright/test';
+import { join } from 'node:path';
 
 export default defineConfig({
   testDir: './e2e/ldap-ui',
   fullyParallel: false,
   workers: 1,
   reporter: 'list',
-  outputDir: '/tmp/pabawi-ldap-p6-browser-results',
+  outputDir: process.env.TEST_LDAP_EVIDENCE_DIR ? join(process.env.TEST_LDAP_EVIDENCE_DIR, 'browser-results') : '/tmp/pabawi-ldap-p6-browser-results',
   use: { ...devices['Desktop Chrome'], baseURL: 'http://127.0.0.1:3186', screenshot: 'only-on-failure' },
   webServer: {
     command: 'npm run build:frontend && node_modules/.bin/tsx backend/test/fixtures/ldap/ui-server.ts',
