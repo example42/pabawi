@@ -775,6 +775,12 @@ account for linking. Local account creation still requires a unique local email
 and username. The `ldap:` username prefix is reserved for directory accounts.
 Password hashes are excluded from responses. Entra enrollment continues to
 require explicit administrative authority and rejects implicit email linking.
+LDAP-owned profile fields (email, given name, surname) and local password writes
+are rejected with HTTP 403 and code `DIRECTORY_ACCOUNT_READ_ONLY` through
+`PUT /api/users/:id` and `POST /api/auth/change-password`, including for
+administrators. Directory password changes must be performed at the directory.
+Local suspension, administrative status and manual role assignments remain
+managed in Pabawi. LDAP login is not yet available.
 
 | Method | Endpoint | Description |
 |---|---|---|

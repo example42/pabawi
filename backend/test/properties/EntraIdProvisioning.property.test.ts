@@ -19,7 +19,7 @@ import {
 import type { DatabaseAdapter } from '../../src/database/DatabaseAdapter';
 import type { EntraIdConfig } from '../../src/config/schema';
 import type { AuthenticationService } from '../../src/services/AuthenticationService';
-import type { UserService, User } from '../../src/services/UserService';
+import type { UserService, User, FederatedProvisioningInput } from '../../src/services/UserService';
 import type { RoleService } from '../../src/services/RoleService';
 import type { AuditLoggingService } from '../../src/services/AuditLoggingService';
 import type { LoggerService } from '../../src/services/LoggerService';
@@ -147,14 +147,14 @@ describe('EntraIdService — User Provisioning Properties', () => {
     mockUserService = {
       findByFederatedIdentity: vi.fn().mockResolvedValue(null),
       findAllByEmail: vi.fn().mockResolvedValue([]),
-      createFederatedUser: vi.fn().mockImplementation(async (claims: IdTokenClaims) => {
+      createFederatedUser: vi.fn().mockImplementation(async (input: FederatedProvisioningInput) => {
         return createMockUser({
-          id: `new-user-${claims.sub}`,
-          username: claims.preferred_username || claims.email.split('@')[0],
-          email: claims.email,
+          id: `new-user-${input.subject}`,
+          username: input.provider === 'entra-id' ? input.username : '',
+          email: input.email,
           passwordHash: '',
-          firstName: claims.given_name,
-          lastName: claims.family_name,
+          firstName: input.firstName,
+          lastName: input.lastName,
           isActive: 1,
         });
       }),
@@ -231,8 +231,12 @@ describe('EntraIdService — User Provisioning Properties', () => {
               claims.iss,
             );
 
-            // No existing identity → called createFederatedUser with the claims
-            expect(mockUserService.createFederatedUser).toHaveBeenCalledWith(claims);
+            // No existing identity: supply an explicit identity, profile and role policy
+            expect(mockUserService.createFederatedUser).toHaveBeenCalledWith({
+              provider: 'entra-id', issuer: claims.iss, subject: claims.sub,
+              username: claims.preferred_username, email: claims.email || null, displayName: null,
+              firstName: claims.given_name, lastName: claims.family_name, defaultRole: 'configured',
+            });
 
             // Returned user has is_active=1 and empty passwordHash
             expect(result.isActive).toBe(1);
@@ -389,15 +393,15 @@ describe('EntraIdService — User Provisioning Properties', () => {
             vi.mocked(mockUserService.findAllByEmail).mockResolvedValue([]);
 
             // Capture what createFederatedUser receives to verify username derivation
-            let receivedClaims: IdTokenClaims | null = null;
+            let receivedInput: FederatedProvisioningInput | null = null;
             vi.mocked(mockUserService.createFederatedUser).mockImplementation(
-              async (c: IdTokenClaims) => {
-                receivedClaims = c;
+              async (c: FederatedProvisioningInput) => {
+                receivedInput = c;
                 return createMockUser({
-                  id: `new-user-${c.sub}`,
+                  id: `new-user-${c.subject}`,
                   email: c.email,
-                  // UserService.createFederatedUser internally derives the username
-                  username: c.email.split('@')[0].replace(/[^a-zA-Z0-9_]/g, '_').slice(0, 50),
+                  // EntraIdService supplies the provider-neutral username
+                  username: c.provider === 'entra-id' ? c.username : '',
                   passwordHash: '',
                   isActive: 1,
                 });
@@ -406,11 +410,8 @@ describe('EntraIdService — User Provisioning Properties', () => {
 
             const result = await service.provisionUser(claims);
 
-            // createFederatedUser was called with original claims
-            // (UserService.deriveUsername handles the derivation internally)
-            expect(receivedClaims).not.toBeNull();
-            expect(receivedClaims!.preferred_username).toBe(invalidUsername);
-            expect(receivedClaims!.email).toBe(email);
+            expect(receivedInput).not.toBeNull();
+            expect(receivedInput!.email).toBe(email);
 
             // The returned username must be derived from email local-part:
             // replace non-[a-zA-Z0-9_] with underscores, truncate to 50
@@ -451,12 +452,10 @@ describe('EntraIdService — User Provisioning Properties', () => {
             vi.mocked(mockUserService.findByFederatedIdentity).mockResolvedValue(null);
             vi.mocked(mockUserService.findAllByEmail).mockResolvedValue([]);
             vi.mocked(mockUserService.createFederatedUser).mockImplementation(
-              async (c: IdTokenClaims) => {
-                const username = c.email.split('@')[0]
-                  .replace(/[^a-zA-Z0-9_]/g, '_')
-                  .slice(0, 50);
+              async (c: FederatedProvisioningInput) => {
+                const username = c.provider === 'entra-id' ? c.username : '';
                 return createMockUser({
-                  id: `new-user-${c.sub}`,
+                  id: `new-user-${c.subject}`,
                   email: c.email,
                   username,
                   passwordHash: '',
@@ -495,12 +494,10 @@ describe('EntraIdService — User Provisioning Properties', () => {
             vi.mocked(mockUserService.findByFederatedIdentity).mockResolvedValue(null);
             vi.mocked(mockUserService.findAllByEmail).mockResolvedValue([]);
             vi.mocked(mockUserService.createFederatedUser).mockImplementation(
-              async (c: IdTokenClaims) => {
-                const username = c.email.split('@')[0]
-                  .replace(/[^a-zA-Z0-9_]/g, '_')
-                  .slice(0, 50);
+              async (c: FederatedProvisioningInput) => {
+                const username = c.provider === 'entra-id' ? c.username : '';
                 return createMockUser({
-                  id: `new-user-${c.sub}`,
+                  id: `new-user-${c.subject}`,
                   email: c.email,
                   username,
                   passwordHash: '',

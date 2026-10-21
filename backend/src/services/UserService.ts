@@ -1,9 +1,9 @@
+import assert from 'node:assert/strict';
 import type { DatabaseAdapter } from '../database/DatabaseAdapter';
-import { randomUUID } from 'crypto';
+import { createHash, randomUUID } from 'crypto';
 import type { AuthenticationService } from './AuthenticationService';
 import { SetupService } from './SetupService';
 import { validatePassword } from '../utils/passwordValidation';
-import type { IdTokenClaims } from './EntraIdService';
 
 /**
  * User model from database
@@ -164,6 +164,37 @@ export interface FederatedIdentity {
   updatedAt: string;
 }
 
+export interface ExternalProfile {
+  email: string | null;
+  displayName: string | null;
+  firstName: string;
+  lastName: string;
+}
+
+export type FederatedProvisioningInput = ExternalProfile & {
+  issuer: string;
+  subject: string;
+} & ({
+  provider: 'entra-id';
+  username: string;
+  defaultRole: 'configured';
+} | {
+  provider: 'ldap';
+  loginName: string;
+  dn: string;
+  defaultRole: 'none';
+});
+
+export class FederatedAccountError extends Error {
+  constructor(
+    readonly code: 'IDENTITY_COLLISION' | 'DIRECTORY_ACCOUNT_READ_ONLY' | 'INVALID_EXTERNAL_IDENTITY',
+    message: string,
+  ) {
+    super(message);
+    this.name = 'FederatedAccountError';
+  }
+}
+
 /**
  * User service for managing user accounts, profiles, and user-group/role relationships
  *
@@ -313,6 +344,11 @@ export class UserService {
     const user = await this.getUserById(id);
     if (!user) {
       throw new Error('User not found');
+    }
+
+    if (data.password !== undefined || data.email !== undefined ||
+        data.firstName !== undefined || data.lastName !== undefined) {
+      await this.requireLocalProfileOwnership(id);
     }
 
     // Validate email uniqueness if email is being updated
@@ -679,109 +715,99 @@ export class UserService {
     };
   }
 
-  /**
-   * Derive a valid username from IdToken claims.
-   *
-   * If preferred_username matches ^[a-zA-Z0-9_]{3,50}$, use it directly.
-   * Otherwise, derive from the email local-part by replacing disallowed
-   * characters with underscores and truncating to 50 characters.
-   */
-  private deriveUsername(claims: IdTokenClaims): string {
-    const validUsernamePattern = /^[a-zA-Z0-9_]{3,50}$/;
-
-    if (claims.preferred_username && validUsernamePattern.test(claims.preferred_username)) {
-      return claims.preferred_username;
+  /** Reject directory-owned writes even for administrators and legacy mixed accounts. */
+  public async requireLocalProfileOwnership(userId: string): Promise<void> {
+    const identity = await this.db.queryOne<{ id: string }>(
+      "SELECT id FROM federated_identities WHERE user_id = ? AND provider = 'ldap'",
+      [userId],
+    );
+    if (identity) {
+      throw new FederatedAccountError('DIRECTORY_ACCOUNT_READ_ONLY',
+        'Directory profile fields are read-only; directory accounts cannot have local passwords');
     }
-
-    const localPart = claims.email.split('@')[0];
-    const sanitized = localPart.replace(/[^a-zA-Z0-9_]/g, '_');
-    return sanitized.slice(0, 50);
   }
 
   /**
-   * Create a new user from federated identity (SSO) claims.
-   *
-   * Creates the user with null password_hash, is_active=1, assigns the
-   * default viewer role, and creates a federated_identities record linking
-   * the user to the external IdP.
-   *
-   * @param claims - Validated ID token claims from the identity provider
-   * @returns Created user
-   * @throws Error if username uniqueness constraint is violated
+   * Owns the provisioning transaction. Call only after proving the external identity.
+   * No token is issued here, including when a committed account has no effective roles.
    */
-  public async createFederatedUser(claims: IdTokenClaims): Promise<User> {
-    const username = this.deriveUsername(claims);
+  public async createFederatedUser(input: FederatedProvisioningInput): Promise<User> {
+    if (!input.issuer.trim() || !input.subject.trim() ||
+        (input.provider === 'ldap' && (!input.loginName.trim() || !input.dn.trim())) ||
+        (input.provider === 'entra-id' && input.username.toLowerCase().startsWith('ldap:'))) {
+      throw new FederatedAccountError('INVALID_EXTERNAL_IDENTITY', 'Invalid external identity or provisioning policy');
+    }
+    // Hash a structured tuple so separators and mutable directory locators cannot collide.
+    const username = input.provider === 'ldap'
+      ? 'ldap:' + createHash('sha256').update(JSON.stringify([input.provider, input.issuer, input.subject])).digest('hex')
+      : input.username;
 
-    // Use a transaction to ensure atomicity — no partial records
     return this.db.withTransaction(async () => {
-      // Serialize Entra collision checks across PostgreSQL provisioning writers.
-      await this.db.execute("UPDATE config SET value = value WHERE key = 'default_new_user_role'");
-      // Check username uniqueness
-      const existingUsername = await this.getUserByUsername(username);
-      if (existingUsername) {
-        throw new Error(
-          `Account creation failed: derived username "${username}" already exists`
-        );
-      }
-
-      // Check email uniqueness (a separate user with this email should not exist;
-      // collisions must never implicitly link the existing account)
-      const existingEmails = claims.email ? await this.findAllByEmail(claims.email) : [];
-      if (existingEmails.length > 0) {
-        throw new Error(
-          `Account creation failed: email "${claims.email}" already exists`
-        );
-      }
-
-      const userId = randomUUID();
       const now = new Date().toISOString();
-
-      // Insert user with null password_hash (federation-only)
+      // Preserve SetupService's fallback when the row is absent and lock every provisioning writer.
       await this.db.execute(
-        `INSERT INTO users (id, username, email, password_hash, local_auth_enabled, first_name, last_name, is_active, is_admin, created_at, updated_at)
-         VALUES (?, ?, ?, NULL, 0, ?, ?, 1, 0, ?, ?)`,
-        [
-          userId,
-          username,
-          claims.email || null,
-          claims.given_name || '',
-          claims.family_name || '',
-          now,
-          now
-        ]
+        `INSERT INTO config (key, value, updated_at) VALUES ('default_new_user_role', 'role-viewer-001', ?)
+         ON CONFLICT(key) DO UPDATE SET value = config.value`, [now],
       );
-
-      // Assign default viewer role
-      const defaultRoleId = await this.setupService.getDefaultNewUserRole();
-      if (defaultRoleId) {
+      const existing = await this.findByFederatedIdentity(input.provider, input.subject, input.issuer);
+      let userId: string;
+      let identityId: string;
+      if (existing) {
+        if (input.provider === 'entra-id') return existing;
+        userId = existing.id;
+        const identity = await this.db.queryOne<{ id: string }>(
+          'SELECT id FROM federated_identities WHERE provider = ? AND issuer = ? AND subject = ?',
+          [input.provider, input.issuer, input.subject],
+        );
+        assert(identity);
+        identityId = identity.id;
         await this.db.execute(
-          `INSERT INTO user_roles (user_id, role_id, assigned_at) VALUES (?, ?, ?)`,
-          [userId, defaultRoleId, now]
+          'UPDATE users SET email = ?, display_name = ?, first_name = ?, last_name = ?, updated_at = ? WHERE id = ?',
+          [input.email, input.displayName, input.firstName, input.lastName, now, userId],
+        );
+        await this.db.execute('UPDATE federated_identities SET email = ?, updated_at = ? WHERE id = ?',
+          [input.email, now, identityId]);
+      } else {
+        if (await this.getUserByUsername(username)) {
+          throw new FederatedAccountError('IDENTITY_COLLISION', 'Account creation failed: derived username already exists');
+        }
+        if (input.provider === 'entra-id' && input.email && (await this.findAllByEmail(input.email)).length > 0) {
+          throw new FederatedAccountError('IDENTITY_COLLISION', 'Existing accounts require explicit administrative enrollment');
+        }
+        userId = randomUUID();
+        identityId = randomUUID();
+        await this.db.execute(
+          `INSERT INTO users (id, username, email, password_hash, local_auth_enabled, display_name,
+            first_name, last_name, is_active, is_admin, created_at, updated_at)
+           VALUES (?, ?, ?, NULL, 0, ?, ?, ?, 1, 0, ?, ?)`,
+          [userId, username, input.email, input.displayName, input.firstName, input.lastName, now, now],
+        );
+        await this.db.execute(
+          `INSERT INTO federated_identities (id, user_id, provider, issuer, subject, email, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          [identityId, userId, input.provider, input.issuer, input.subject, input.email, now, now],
+        );
+        if (input.defaultRole === 'configured') {
+          const roleId = await this.setupService.getDefaultNewUserRole();
+          if (roleId) await this.db.execute(
+            'INSERT INTO user_roles (user_id, role_id, assigned_at) VALUES (?, ?, ?)', [userId, roleId, now]);
+        }
+      }
+      if (input.provider === 'ldap') {
+        await this.db.execute('INSERT INTO ldap_directory_state (directory_id) VALUES (?) ON CONFLICT DO NOTHING', [input.issuer]);
+        await this.db.execute(
+          `INSERT INTO ldap_identity_metadata (identity_id, directory_id, login_name, dn) VALUES (?, ?, ?, ?)
+           ON CONFLICT(identity_id) DO UPDATE SET login_name = excluded.login_name, dn = excluded.dn`,
+          [identityId, input.issuer, input.loginName, input.dn],
+        );
+        // Provisioning alone proves no session freshness. Revalidation owns these revisions later.
+        await this.db.execute(
+          `INSERT INTO ldap_validation_state (identity_id, config_revision) VALUES (?, '')
+           ON CONFLICT(identity_id) DO NOTHING`, [identityId],
         );
       }
-
-      // Create federated identity record
-      const federatedId = randomUUID();
-      await this.db.execute(
-        `INSERT INTO federated_identities (id, user_id, provider, subject, issuer, email, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
-          federatedId,
-          userId,
-          'entra-id',
-          claims.sub,
-          claims.iss,
-          claims.email,
-          now,
-          now
-        ]
-      );
-
       const user = await this.getUserById(userId);
-      if (!user) {
-        throw new Error('Failed to create federated user');
-      }
-
+      assert(user);
       return user;
     });
   }
@@ -805,6 +831,10 @@ export class UserService {
     issuer: string,
     email: string | null,
   ): Promise<FederatedIdentity> {
+    if (provider === 'ldap') {
+      throw new FederatedAccountError('DIRECTORY_ACCOUNT_READ_ONLY', 'LDAP identities cannot be linked to existing accounts');
+    }
+    await this.requireLocalProfileOwnership(userId);
     const id = randomUUID();
     const now = new Date().toISOString();
 

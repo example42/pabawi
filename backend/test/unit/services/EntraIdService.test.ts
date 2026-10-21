@@ -330,7 +330,12 @@ describe('EntraIdService', () => {
       const result = await provisionService.provisionUser(baseClaims);
 
       expect(result).toBe(newUser);
-      expect(mockUserService.createFederatedUser).toHaveBeenCalledWith(baseClaims);
+      expect(mockUserService.createFederatedUser).toHaveBeenCalledWith({
+        provider: 'entra-id', issuer: baseClaims.iss, subject: baseClaims.sub,
+        username: baseClaims.preferred_username, email: baseClaims.email || null,
+        displayName: null, firstName: baseClaims.given_name, lastName: baseClaims.family_name,
+        defaultRole: 'configured',
+      });
     });
 
     it('wraps createFederatedUser errors as PROVISIONING_FAILED', async () => {
@@ -353,7 +358,12 @@ describe('EntraIdService', () => {
       await provisionService.provisionUser(baseClaims);
 
       expect(mockUserService.findAllByEmail).toHaveBeenCalledWith(baseClaims.email);
-      expect(mockUserService.createFederatedUser).toHaveBeenCalledWith(baseClaims);
+      expect(mockUserService.createFederatedUser).toHaveBeenCalledWith({
+        provider: 'entra-id', issuer: baseClaims.iss, subject: baseClaims.sub,
+        username: baseClaims.preferred_username, email: baseClaims.email || null,
+        displayName: null, firstName: baseClaims.given_name, lastName: baseClaims.family_name,
+        defaultRole: 'configured',
+      });
     });
 
     it('skips email lookup and creates user when email is empty but preferred_username is present', async () => {
@@ -369,7 +379,12 @@ describe('EntraIdService', () => {
 
       // findAllByEmail should not be called with empty string
       expect(mockUserService.findAllByEmail).not.toHaveBeenCalled();
-      expect(mockUserService.createFederatedUser).toHaveBeenCalledWith(claims);
+      expect(mockUserService.createFederatedUser).toHaveBeenCalledWith({
+        provider: 'entra-id', issuer: claims.iss, subject: claims.sub,
+        username: claims.preferred_username, email: claims.email || null,
+        displayName: null, firstName: claims.given_name, lastName: claims.family_name,
+        defaultRole: 'configured',
+      });
     });
 
     it('logs provisioning actions without exposing tokens or secrets', async () => {
