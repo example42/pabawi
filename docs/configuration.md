@@ -143,8 +143,10 @@ When `ENTRA_ID_ENABLED=true`, all four required variables must be set or the ser
 
 ## LDAP directory service
 
-LDAP configuration and read-only directory operations are implemented for internal
-services and tests. Public LDAP login and provider discovery remain unavailable
+LDAP configuration, read-only directory operations and restricted group-mapping
+administration are implemented. The [LDAP administration API](api.md#ldap-administration)
+requires `rbac:admin` for group search, stored mappings and diagnostics.
+Public LDAP login and provider discovery remain unavailable
 until the authentication/session package is complete. Enabling this configuration
 does not enable an authentication endpoint or grant any role.
 

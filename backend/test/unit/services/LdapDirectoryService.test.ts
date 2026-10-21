@@ -89,6 +89,62 @@ describe('immutable LDAP identities and AD policy', () => {
 });
 
 describe('read-only LDAP directory transactions', () => {
+  it('diagnoses lookup, immutable identity, eligibility and selected membership without a user bind or personal fields', async () => {
+    const f = fixture([[user], [user], [group], [group]]);
+    const result = await f.service.diagnose({ username: 'alice', groupSubjects: [groupId] });
+    expect(result.authenticated).toBe(false);
+    expect(result.groupSubjects).toEqual([groupId]);
+    expect(result.stages.map(stage => [stage.stage, stage.status])).toEqual([
+      ['tls', 'passed'], ['lookup', 'passed'], ['identity', 'passed'], ['eligibility', 'passed'], ['groups', 'passed'],
+    ]);
+    expect(f.connect).toHaveBeenCalledTimes(1);
+    expect(f.userConnection.bind).not.toHaveBeenCalled();
+    expect(JSON.stringify(result)).not.toMatch(/alice|uid=|email|fixture-user/);
+    const filters = vi.mocked(f.lookup.search).mock.calls.map(call => String(call[1].filter));
+    expect(filters[0]).not.toContain('employeeType');
+    expect(filters[1]).toContain('employeeType');
+    expect(f.lookup.close).toHaveBeenCalled();
+  });
+
+  it('distinguishes absent identity, ineligible policy and unreadable AD policy in restricted diagnostics', async () => {
+    const absent = await fixture([[]]).service.diagnose({ username: 'absent' });
+    expect(absent.stages.at(-1)).toMatchObject({ stage: 'identity', status: 'failed', code: 'INVALID_IDENTITY' });
+    const inactive = await fixture([[user], []]).service.diagnose({ username: 'alice' });
+    expect(inactive.stages.at(-1)).toMatchObject({ stage: 'eligibility', status: 'failed', code: 'INELIGIBLE' });
+    const f = fixture([[adUser], [{ ...adUser, pwdLastSet: [] }]]);
+    const ad = new LdapDirectoryService({ ...config, directoryType: 'ad', userIdAttr: 'objectGUID' }, f.logger, f.connect);
+    const unreadable = await ad.diagnose({ username: 'alice' });
+    expect(unreadable.stages.at(-1)).toMatchObject({ stage: 'eligibility', status: 'failed', code: 'POLICY_UNREADABLE' });
+  });
+
+  it('redacts raw TLS and lookup failures and returns no partial membership diagnostics', async () => {
+    const f = fixture();
+    f.connect.mockReset().mockRejectedValue(new Error('private endpoint and secret'));
+    const tls = await f.service.diagnose({});
+    expect(tls.stages).toEqual([{ stage: 'tls', status: 'failed', code: 'UNAVAILABLE', durationMs: expect.any(Number) }]);
+    const bound = fixture();
+    vi.mocked(bound.lookup.bind).mockRejectedValue(new InvalidCredentialsError('private lookup password'));
+    const lookup = await bound.service.diagnose({});
+    expect(lookup.stages.at(-1)).toMatchObject({ stage: 'lookup', status: 'failed', code: 'INVALID_CREDENTIALS' });
+    const limited = fixture([[user], [user], [group], new SizeLimitExceededError('private server message')]);
+    const result = await limited.service.diagnose({ username: 'alice', groupSubjects: [groupId] });
+    expect(result.groupSubjects).toBeUndefined();
+    expect(result.stages.at(-1)).toMatchObject({ stage: 'groups', status: 'failed' });
+    expect(JSON.stringify([tls, lookup, result])).not.toContain('private');
+  });
+
+  it('bounds diagnostic deadlines and closes lookup sockets without granting authentication', async () => {
+    vi.useFakeTimers();
+    const f = fixture();
+    vi.mocked(f.lookup.search).mockImplementation(() => new Promise(() => {}));
+    const pending = f.service.diagnose({ username: 'alice' });
+    await vi.advanceTimersByTimeAsync(config.requestTimeoutSeconds * 1000 + 1);
+    const result = await pending;
+    expect(result.stages.at(-1)).toMatchObject({ status: 'failed', code: 'TIMEOUT' });
+    expect(result.authenticated).toBe(false);
+    expect(f.lookup.close).toHaveBeenCalled();
+  });
+
   it('isolates the user bind, rereads identity and returns explicit mapped direct membership', async () => {
     const f = fixture([[user], [user], [group]]);
     expect(await f.service.authenticate('alice', fixturePassword, [groupId, parentId])).toEqual({

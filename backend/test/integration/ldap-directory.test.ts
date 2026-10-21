@@ -37,6 +37,15 @@ describe.skipIf(!ready)('real OpenLDAP directory interoperability', () => {
       expect(direct.user).toMatchObject({ loginName: 'alice', displayName: 'Alice Fixture', email: 'alice@example.test' });
       expect(direct.groupSubjects).toEqual([operators.subject]);
       expect((await directory.resolveGroup(operators.subject)).dn).toBe(operators.dn);
+      const diagnostic = await directory.diagnose({ username: 'alice', groupSubjects: [operators.subject] });
+      expect(diagnostic.authenticated).toBe(false);
+      expect(diagnostic.stages.map(stage => stage.status)).toEqual(Array(5).fill('passed'));
+      expect(diagnostic.groupSubjects).toEqual([operators.subject]);
+      expect(JSON.stringify(diagnostic)).not.toMatch(/Alice|alice@|uid=|fixture-reader/);
+      expect((await directory.diagnose({ username: 'inactive' })).stages.at(-1))
+        .toMatchObject({ stage: 'eligibility', status: 'failed', code: 'INELIGIBLE' });
+      expect((await directory.diagnose({ username: 'absent' })).stages.at(-1))
+        .toMatchObject({ stage: 'identity', status: 'failed', code: 'INVALID_IDENTITY' });
       const nested = new LdapDirectoryService({ ...config, searchNestedGroups: true }, logger);
       expect(new Set((await nested.authenticate('alice', fixturePassword, [operators.subject, admins.subject])).groupSubjects))
         .toEqual(new Set([operators.subject, admins.subject]));
