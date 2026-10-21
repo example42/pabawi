@@ -4,14 +4,27 @@ import { ConfigService } from "../config/ConfigService";
 import type { EntraIdService } from "../services/EntraIdService";
 import type { LdapDirectoryService } from "../services/LdapDirectoryService";
 import type { LdapMappingService } from "../services/LdapMappingService";
+import { AuthenticationService } from "../services/AuthenticationService";
+import { AuditLoggingService } from "../services/AuditLoggingService";
+import type { DatabaseAdapter } from "../database/DatabaseAdapter";
 
 export interface ServiceRegistry {
   logger: LoggerService;
   expertMode: ExpertModeService;
   config: ConfigService;
+  authentication: AuthenticationService;
   entraId?: EntraIdService;
   ldapDirectory?: LdapDirectoryService;
   ldapMappings?: LdapMappingService;
+}
+
+export function resolveAuthenticationService(db: DatabaseAdapter, container: DIContainer): AuthenticationService {
+  if (!container.has('authentication')) {
+    container.register('authentication', new AuthenticationService(
+      db, container.resolve('config').getJwtSecret(), new AuditLoggingService(db),
+    ));
+  }
+  return container.resolve('authentication');
 }
 
 export class DIContainer {

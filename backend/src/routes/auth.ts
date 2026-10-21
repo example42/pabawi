@@ -3,9 +3,7 @@ import { Router, type Request, type Response } from "express";
 import { z } from "zod";
 import { asyncHandler } from "./asyncHandler";
 import { FederatedAccountError, UserService } from "../services/UserService";
-import { AuthenticationService } from "../services/AuthenticationService";
 import { SetupService } from "../services/SetupService";
-import { AuditLoggingService } from "../services/AuditLoggingService";
 import type { DatabaseService } from "../database/DatabaseService";
 import {
   sendValidationError,
@@ -20,7 +18,7 @@ import {
 } from "../utils/errorHandling";
 import { ZodError } from "zod";
 import { createAuthMiddleware } from "../middleware/authMiddleware";
-import { type DIContainer, createDefaultContainer } from "../container/DIContainer";
+import { type DIContainer, createDefaultContainer, resolveAuthenticationService } from "../container/DIContainer";
 import type { EntraIdService } from "../services/EntraIdService";
 
 /**
@@ -75,13 +73,10 @@ export function createAuthRouter(
 ): Router {
   const router = Router();
   const logger = container.resolve("logger");
-  const configService = container.resolve("config");
-  const jwtSecret = configService.getJwtSecret();
-  const auditLogger = new AuditLoggingService(databaseService.getAdapter());
-  const authService = new AuthenticationService(databaseService.getAdapter(), jwtSecret, auditLogger);
+  const authService = resolveAuthenticationService(databaseService.getAdapter(), container);
   const userService = new UserService(databaseService.getAdapter(), authService);
   const setupService = new SetupService(databaseService.getAdapter());
-  const authMiddleware = createAuthMiddleware(databaseService.getAdapter(), jwtSecret);
+  const authMiddleware = createAuthMiddleware(authService);
   router.get("/permissions", asyncHandler(authMiddleware), asyncHandler(async (req, res) => {
     const userId = req.user?.userId;
     if (!userId) {

@@ -1,6 +1,6 @@
 # LDAP authentication implementation plan
 
-**Status:** Packages 1 through 4 complete; packages 5 through 7 pending
+**Status:** Packages 1 through 4 and 5A complete; packages 5B, 6 and 7 pending
 **Date:** 2026-10-21  
 **Scope:** OpenLDAP and Active Directory authentication, directory group authorization, and provider-bound session revalidation
 
@@ -451,8 +451,8 @@ Update this table as work proceeds. Status values: `pending`, `in_progress`, `bl
 | 1 Identity and schema | complete | Commit `a739cf2`, migration 031 and consumers | [2026-10-21 Codex](#handoff-2026-10-21-codex-package-1) |
 | 2 Shared provisioning | complete | Commit `2d37548`, verified against current source | [2026-10-21 Codex](#handoff-2026-10-21-codex-package-2) |
 | 3 Directory configuration and service | complete | Commit `4fac169`, verified against current source | [2026-10-21 Codex](#handoff-2026-10-21-codex-package-3) |
-| 4 RBAC mapping administration | complete | Branch `151`, base `4fac169`, uncommitted paths in handoff | [2026-10-21 Codex](#handoff-2026-10-21-codex-package-4) |
-| 5A Provider context and wiring | pending | Not started | None |
+| 4 RBAC mapping administration | complete | Commit `4a5c2b4`, verified against current source | [2026-10-21 Codex](#handoff-2026-10-21-codex-package-4) |
+| 5A Provider context and wiring | complete | Branch `151`, base `ac20696`, uncommitted paths in handoff | [2026-10-21 Codex](#handoff-2026-10-21-codex-package-5a) |
 | 5B LDAP login and transport enforcement | pending | Not started | None |
 | 6 Frontend and operator documentation | pending | Not started | None |
 | 7 Interoperability and rollout | pending | Not started | None |
@@ -900,3 +900,137 @@ Content-Type: application/json
 Use source/directory/group/role labels returned by the API. Never submit browser locators as identity. Continue local/Entra discovery unchanged until package 5B.
 
 **Next action and acceptance criterion still to satisfy:** Start package 5A. Add verified provider/identity context for existing local/Entra access and refresh tokens, shared configured authentication dependencies and intentional one-time legacy-session invalidation via a forward migration on both adapters. Keep LDAP tokens/login unavailable until package 5B completes all transport and freshness checks.
+
+
+## Handoff 2026-10-21 Codex package 5A
+
+**Date and agent:** 2026-10-21, Codex.
+
+**Package and checkpoint:** Package 5A, provider context and shared authentication wiring, complete. Package 5B is next eligible. Public LDAP discovery/login and LDAP token issuance remain unavailable.
+
+**Branch, base commit, completion commit or uncommitted paths:** Branch `151`, base `ac2069672962e0c2b723ba8d65534841d8afd461`. Starting tree was clean. Package 4 is committed as `4a5c2b4`; its progress reference has been corrected. Base `ac20696` bumps release metadata to 1.6.0 WIP, so the earlier handoff's single release-documentation failure is no longer an accurate description of the current base. Read AGENTS.md, code-change/git/Context7 instructions, progress and latest handoffs. Verified migration 031, provider-neutral provisioning, scoped identities and grants, directory service and mapping revision/audit routes against source and regression tests. KiroGraph had 208 pending files; used source inspection for missing context and did not change the index. No completion commit was created. Changed/new paths:
+
+~~~text
+backend/src/container/DIContainer.ts
+backend/src/database/migrations/032_provider_bound_sessions.postgres.sql
+backend/src/database/migrations/032_provider_bound_sessions.sqlite.sql
+backend/src/middleware/authMiddleware.ts
+backend/src/routes/auth.ts
+backend/src/routes/console.ts
+backend/src/routes/entraIdAuth.ts
+backend/src/routes/groups.ts
+backend/src/routes/journal.ts
+backend/src/routes/ldapAdministration.ts
+backend/src/routes/permissions.ts
+backend/src/routes/roles.ts
+backend/src/routes/setup.ts
+backend/src/routes/users.ts
+backend/src/server.ts
+backend/src/services/AuthenticationService.ts
+backend/src/services/EntraIdService.ts
+backend/src/types/express.d.ts
+backend/test/AuthenticationService.test.ts
+backend/test/database/BatchLifecycleMigration.test.ts
+backend/test/database/authorization-state.test.ts
+backend/test/database/external-identity-boundaries.test.ts
+backend/test/database/federated-provisioning.test.ts
+backend/test/database/migration-016-convergence.test.ts
+backend/test/database/migration-integration.test.ts
+backend/test/database/provider-bound-sessions.test.ts
+backend/test/database/sso-concurrency.test.ts
+backend/test/integration/EntraIdAuthFlow.test.ts
+backend/test/integration/ldap-account-ownership.test.ts
+backend/test/integration/ldap-administration.test.ts
+backend/test/integration/mcp-authorization.test.ts
+backend/test/integration/shared-authentication.test.ts
+backend/test/middleware/authMiddleware.test.ts
+backend/test/properties/auth/token-validity.property.test.ts
+backend/test/properties/consoleRbacCreation.property.test.ts
+backend/test/properties/consoleRbacTermination.property.test.ts
+backend/test/routes/auth.test.ts
+backend/test/routes/aws.test.ts
+backend/test/routes/groups.test.ts
+backend/test/routes/journal.test.ts
+backend/test/routes/permissions.test.ts
+backend/test/routes/roles-permissions.test.ts
+backend/test/routes/users.test.ts
+backend/test/security/console-lifecycle.test.ts
+backend/test/security/entitlement-administration.test.ts
+backend/test/security/route-authorization.test.ts
+backend/test/security/session-revocation.test.ts
+docs/api.md
+docs/internal/plans/ldap-authentication.md
+~~~
+
+**Completed scope and changed interfaces:**
+
+- Access and refresh JWTs require signed `authContext`. Local context is `{ provider: 'local', identityId: null }`; Entra context is `{ provider: 'entra-id', identityId: '<federated-identity-id>' }`. Missing, malformed, unknown-provider and extra-field contexts fail closed, including LDAP contexts at this checkpoint. No provider inference from email, username or enrollment takes place. Existing issuer/audience `pabawi`, HS256 restriction, token purpose, expiry/JTI/session-version checks and token lifetimes remain.
+- `generateToken(user, context, expectedVersion?)`, `generateRefreshToken(user, context, expectedVersion?)` and `generateTokenPair(user, context, expectedVersion?)` require an explicit context argument. Expected session version is the third argument. Local login explicitly selects local context. Entra callback passes the exact identity ID resolved by authenticated issuer/subject, not an arbitrary identity attached to the account. Refresh retains the verified inbound context in both replacement tokens.
+- `assertSessionEligible(userId, context, expectedVersion?)` is the shared account/provider eligibility seam and returns the current session version. It validates context, requires an active account and the expected version, then requires enabled local scope or an existing identity matching ID, user ID and provider. It runs at issuance, access verification and refresh. Pair issuance checks the same context/version before and between signing steps and again before returning. Identity removal rejects the associated Entra session while separately issued local sessions remain valid. Account-wide revocation and refresh reuse detection retain existing behavior.
+- `InvalidAuthenticationContextError` is a typed safe INVALID_TOKEN failure for context or identity ownership rejection. Client responses retain existing authentication error envelopes and no identity details are exposed.
+- DIContainer registers `authentication`; `resolveAuthenticationService(db, container)` creates it once with ConfigService's JWT secret and an audit logger, or returns the explicitly registered instance. Server, setup/auth/user/RBAC/journal/console/LDAP/Entra routers and lifecycle/MCP user provisioning share it. The standalone password-reset CLI still owns its independent process/database service and issues no sessions.
+- `createAuthMiddleware(authService)` now takes the configured instance and constructs no service. It exposes verified `req.authContext` separately from the existing user DTO and captures this same instance/token in `req.revalidateAuth`. Static lifecycle/MCP credentials retain their existing separate authentication policy and are not assigned a fabricated password-provider context.
+- New dialect-specific migration 032 rotates every existing account's session version and expires pending OAuth state and authorization-code exchanges once. Console credentials fail the existing persisted session-version comparison. Account/profile data, identities, role grants, console records and relationships survive. Re-running migrations does not invalidate freshly issued sessions. Legacy JWTs lacking context are rejected even without version inference.
+- Updated API documentation describes context and required upgrade reauthentication. Updated older test call sites to select local explicitly, adjusted historic migration expectations and raw property-test payloads, and replaced direct LDAP token fixtures with persisted-version assertions or correctly scoped Entra tokens. The password-ownership HTTP regression uses a deliberately constructed legacy mixed account and a local token. No LDAP authentication bypass was added.
+
+**Verification: exact commands, outcomes, and external log reference:**
+
+All state-changing, network-documentation and verification commands are recorded in append-only `~/.agents/logs/pabawi.jsonl`. Evidence is retained under `/tmp/pabawi-ldap-p5-*`. Used the previously verified Node 24.21.0 archive, PostgreSQL fixture and local OpenLDAP image. No new dependency, image or archive download occurred, so there were no new downloaded artifacts requiring a ClamAV scan.
+
+- Focused provider/upgrade/shared-service/Entra checks passed: 40 tests in five files, including both adapters.
+
+~~~bash
+PATH=/tmp/pabawi-node24/node-v24.21.0-darwin-arm64/bin:$PATH TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:62420/ldap_package5a_verified npm run test --workspace=backend -- test/database/provider-bound-sessions.test.ts test/database/migration-016-convergence.test.ts test/properties/auth/token-validity.property.test.ts test/integration/shared-authentication.test.ts test/integration/EntraIdAuthFlow.test.ts > /tmp/pabawi-ldap-p5-focused.log 2>&1
+~~~
+
+New evidence includes local/Entra context through issuance and rotation, a real signed Entra callback/code exchange plus HTTP refresh, multiple-provider enrollment without inference, signed malformed/foreign-user context, tampered signatures, identity deletion, local-scope disablement, revocation, null email and shared service use across route guards/MCP/stream revalidation. Fresh SQLite/PostgreSQL and populated pre-032 upgrades prove one-time invalidation while preserving identity, account, grant and console records. Existing regressions cover revoked refresh reuse and revocation between pair signing steps.
+
+- Fixture startup used existing local artifacts:
+
+~~~bash
+docker start pabawi-ldap-p1-postgres
+docker exec pabawi-ldap-p1-postgres createdb -U postgres ldap_package5a_acceptance
+docker run --detach --name pabawi-ldap-p5-openldap --pull never -p 127.0.0.1::1389 -p 127.0.0.1::1636 pabawi-ldap-fixture:package3-verified
+mkdir -p /tmp/pabawi-ldap-p5-tls && docker cp pabawi-ldap-p5-openldap:/fixture/tls/ca.pem /tmp/pabawi-ldap-p5-tls/ca.pem
+~~~
+
+Published ports: PostgreSQL 62420, LDAPS 51397, StartTLS 51396. Earlier retained `postgres` database had migration-031 checksum drift and was not repaired or reset. Fresh disposable databases removed that fixture limitation. Initial test failures from legacy payload/migration assumptions, missing ConfigService test secret length and the local-scope/password-hash constraint were corrected. Build initially found one unused route audit instance, removed before acceptance.
+
+- Full backend acceptance on final production source passed: 248 files passed, one skipped; 4020 tests passed, two skipped, one todo. Includes local/Entra, authorization and transport regressions, migrations/concurrency on both adapters and live OpenLDAP LDAPS/StartTLS.
+
+~~~bash
+PATH=/tmp/pabawi-node24/node-v24.21.0-darwin-arm64/bin:$PATH TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:62420/ldap_package5a_acceptance TEST_LDAP_LDAPS_PORT=51397 TEST_LDAP_STARTTLS_PORT=51396 TEST_LDAP_CA_FILE=/tmp/pabawi-ldap-p5-tls/ca.pem npm run test --workspace=backend > /tmp/pabawi-ldap-p5-backend-final-acceptance.log 2>&1
+PATH=/tmp/pabawi-node24/node-v24.21.0-darwin-arm64/bin:$PATH npm run build:backend > /tmp/pabawi-ldap-p5-build-final.log 2>&1
+PATH=/tmp/pabawi-node24/node-v24.21.0-darwin-arm64/bin:$PATH npm run lint > /tmp/pabawi-ldap-p5-lint-final.log 2>&1
+~~~
+
+Backend build and both workspace linters passed. Frontend source and response DTOs are unchanged, so frontend tests/component checks were not rerun.
+
+- Documentation contracts pass all five checks independent of pre-existing version consistency. The complete run has the two existing metadata failures described below.
+
+~~~bash
+PATH=/tmp/pabawi-node24/node-v24.21.0-darwin-arm64/bin:$PATH node --test scripts/documentation/contracts.test.mjs > /tmp/pabawi-ldap-p5-doc-contracts.log 2>&1
+PATH=/Users/al/.cache/pre-commit/repovdso_3ip/py_env-python3/bin:$PATH bash scripts/quality/secret-scan.sh > /tmp/pabawi-ldap-p5-secrets-full.log 2>&1
+~~~
+
+The tracked scan retains four unchanged findings. Additional scan of all 49 changed/new files passes with zero new unreviewed findings (`/tmp/pabawi-ldap-p5-secret-comparison.log`). Exact scanner/comparison commands are in the external log. Synthetic test credentials are annotated; no baseline exception was added. The comparison proves flagged files, baseline and relevant release metadata match starting commit `ac20696` byte-for-byte.
+
+Final documentation-only checks retain the same two metadata failures (`/tmp/pabawi-ldap-p5-doc-contracts-final.log`), and the changed/new-file secret comparison passes after handoff publication. `git diff --check` passed. `docker stop pabawi-ldap-p5-openldap pabawi-ldap-p1-postgres` stopped both acceptance servers; containers, databases, public CA and evidence are retained. Prior handoff records are preserved verbatim. No commit, push, PR, deployment or repository cleanup occurred.
+
+**Pre-existing failures:**
+
+- Base `ac20696` has package metadata 1.6.0 while lockfile/OpenAPI metadata remains 1.5.1; CHANGELOG.md also lacks the required dated release entry. Two documentation contracts fail: release-version consistency and OpenAPI-version coherence. These are outside package 5A; no release metadata was changed here.
+- Full tracked-tree secret scan reports four unchanged findings: one in backend/package.json, two in backend/src/cli/resetUserPassword.ts and one in backend/test/unit/cli/resetUserPassword.test.ts. The reviewed baseline is unchanged.
+- One full rerun hit an existing logging property failure, seed 1994789662, path `6:0:0`, vector `['error', ' ', 'z', 'bolt', 'z']`. The field-order property uses `indexOf('[z]')` for both component and operation, so equal labels resolve to the same first marker. LoggerService and this test match base byte-for-byte. Deterministic compiled-logger reproduction confirms two correctly ordered markers while the property's indices are equal (`/tmp/pabawi-ldap-p5-logging-reproducer.log`); its exact command is in the external log. No logging code or property test was changed. The final full acceptance rerun passed.
+
+**Remaining work and blockers:** No package-5A acceptance blocker remains. Package 5B is pending and blocks public LDAP authentication. The release-documentation and tracked-tree secret failures above remain release blockers; the unrelated logging property remains a known intermittent verification defect. Actual AD environment/credentials remain unavailable and block package-7 interoperability/support claims. The previously recorded decommissioned DN-parser dependency still requires maintenance review before release. The old retained PostgreSQL database has drifted migration checksums; use a new disposable database for acceptance rather than changing migration history.
+
+**Decisions or discoveries affecting the next package:**
+
+- Extend the existing AuthenticationContext union/validator and shared assertSessionEligible seam for LDAP only when complete credential, explicit-role and freshness enforcement is ready. Add directory ID to LDAP context, resolve the exact database identity/metadata owner and configured directory, and never infer provider from account enrollments. Refresh must force LDAP validation; pair issuance must reuse the already authoritative login/refresh result without incorrectly extending freshness. Local/Entra paths must remain independent of directory availability.
+- REST middleware and `req.revalidateAuth` now use the shared service. StreamingExecutionManager.subscribe installs SessionAuthorization around that callback; journal SSE uses the same request callback. McpRouter captures the opening callback for its stored session, checks it on subsequent requests/idle intervals and exposes it to tool handlers. Add LDAP deadline/race/outage coverage through all these paths in 5B.
+- Console REST guards share the service, but websocket authorization still goes through ConsoleSessionManager.assertSessionAuthorized, which checks account session version and console permission only. Console session rows currently retain no authentication context. Package 5B must carry the verified request provider/identity/directory context through reservation and persistence, wire the shared eligibility dependency into the manager, and enforce it during upgrade, initial relay, idle checks and both delivery directions. Do not use account-level identity guessing or rely only on console REST middleware.
+- Shared provisioning and LdapMappingService.withRevision still own their transactions. Package 5B must form a single atomic account/profile/grant/freshness publication transaction, combine mapping/config revisions with database-time lease owner/expiry/fencing checks, and prevent stale work from restoring removed grants. Null validation state is never eligibility. Positive revocation remains terminal; transient failures cannot extend freshness or erase authoritative grants.
+- Migration 032 is now part of the sequence and intentionally invalidates legacy sessions. Do not edit 031 or 032 when adding console context or other new schema requirements; add another forward migration.
+
+**Next action and acceptance criterion still to satisfy:** Start package 5B. Implement explicit LDAP login/discovery and provider-aware throttling, atomic grant/profile reconciliation, persisted freshness with cross-process leases/fencing, forced refresh and every REST/SSE/MCP/console enforcement path. Keep LDAP login/token issuance unavailable until all package-5B transport, deadline, revocation and race acceptance checks pass.

@@ -4,14 +4,13 @@ import { Router, type Request, type Response } from "express";
 import { z } from "zod";
 import { asyncHandler } from "./asyncHandler";
 import { FederatedAccountError, UserService } from "../services/UserService";
-import { AuthenticationService } from "../services/AuthenticationService";
 import { PermissionService } from "../services/PermissionService";
 import type { DatabaseService } from "../database/DatabaseService";
 import { sendValidationError, ERROR_CODES } from "../utils/errorHandling";
 import { ZodError } from "zod";
 import { createAuthMiddleware } from "../middleware/authMiddleware";
 import { createRbacMiddleware } from "../middleware/rbacMiddleware";
-import { type DIContainer, createDefaultContainer } from "../container/DIContainer";
+import { type DIContainer, createDefaultContainer, resolveAuthenticationService } from "../container/DIContainer";
 
 /**
  * Zod schema for pagination query parameters
@@ -55,13 +54,11 @@ export function createUsersRouter(
 ): Router {
   const router = Router();
   const logger = container.resolve("logger");
-  const configService = container.resolve("config");
-  const jwtSecret = configService.getJwtSecret();
-  const authService = new AuthenticationService(databaseService.getAdapter(), jwtSecret);
+  const authService = resolveAuthenticationService(databaseService.getAdapter(), container);
   const userService = new UserService(databaseService.getAdapter(), authService);
   const auditLogger = new AuditLoggingService(databaseService.getAdapter());
   const permissionService = new PermissionService(databaseService.getAdapter());
-  const authMiddleware = createAuthMiddleware(databaseService.getAdapter(), jwtSecret);
+  const authMiddleware = createAuthMiddleware(authService);
   const rbacMiddleware = createRbacMiddleware(databaseService.getAdapter());
 
   /**

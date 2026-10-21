@@ -40,7 +40,7 @@ describe('LDAP account ownership at HTTP boundaries', () => {
     app.use('/api/users', createUsersRouter(database, container));
     const admin = await users.createUser({ username: 'admin', email: 'admin@example.test',
       password: fixturePassword, firstName: 'Admin', lastName: 'User', isAdmin: true });
-    adminToken = await auth.generateToken(admin);
+    adminToken = await auth.generateToken(admin, { provider: 'local', identityId: null });
     ldapUser = await users.createFederatedUser({ provider: 'ldap', issuer: 'directory', subject: 'subject',
       loginName: 'alice', dn: 'uid=alice,dc=example', email: 'alice@example.test', displayName: 'Alice',
       firstName: 'Alice', lastName: 'User', defaultRole: 'none' });
@@ -75,7 +75,10 @@ describe('LDAP account ownership at HTTP boundaries', () => {
 
   it('rejects authenticated password changes before password verification or lockout accounting', async () => {
     const verify = vi.spyOn(AuthenticationService.prototype, 'verifyPassword');
-    const token = await auth.generateToken(ldapUser);
+    // Exercise the server-side ownership guard for a legacy mixed account.
+    await database.getAdapter().execute('UPDATE users SET local_auth_enabled = 1, password_hash = ? WHERE id = ?',
+      [await auth.hashPassword(fixturePassword), ldapUser.id]);
+    const token = await auth.generateToken(ldapUser, { provider: 'local', identityId: null });
     const response = await request(harness.use(app)).post('/api/auth/change-password')
       .set('Authorization', `Bearer ${token}`).send({ currentPassword: fixturePassword, newPassword: fixturePassword }).expect(403);
     expect(response.body.error.code).toBe('DIRECTORY_ACCOUNT_READ_ONLY');

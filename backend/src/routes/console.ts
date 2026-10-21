@@ -9,7 +9,7 @@ import { PermissionService } from "../services/PermissionService";
 import type { ConsoleSessionManager } from "../services/ConsoleSessionManager";
 import { ConsoleAccountError, ConsoleCapacityError } from "../services/ConsoleSessionManager";
 import type { ConsoleConnectionBroker } from "../services/ConsoleConnectionBroker";
-import { type DIContainer, createDefaultContainer } from "../container/DIContainer";
+import { type DIContainer, createDefaultContainer, resolveAuthenticationService } from "../container/DIContainer";
 
 import { asyncHandler } from "./asyncHandler";
 
@@ -37,10 +37,8 @@ export function createConsoleRouter(
 ): Router {
   const router = Router();
   const logger = container.resolve("logger");
-  const config = container.resolve("config");
 
-  const jwtSecret = config.getJwtSecret();
-  const authMiddleware = createAuthMiddleware(db, jwtSecret);
+  const authMiddleware = createAuthMiddleware(resolveAuthenticationService(db, container));
   const rbacMiddleware = createRbacMiddleware(db);
   const permissionService = new PermissionService(db);
 

@@ -9,7 +9,7 @@ import { sendValidationError, ERROR_CODES } from "../utils/errorHandling";
 import { ZodError } from "zod";
 import { createAuthMiddleware } from "../middleware/authMiddleware";
 import { createRbacMiddleware } from "../middleware/rbacMiddleware";
-import { type DIContainer, createDefaultContainer } from "../container/DIContainer";
+import { type DIContainer, createDefaultContainer, resolveAuthenticationService } from "../container/DIContainer";
 
 /**
  * Zod schema for pagination query parameters
@@ -38,11 +38,9 @@ export function createPermissionsRouter(
 ): Router {
   const router = Router();
   const logger = container.resolve("logger");
-  const configService = container.resolve("config");
-  const jwtSecret = configService.getJwtSecret();
   const auditLogger = new AuditLoggingService(databaseService.getAdapter());
   const permissionService = new PermissionService(databaseService.getAdapter());
-  const authMiddleware = createAuthMiddleware(databaseService.getAdapter(), jwtSecret);
+  const authMiddleware = createAuthMiddleware(resolveAuthenticationService(databaseService.getAdapter(), container));
   const rbacMiddleware = createRbacMiddleware(databaseService.getAdapter());
 
   /**

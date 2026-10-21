@@ -290,6 +290,7 @@ export class EntraIdService {
     // 10. Issue session tokens and generate auth code
     const authCodeEntry = await this.issueSessionTokens(
       user,
+      identity.id,
       tokenResponse.id_token,
       browserBinding,
     );
@@ -408,6 +409,7 @@ export class EntraIdService {
    */
   private async issueSessionTokens(
     user: User,
+    identityId: string,
     idToken: string,
     browserBinding: string,
   ): Promise<AuthCodeEntry> {
@@ -415,7 +417,7 @@ export class EntraIdService {
 
     this.requireActiveUser(user);
     // 1. Generate Pabawi JWT tokens
-    const { token: accessToken, refreshToken } = await this.authService.generateTokenPair(user);
+    const { token: accessToken, refreshToken } = await this.authService.generateTokenPair(user, { provider: 'entra-id', identityId });
 
     // 2. Generate single-use authorization code (32 bytes of entropy)
     const authCode = randomBytes(32).toString('hex');

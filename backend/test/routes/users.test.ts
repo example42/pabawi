@@ -117,7 +117,7 @@ describe('Users Router - GET /api/users', () => {
     await userService.assignRoleToUser(adminUserId, adminRole.id);
 
     // Generate token for admin user
-    adminToken = await authService.generateToken(adminUser);
+    adminToken = await authService.generateToken(adminUser, { provider: 'local', identityId: null });
 
     // Create regular user without permissions
     const regularUser = await userService.createUser({
@@ -131,7 +131,7 @@ describe('Users Router - GET /api/users', () => {
     regularUserId = regularUser.id;
 
     // Generate token for regular user
-    regularUserToken = await authService.generateToken(regularUser);
+    regularUserToken = await authService.generateToken(regularUser, { provider: 'local', identityId: null });
   });
 
   afterEach(async () => {
@@ -363,7 +363,7 @@ describe('Users Router - GET /api/users', () => {
         isAdmin: true,
       });
 
-      const superAdminToken = await authService.generateToken(superAdmin);
+      const superAdminToken = await authService.generateToken(superAdmin, { provider: 'local', identityId: null });
 
       const response = await request(harness.use(app))
         .get('/api/users')
@@ -456,7 +456,7 @@ describe('Users Router - GET /api/users/:id', () => {
     await userService.assignRoleToUser(adminUserId, adminRole.id);
 
     // Generate token for admin user
-    adminToken = await authService.generateToken(adminUser);
+    adminToken = await authService.generateToken(adminUser, { provider: 'local', identityId: null });
 
     // Create regular user without permissions
     const regularUser = await userService.createUser({
@@ -470,7 +470,7 @@ describe('Users Router - GET /api/users/:id', () => {
     regularUserId = regularUser.id;
 
     // Generate token for regular user
-    regularUserToken = await authService.generateToken(regularUser);
+    regularUserToken = await authService.generateToken(regularUser, { provider: 'local', identityId: null });
 
     // Create test user with groups and roles
     const testUser = await userService.createUser({
@@ -709,7 +709,7 @@ describe('Users Router - GET /api/users/:id', () => {
         isAdmin: true,
       });
 
-      const superAdminToken = await authService.generateToken(superAdmin);
+      const superAdminToken = await authService.generateToken(superAdmin, { provider: 'local', identityId: null });
 
       const response = await request(harness.use(app))
         .get(`/api/users/${testUserId}`)
@@ -820,7 +820,7 @@ describe('Users Router - PUT /api/users/:id', () => {
     await userService.assignRoleToUser(adminUserId, adminRole.id);
 
     // Generate token for admin user
-    adminToken = await authService.generateToken(adminUser);
+    adminToken = await authService.generateToken(adminUser, { provider: 'local', identityId: null });
 
     // Create regular user without permissions
     const regularUser = await userService.createUser({
@@ -834,7 +834,7 @@ describe('Users Router - PUT /api/users/:id', () => {
     regularUserId = regularUser.id;
 
     // Generate token for regular user
-    regularUserToken = await authService.generateToken(regularUser);
+    regularUserToken = await authService.generateToken(regularUser, { provider: 'local', identityId: null });
 
     // Create test user to be updated
     const testUser = await userService.createUser({
@@ -1225,7 +1225,7 @@ describe('Users Router - PUT /api/users/:id', () => {
         isAdmin: true,
       });
 
-      const superAdminToken = await authService.generateToken(superAdmin);
+      const superAdminToken = await authService.generateToken(superAdmin, { provider: 'local', identityId: null });
 
       const response = await request(harness.use(app))
         .put(`/api/users/${testUserId}`)
@@ -1387,7 +1387,7 @@ describe('Users Router - DELETE /api/users/:id', () => {
     await userService.assignRoleToUser(adminUserId, adminRole.id);
 
     // Generate token for admin user
-    adminToken = await authService.generateToken(adminUser);
+    adminToken = await authService.generateToken(adminUser, { provider: 'local', identityId: null });
 
     // Create user with users:write permission (but not users:admin)
     const writerUser = await userService.createUser({
@@ -1429,7 +1429,7 @@ describe('Users Router - DELETE /api/users/:id', () => {
     await userService.assignRoleToUser(writerUserId, writerRole.id);
 
     // Generate token for writer user
-    writerUserToken = await authService.generateToken(writerUser);
+    writerUserToken = await authService.generateToken(writerUser, { provider: 'local', identityId: null });
 
     // Create regular user without permissions
     const regularUser = await userService.createUser({
@@ -1443,7 +1443,7 @@ describe('Users Router - DELETE /api/users/:id', () => {
     regularUserId = regularUser.id;
 
     // Generate token for regular user
-    regularUserToken = await authService.generateToken(regularUser);
+    regularUserToken = await authService.generateToken(regularUser, { provider: 'local', identityId: null });
 
     // Create test user to be deleted
     const testUser = await userService.createUser({
@@ -1617,7 +1617,7 @@ describe('Users Router - DELETE /api/users/:id', () => {
         isAdmin: true,
       });
 
-      const superAdminToken = await authService.generateToken(superAdmin);
+      const superAdminToken = await authService.generateToken(superAdmin, { provider: 'local', identityId: null });
 
       await request(harness.use(app))
         .delete(`/api/users/${testUserId}`)
@@ -1813,7 +1813,7 @@ describe('Users Router - POST /api/users/:id/groups/:groupId', () => {
     await userService.assignRoleToUser(adminUserId, adminRole.id);
 
     // Generate token for admin user
-    adminToken = await authService.generateToken(adminUser);
+    adminToken = await authService.generateToken(adminUser, { provider: 'local', identityId: null });
 
     // Create regular user without permissions
     const regularUser = await userService.createUser({
@@ -1827,7 +1827,7 @@ describe('Users Router - POST /api/users/:id/groups/:groupId', () => {
     regularUserId = regularUser.id;
 
     // Generate token for regular user
-    regularUserToken = await authService.generateToken(regularUser);
+    regularUserToken = await authService.generateToken(regularUser, { provider: 'local', identityId: null });
 
     // Create test user to be added to group
     const testUser = await userService.createUser({
@@ -2087,7 +2087,7 @@ describe('Users Router - POST /api/users/:id/groups/:groupId', () => {
         isAdmin: true,
       });
 
-      const superAdminToken = await authService.generateToken(superAdmin);
+      const superAdminToken = await authService.generateToken(superAdmin, { provider: 'local', identityId: null });
 
       await request(harness.use(app))
         .post(`/api/users/${testUserId}/groups/${testGroupId}`)
@@ -2225,7 +2225,7 @@ describe('Users Router - DELETE /api/users/:id/groups/:groupId', () => {
     await userService.assignRoleToUser(adminUserId, adminRole.id);
 
     // Generate token for admin user
-    adminToken = await authService.generateToken(adminUser);
+    adminToken = await authService.generateToken(adminUser, { provider: 'local', identityId: null });
 
     // Create regular user without permissions
     const regularUser = await userService.createUser({
@@ -2239,7 +2239,7 @@ describe('Users Router - DELETE /api/users/:id/groups/:groupId', () => {
     regularUserId = regularUser.id;
 
     // Generate token for regular user
-    regularUserToken = await authService.generateToken(regularUser);
+    regularUserToken = await authService.generateToken(regularUser, { provider: 'local', identityId: null });
 
     // Create test user to be removed from group
     const testUser = await userService.createUser({
@@ -2555,7 +2555,7 @@ describe('Users Router - DELETE /api/users/:id/groups/:groupId', () => {
         isAdmin: true,
       });
 
-      const superAdminToken = await authService.generateToken(superAdmin);
+      const superAdminToken = await authService.generateToken(superAdmin, { provider: 'local', identityId: null });
 
       await request(harness.use(app))
         .delete(`/api/users/${testUserId}/groups/${testGroupId}`)
@@ -2680,7 +2680,7 @@ describe('Users Router - POST /api/users/:id/roles/:roleId', () => {
     await userService.assignRoleToUser(adminUserId, adminRole.id);
 
     // Generate token for admin user
-    adminToken = await authService.generateToken(adminUser);
+    adminToken = await authService.generateToken(adminUser, { provider: 'local', identityId: null });
 
     // Create regular user without permissions
     const regularUser = await userService.createUser({
@@ -2694,7 +2694,7 @@ describe('Users Router - POST /api/users/:id/roles/:roleId', () => {
     regularUserId = regularUser.id;
 
     // Generate token for regular user
-    regularUserToken = await authService.generateToken(regularUser);
+    regularUserToken = await authService.generateToken(regularUser, { provider: 'local', identityId: null });
 
     // Create test user to be assigned role
     const testUser = await userService.createUser({
@@ -2980,7 +2980,7 @@ describe('Users Router - POST /api/users/:id/roles/:roleId', () => {
         isAdmin: true,
       });
 
-      const superAdminToken = await authService.generateToken(superAdmin);
+      const superAdminToken = await authService.generateToken(superAdmin, { provider: 'local', identityId: null });
 
       await request(harness.use(app))
         .post(`/api/users/${testUserId}/roles/${testRoleId}`)
@@ -3144,7 +3144,7 @@ describe('Users Router - DELETE /api/users/:id/roles/:roleId', () => {
     await userService.assignRoleToUser(adminUserId, adminRole.id);
 
     // Generate token for admin user
-    adminToken = await authService.generateToken(adminUser);
+    adminToken = await authService.generateToken(adminUser, { provider: 'local', identityId: null });
 
     // Create regular user without permissions
     const regularUser = await userService.createUser({
@@ -3158,7 +3158,7 @@ describe('Users Router - DELETE /api/users/:id/roles/:roleId', () => {
     regularUserId = regularUser.id;
 
     // Generate token for regular user
-    regularUserToken = await authService.generateToken(regularUser);
+    regularUserToken = await authService.generateToken(regularUser, { provider: 'local', identityId: null });
 
     // Create test user to be assigned role
     const testUser = await userService.createUser({
@@ -3480,7 +3480,7 @@ describe('Users Router - DELETE /api/users/:id/roles/:roleId', () => {
         isAdmin: true,
       });
 
-      const superAdminToken = await authService.generateToken(superAdmin);
+      const superAdminToken = await authService.generateToken(superAdmin, { provider: 'local', identityId: null });
 
       await request(harness.use(app))
         .delete(`/api/users/${testUserId}/roles/${testRoleId}`)

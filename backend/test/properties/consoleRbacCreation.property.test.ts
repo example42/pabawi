@@ -164,7 +164,7 @@ describe("Feature: console-integration, Property 5: RBAC enforcement for session
       await userService.assignRoleToUser(user.id, role.id);
     }
 
-    const token = await authService.generateToken(user);
+    const token = await authService.generateToken(user, { provider: 'local', identityId: null });
     return { token, userId: user.id };
   }
 

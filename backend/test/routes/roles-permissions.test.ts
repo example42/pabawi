@@ -101,7 +101,7 @@ describe('Roles Router - Role-Permission Association Routes', () => {
     await userService.assignRoleToUser(adminUserId, adminRole.id);
 
     // Generate token for admin user
-    adminToken = await authService.generateToken(adminUser);
+    adminToken = await authService.generateToken(adminUser, { provider: 'local', identityId: null });
 
     // Create regular user without permissions
     const regularUser = await userService.createUser({
@@ -115,7 +115,7 @@ describe('Roles Router - Role-Permission Association Routes', () => {
     regularUserId = regularUser.id;
 
     // Generate token for regular user
-    regularUserToken = await authService.generateToken(regularUser);
+    regularUserToken = await authService.generateToken(regularUser, { provider: 'local', identityId: null });
 
     // Create test role
     const testRole = await roleService.createRole({

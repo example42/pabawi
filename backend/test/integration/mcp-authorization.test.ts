@@ -68,14 +68,14 @@ describe('Production MCP authentication and session boundary', () => {
     alice = await users.createUser({ username: 'alice', email: 'alice@example.test', password: 'Test!password123', firstName: 'Test', lastName: 'User', isActive: true, isAdmin: false }); // pragma: allowlist secret
     bob = await users.createUser({ username: 'bob', email: 'bob@example.test', password: 'Test!password123', firstName: 'Test', lastName: 'User', isActive: true, isAdmin: false }); // pragma: allowlist secret
     await db.execute('DELETE FROM user_roles WHERE user_id IN (?, ?)', [alice.id, bob.id]);
-    aliceToken = await auth.generateToken(alice);
-    bobToken = await auth.generateToken(bob);
+    aliceToken = await auth.generateToken(alice, { provider: 'local', identityId: null });
+    bobToken = await auth.generateToken(bob, { provider: 'local', identityId: null });
     mcp = createMcpRouter({
       integrationManager: manager, executionRepository: new ExecutionRepository(db),
       journalService: new JournalService(db), permissionService: permissions,
       hieraPlugin: undefined, puppetDBService: undefined, puppetRunHistoryService: undefined,
       logger, version: 'test',
-    }, createMcpAuthMiddleware(machineToken, machine.userId, createAuthMiddleware(db, jwtSecret), db),
+    }, createMcpAuthMiddleware(machineToken, machine.userId, createAuthMiddleware(new AuthenticationService(db, jwtSecret)), db),
     { total: 4, perPrincipal: 2, ttlMs: 86400000 });
     const app = express();
     app.use(express.json());
@@ -119,7 +119,7 @@ describe('Production MCP authentication and session boundary', () => {
 
   it('rejects missing credentials, refresh JWTs and invalid initialization', async () => {
     await request(`http://127.0.0.1:${String(harness.port)}`).post('/mcp').send(initialize).expect(401);
-    const pair = await auth.generateTokenPair(alice);
+    const pair = await auth.generateTokenPair(alice, { provider: 'local', identityId: null });
     await send(pair.refreshToken).send(initialize).expect(401);
     await send(aliceToken).send({ jsonrpc: '2.0', id: 1, method: 'tools/list' }).expect(400);
   });
@@ -151,7 +151,7 @@ describe('Production MCP authentication and session boundary', () => {
   });
 
   it('separates JWT and static authentication even for the same user ID', async () => {
-    const jwt = await auth.generateToken({ id: machine.userId, username: 'mcp-service' });
+    const jwt = await auth.generateToken({ id: machine.userId, username: 'mcp-service' }, { provider: 'local', identityId: null });
     const staticSession = await open(machineToken);
     const jwtSession = await open(jwt);
     for (const method of ['get', 'post', 'delete'] as const) {
@@ -188,7 +188,7 @@ describe('Production MCP authentication and session boundary', () => {
   it('revokes opening JWT credentials even if a new JWT is supplied for continuation', async () => {
     const session = await open(aliceToken);
     await database.getAdapter().execute('UPDATE users SET session_version = ? WHERE id = ?', ['a'.repeat(32), alice.id]);
-    const fresh = await auth.generateToken(alice);
+    const fresh = await auth.generateToken(alice, { provider: 'local', identityId: null });
     await send(fresh, 'post', session).send({ jsonrpc: '2.0', id: 2, method: 'tools/list' }).expect(401);
     await send(fresh, 'post', session).send(initialize).expect(404);
   });

@@ -73,7 +73,7 @@ describe('restricted LDAP administration HTTP contract', () => {
           SELECT 'manager', id, 'now' FROM permissions WHERE resource = 'rbac' AND "action" = 'admin'`);
         await users.assignRoleToUser(user.id, 'manager');
       }
-      const token = await auth.generateToken(user);
+      const token = await auth.generateToken(user, { provider: 'local', identityId: null });
       if (name === 'administrator') adminToken = token;
       if (name === 'viewer') viewerToken = token;
       if (name === 'manager') managerToken = token;

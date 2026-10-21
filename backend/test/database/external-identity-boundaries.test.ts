@@ -143,10 +143,10 @@ for (const dialect of ['sqlite', 'postgres'] as const) {
       await expect(identity(db, 'third', 'external')).resolves.toBeUndefined();
       await expect(db.execute(`UPDATE federated_identities SET subject = 'ldap' WHERE id = 'third'`)).rejects.toThrow();
       expect((await users.findByFederatedIdentity('ldap', 'ldap', 'directory'))?.id).toBe('external');
-      const token = await auth.generateToken({ id: 'external', username: 'ldap:external' });
+      const originalVersion = await db.queryOne('SELECT session_version FROM users WHERE id = ?', ['external']);
       await db.execute(`UPDATE ldap_identity_metadata SET login_name = 'renamed', dn = 'uid=renamed,ou=moved,dc=example' WHERE identity_id = 'ldap'`);
       await db.execute(`UPDATE users SET display_name = 'Single Display Name', first_name = '', last_name = '', email = NULL, updated_at = 'later' WHERE id = 'external'`);
-      expect((await auth.verifyToken(token)).userId).toBe('external');
+      expect(await db.queryOne('SELECT session_version FROM users WHERE id = ?', ['external'])).toEqual(originalVersion);
       expect((await users.getUserById('external'))?.displayName).toBe('Single Display Name');
       await externalUser(db, 'replacement');
       await ldapIdentity(db, 'new-object', 'replacement');
@@ -165,7 +165,11 @@ for (const dialect of ['sqlite', 'postgres'] as const) {
       await ldapIdentity(db);
       await expect(users.updateUser('external', { password: fixturePassword })).rejects.toThrow('cannot have local passwords');
       expect((await users.getUserById('external'))?.passwordHash).toBeNull();
-      const { refreshToken } = await auth.generateTokenPair({ id: 'external', username: 'ldap:external' });
+      await expect(auth.generateTokenPair({ id: 'external', username: 'ldap:external' }, { provider: 'local', identityId: null }))
+        .rejects.toThrow('Invalid token');
+      const contactless = await entra.provisionUser({ ...claims, sub: 'contactless', email: '', preferred_username: 'contactless' });
+      const contactlessIdentity = await db.queryOne<{ id: string }>('SELECT id FROM federated_identities WHERE user_id = ?', [contactless.id]);
+      const { refreshToken } = await auth.generateTokenPair(contactless, { provider: 'entra-id', identityId: contactlessIdentity!.id });
       expect((await auth.refreshToken(refreshToken)).user?.email).toBeNull();
     });
 
@@ -248,7 +252,7 @@ for (const dialect of ['sqlite', 'postgres'] as const) {
       if (dialect === 'sqlite') expect(await db.query('PRAGMA foreign_key_check')).toEqual([]);
     });
 
-    it('upgrades a populated migration-030 database without changing enrollments, sessions or relationships', async () => {
+    it('upgrades a populated migration-030 database preserving enrollments and relationships with intentional session invalidation', async () => {
       // Use a second isolated schema/file so the fixture really predates migration 031.
       const partial = join(dir, 'migrations');
       mkdirSync(partial);
@@ -283,11 +287,12 @@ for (const dialect of ['sqlite', 'postgres'] as const) {
           VALUES ('journal', 'n1', 'ssh://n1', 'note', 'user', 'note', 'fixture', 'enrolled', 'now')`);
         const tables = ['federated_identities', 'user_groups', 'legacy_federated_user_roles', 'revoked_tokens', 'audit_logs', 'journal_entries'];
         const before = await Promise.all(tables.map(table => old.query(`SELECT * FROM ${table}`)));
-        const accountColumns = 'id, username, email, password_hash, session_version, is_active, is_admin, first_name, last_name, created_at, updated_at, last_login_at';
+        const accountColumns = 'id, username, email, password_hash, is_active, is_admin, first_name, last_name, created_at, updated_at, last_login_at';
         const accountsBefore = await old.query(`SELECT ${accountColumns} FROM users ORDER BY id`);
         const permissionsBefore = await old.query('SELECT * FROM effective_user_roles ORDER BY user_id, role_id');
         await new MigrationRunner(old).runPendingMigrations();
         expect(await old.query(`SELECT ${accountColumns} FROM users ORDER BY id`)).toEqual(accountsBefore);
+        expect(await old.query("SELECT id FROM users WHERE session_version = 'abc123'")).toEqual([]);
         expect(await Promise.all(tables.map(table => old.query(`SELECT * FROM ${table}`)))).toEqual(before);
         expect(await old.query('SELECT * FROM effective_user_roles ORDER BY user_id, role_id')).toEqual(permissionsBefore);
         expect(await old.query('SELECT user_id, identity_id, source_key FROM federated_user_roles ORDER BY user_id')).toEqual([
@@ -299,7 +304,7 @@ for (const dialect of ['sqlite', 'postgres'] as const) {
           { id: 'federated', local_auth_enabled: 0 }, { id: 'local', local_auth_enabled: 1 },
         ]);
         const oldAuth = new AuthenticationService(old, 'upgrade-fixture-secret');
-        const token = await oldAuth.generateToken({ id: 'enrolled', username: 'enrolled' });
+        const token = await oldAuth.generateToken({ id: 'enrolled', username: 'enrolled' }, { provider: 'local', identityId: null });
         await old.execute(`UPDATE users SET display_name = 'Changed' WHERE id = 'enrolled'`);
         await expect(oldAuth.verifyToken(token)).resolves.toBeDefined();
         await old.execute(`UPDATE users SET password_hash = ? WHERE id = 'enrolled'`, ['changed']);

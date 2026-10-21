@@ -146,7 +146,7 @@ beforeAll(async () => {
     if (principal !== "noRole" && principal !== "boltOnly" && principal !== "awsOnly") {
       await userService.assignRoleToUser(user.id, ROLE_IDS[principal]);
     }
-    tokens.set(principal, await authService.generateToken(user));
+    tokens.set(principal, await authService.generateToken(user, { provider: 'local', identityId: null }));
   }
 
   const scoped = await userService.createUser({ username: "bolt_only", email: "bolt_only@test.local", password: "RouteAuthzPass123!", firstName: "Bolt", lastName: "Only", isAdmin: false });
@@ -154,18 +154,18 @@ beforeAll(async () => {
   await db.execute("INSERT INTO roles (id, name, description, is_built_in, created_at, updated_at) VALUES ('bolt-only', 'Bolt only', '', 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)");
   await db.execute("INSERT INTO role_permissions (role_id, permission_id, assigned_at) SELECT 'bolt-only', id, CURRENT_TIMESTAMP FROM permissions WHERE (resource = 'bolt' AND \"action\" IN ('read', 'execute')) OR (resource = 'executions' AND \"action\" = 'read')");
   await userService.assignRoleToUser(scoped.id, "bolt-only");
-  tokens.set("boltOnly", await authService.generateToken(scoped));
+  tokens.set("boltOnly", await authService.generateToken(scoped, { provider: 'local', identityId: null }));
   const awsScoped = await userService.createUser({ username: "aws_only", email: "aws_only@test.local", password: "RouteAuthzPass123!", firstName: "AWS", lastName: "Only", isAdmin: false });
   await db.execute("DELETE FROM user_roles WHERE user_id = ?", [awsScoped.id]);
   await db.execute("INSERT INTO roles (id, name, description, is_built_in, created_at, updated_at) VALUES ('aws-only', 'AWS lifecycle only', '', 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)");
   await db.execute("INSERT INTO role_permissions (role_id, permission_id, assigned_at) SELECT 'aws-only', id, CURRENT_TIMESTAMP FROM permissions WHERE resource = 'aws' AND \"action\" IN ('read', 'lifecycle')");
   await userService.assignRoleToUser(awsScoped.id, "aws-only");
-  tokens.set("awsOnly", await authService.generateToken(awsScoped));
+  tokens.set("awsOnly", await authService.generateToken(awsScoped, { provider: 'local', identityId: null }));
 
 
   spies = makeSpies();
 
-  const authMiddleware = asyncHandler(createAuthMiddleware(db, JWT_SECRET));
+  const authMiddleware = asyncHandler(createAuthMiddleware(new AuthenticationService(db, JWT_SECRET)));
   const rawRbac = createRbacMiddleware(db);
   const rbacMiddleware: PermissionMiddlewareFactory = (resource, action) =>
     asyncHandler(rawRbac(resource, action));

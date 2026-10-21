@@ -102,7 +102,7 @@ describe('Groups Router - POST /api/groups', () => {
     await userService.assignRoleToUser(adminUserId, adminRole.id);
 
     // Generate token for admin user
-    adminToken = await authService.generateToken(adminUser);
+    adminToken = await authService.generateToken(adminUser, { provider: 'local', identityId: null });
 
     // Create regular user without permissions
     const regularUser = await userService.createUser({
@@ -116,7 +116,7 @@ describe('Groups Router - POST /api/groups', () => {
     regularUserId = regularUser.id;
 
     // Generate token for regular user
-    regularUserToken = await authService.generateToken(regularUser);
+    regularUserToken = await authService.generateToken(regularUser, { provider: 'local', identityId: null });
   });
 
   afterEach(async () => {
@@ -296,7 +296,7 @@ describe('Groups Router - GET /api/groups', () => {
 
     await roleService.assignPermissionToRole(adminRole.id, groupsReadPermission.id);
     await userService.assignRoleToUser(adminUser.id, adminRole.id);
-    adminToken = await authService.generateToken(adminUser);
+    adminToken = await authService.generateToken(adminUser, { provider: 'local', identityId: null });
 
     const regularUser = await userService.createUser({
       username: 'regular_user',
@@ -306,7 +306,7 @@ describe('Groups Router - GET /api/groups', () => {
       lastName: 'User',
       isAdmin: false,
     });
-    regularUserToken = await authService.generateToken(regularUser);
+    regularUserToken = await authService.generateToken(regularUser, { provider: 'local', identityId: null });
   });
 
   afterEach(async () => {
@@ -464,7 +464,7 @@ describe('Groups Router - GET /api/groups/:id', () => {
 
     await roleService.assignPermissionToRole(adminRole.id, groupsReadPermission.id);
     await userService.assignRoleToUser(adminUser.id, adminRole.id);
-    adminToken = await authService.generateToken(adminUser);
+    adminToken = await authService.generateToken(adminUser, { provider: 'local', identityId: null });
 
     // Create test group
     const group = await groupService.createGroup({
@@ -580,7 +580,7 @@ describe('Groups Router - PUT /api/groups/:id', () => {
 
     await roleService.assignPermissionToRole(adminRole.id, groupsWritePermission.id);
     await userService.assignRoleToUser(adminUser.id, adminRole.id);
-    adminToken = await authService.generateToken(adminUser);
+    adminToken = await authService.generateToken(adminUser, { provider: 'local', identityId: null });
 
     // Create test group
     const group = await groupService.createGroup({
@@ -719,7 +719,7 @@ describe('Groups Router - DELETE /api/groups/:id', () => {
 
     await roleService.assignPermissionToRole(adminRole.id, groupsAdminPermission.id);
     await userService.assignRoleToUser(adminUser.id, adminRole.id);
-    adminToken = await authService.generateToken(adminUser);
+    adminToken = await authService.generateToken(adminUser, { provider: 'local', identityId: null });
 
     const regularUser = await userService.createUser({
       username: 'regular_user',
@@ -729,7 +729,7 @@ describe('Groups Router - DELETE /api/groups/:id', () => {
       lastName: 'User',
       isAdmin: false,
     });
-    regularUserToken = await authService.generateToken(regularUser);
+    regularUserToken = await authService.generateToken(regularUser, { provider: 'local', identityId: null });
 
     // Create test group
     const group = await groupService.createGroup({
@@ -854,7 +854,7 @@ describe('Groups Router - POST /api/groups/:id/roles/:roleId', () => {
 
     await roleService.assignPermissionToRole(adminRole.id, groupsWritePermission.id);
     await userService.assignRoleToUser(adminUser.id, adminRole.id);
-    adminToken = await authService.generateToken(adminUser);
+    adminToken = await authService.generateToken(adminUser, { provider: 'local', identityId: null });
 
     const regularUser = await userService.createUser({
       username: 'regular_user',
@@ -864,7 +864,7 @@ describe('Groups Router - POST /api/groups/:id/roles/:roleId', () => {
       lastName: 'User',
       isAdmin: false,
     });
-    regularUserToken = await authService.generateToken(regularUser);
+    regularUserToken = await authService.generateToken(regularUser, { provider: 'local', identityId: null });
 
     // Create test group
     const group = await groupService.createGroup({
@@ -1071,7 +1071,7 @@ describe('Groups Router - DELETE /api/groups/:id/roles/:roleId', () => {
 
     await roleService.assignPermissionToRole(adminRole.id, groupsWritePermission.id);
     await userService.assignRoleToUser(adminUser.id, adminRole.id);
-    adminToken = await authService.generateToken(adminUser);
+    adminToken = await authService.generateToken(adminUser, { provider: 'local', identityId: null });
 
     const regularUser = await userService.createUser({
       username: 'regular_user',
@@ -1081,7 +1081,7 @@ describe('Groups Router - DELETE /api/groups/:id/roles/:roleId', () => {
       lastName: 'User',
       isAdmin: false,
     });
-    regularUserToken = await authService.generateToken(regularUser);
+    regularUserToken = await authService.generateToken(regularUser, { provider: 'local', identityId: null });
 
     // Create test group
     const group = await groupService.createGroup({

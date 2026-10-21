@@ -94,9 +94,10 @@ for (const dialect of ['sqlite', 'postgres'] as const) {
 
     it('refreshes directory profile and locators without reactivating, changing manual grants or rotating sessions', async () => {
       const user = await users.createFederatedUser(ldap);
-      const token = await auth.generateToken(user);
+      const originalVersion = await db.queryOne('SELECT session_version FROM users WHERE id = ?', [user.id]);
       await users.createFederatedUser({ ...ldap, displayName: 'Updated Directory Name' });
-      expect((await auth.verifyToken(token)).userId).toBe(user.id);
+      expect(await db.queryOne('SELECT session_version FROM users WHERE id = ?', [user.id])).toEqual(originalVersion);
+      await expect(auth.generateToken(user, { provider: 'local', identityId: null })).rejects.toThrow('Invalid token');
       await users.assignRoleToUser(user.id, 'role-viewer-001');
       await users.updateUser(user.id, { isActive: false, isAdmin: true });
       const version = await db.queryOne('SELECT session_version FROM users WHERE id = ?', [user.id]);
