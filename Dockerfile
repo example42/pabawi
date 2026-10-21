@@ -80,7 +80,7 @@ ARG BUILDPLATFORM
 # Add metadata labels
 LABEL org.opencontainers.image.title="Pabawi Core"
 LABEL org.opencontainers.image.description="Pabawi infrastructure management web interface"
-LABEL org.opencontainers.image.version="1.5.1"
+LABEL org.opencontainers.image.version="1.6.0"
 LABEL org.opencontainers.image.vendor="example42"
 LABEL org.opencontainers.image.source="https://github.com/example42/pabawi"
 

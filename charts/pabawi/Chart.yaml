@@ -3,7 +3,7 @@ name: pabawi
 description: Pabawi infrastructure management web UI
 type: application
 version: 0.2.1
-appVersion: "1.5.1"
+appVersion: "1.6.0"
 home: https://github.com/example42/pabawi
 sources:
   - https://github.com/example42/pabawi
