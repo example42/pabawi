@@ -36,7 +36,7 @@ RUN apt-get update && \
     ca-certificates \
     curl \
     && curl -fsSLO https://apt.voxpupuli.org/openvox8-release-debian12.deb \
-    && echo "f10b71b2317c2a919ef1c00a2b5d2d00ac825632323f801601466a9200dc3122  openvox8-release-debian12.deb" | sha256sum -c - \
+    && echo "6d1a663202a066a1f676c797ddfd116a141c8fa2f55bd0cd45a8ac8434a3ffeb  openvox8-release-debian12.deb" | sha256sum -c - \
     && dpkg -i openvox8-release-debian12.deb \
     && rm openvox8-release-debian12.deb \
     && apt-get update \
