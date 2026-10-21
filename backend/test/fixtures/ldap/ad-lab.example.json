@@ -1,0 +1,19 @@
+{
+  "implementation": "microsoft-ad-ds",
+  "disposableLab": true,
+  "baseDn": "dc=lab,dc=example,dc=test",
+  "parentOu": "ou=PabawiAcceptance,dc=lab,dc=example,dc=test",
+  "controllers": [
+    { "hostname": "dc1.lab.example.test", "ldapsPort": 636, "starttlsPort": 389 },
+    { "hostname": "dc2.lab.example.test", "ldapsPort": 636, "starttlsPort": 389 }
+  ],
+  "caFile": "/absolute/local/ad-ca.pem",
+  "fixtureBindDn": "cn=fixture-writer,ou=LabServices,dc=lab,dc=example,dc=test",
+  "fixturePasswordFile": "/absolute/local/private/fixture-password",
+  "lookupBindDn": "cn=lookup-reader,ou=LabServices,dc=lab,dc=example,dc=test",
+  "lookupPasswordFile": "/absolute/local/private/lookup-password",
+  "userPasswordFile": "/absolute/local/private/disposable-user-password",
+  "largeMemberCount": 1601,
+  "maxLockoutAttempts": 10,
+  "replicationTimeoutSeconds": 120
+}

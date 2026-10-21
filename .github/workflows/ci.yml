@@ -109,6 +109,54 @@ jobs:
           name: playwright-report
           path: playwright-report/
 
+  ldap-acceptance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        postgres: ['15', '17']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+      - run: npm ci --ignore-scripts
+      - run: npm run install:approved
+      - name: Verify acceptance orchestration contracts
+        run: node --test scripts/acceptance/*.test.mjs
+      - name: Typecheck opt-in AD fixtures without directory access
+        run: ./node_modules/.bin/tsc --project test/fixtures/ldap/tsconfig.ad.json
+        working-directory: ./backend
+      - name: Install fixture scanner
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clamav
+          sudo systemctl stop clamav-freshclam || true
+          sudo freshclam
+      - name: Install dedicated browser
+        run: npx playwright install --with-deps chromium
+      - name: Prepare PostgreSQL image
+        run: docker pull postgres:${{ matrix.postgres }}
+      - name: Run live LDAP and recovery matrix plus dedicated browser contracts
+        run: >-
+          npm run test:ldap -- --focused --browser --build-fixture
+          --postgres-image postgres:${{ matrix.postgres }} --postgres-major ${{ matrix.postgres }}
+          --output-root '${{ runner.temp }}/ldap-evidence'
+      - name: Retain synthetic LDAP acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ldap-acceptance-postgres-${{ matrix.postgres }}
+          retention-days: 14
+          if-no-files-found: error
+          # Only the synthetic runner output, never container filesystems or AD evidence.
+          path: |
+            ${{ runner.temp }}/ldap-evidence/**
+            !${{ runner.temp }}/ldap-evidence/**/*.key
+            !${{ runner.temp }}/ldap-evidence/**/fixture-downloads/**
+            !${{ runner.temp }}/ldap-evidence/**/ca.pem
+
   secret-scan:
     # The pre-commit hook excludes docs, tests and e2e fixtures. This job scans
     # them too, so a credential committed under an excluded path is still

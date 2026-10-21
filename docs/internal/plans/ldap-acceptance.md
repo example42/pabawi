@@ -1,6 +1,7 @@
 # LDAP package 7 acceptance evidence
 
-**Candidate:** branch `151`, base `55c8107`, plus the uncommitted package-7 changes.
+**Candidate:** branch `151`, current base `7389784`, plus the uncommitted CI/harness/runner changes.
+The initial base in this session was `55c8107`; the existing package-7 work was committed concurrently and preserved.
 **Date:** 2026-10-21.
 **Release decision:** blocked on actual AD evidence. Parser dependency cleanup is complete; local OpenLDAP transport and database recovery rehearsals pass.
 
@@ -134,3 +135,62 @@ changes. Post-removal `/tmp/pabawi-ldap-acceptance-3jP2T7/result.json` reports p
 focused parser, real TLS, both-adapter, transport, worker and recovery checks. Backend build and both
 linters also pass. The prior complete local run remains the full frontend/browser regression evidence.
 Actual AD remains the integration acceptance blocker.
+
+
+## CI, AD harness and runner lifecycle continuation
+
+The LDAP CI job now calls the existing runner for PostgreSQL 15 and 17, retaining SQLite and
+LDAPS/StartTLS in each job, plus the dedicated browser configuration. JSON/JUnit results, recovery
+backups/manifests and browser reports/failure artifacts are uploaded with `if: always()`, limited to
+the synthetic runner output. No private keys, fixture downloads, CA files or actual AD data are
+uploaded. The runner checks that required live suites and browser cases actually passed, so an
+exit-zero all-skipped run cannot establish acceptance. The server major version is also checked.
+
+The opt-in `scripts/acceptance/ad.mjs` validates local configuration, private secret references,
+production LDAP settings and fixture scope without connecting. Its TypeScript fixture worker
+prepares binary GUID, rename/recreation, account-state, nested-rule/traversal, ranged-membership and
+equivalent-controller cases in both TLS modes. Mutations and cleanup require generated-child scope,
+a run ownership marker and the unchanged binary GUID. Synthetic ownership journals support manual
+investigation of incomplete cleanup. No remote provisioning or actual AD operation occurred.
+Absent configuration reports `unavailable`, all cases `not-run`, `adVerified=false`, exit 1;
+a valid offline configuration remains `not-run`. Local tests and those statuses are not AD evidence.
+
+Runner failure regressions exercise scanner rejection, readiness timeout, subprocess failure,
+command deadline and SIGINT/SIGTERM. They assert nonzero status, accurate manifests, no work after
+cancellation, shutdown of every attempted fixture and no surviving detached child. The detached-child
+case failed against the intermediate group-only implementation and passes with descendant tracking.
+Creation is recorded before Docker returns, failure paths retain environment evidence, each readiness
+check has its own budget, and shutdown is inspected. Containers/data/evidence are retained.
+
+The fixture guide contains exact offline/opt-in commands and the distinction between controlled
+transport failover and an observed controller shutdown. Actual AD remains unavailable and unverified;
+package 7 remains blocked regardless of passing CI/local synthetic checks.
+
+
+### Observed continuation evidence
+
+- PostgreSQL 15.17, OpenLDAP 2.6.10: `/tmp/pabawi-p7-candidate15/pabawi-ldap-acceptance-BP4dyF`.
+- PostgreSQL 17.11, OpenLDAP 2.6.10: `/tmp/pabawi-p7-candidate17/pabawi-ldap-acceptance-mmfqO5`.
+- Local `--build-fixture` branch plus PostgreSQL 17.11:
+  `/tmp/pabawi-p7-built17/pabawi-ldap-acceptance-FMdXtp`.
+- Each run passes 252 focused cases, zero skipped, and all three dedicated browser cases.
+  Six later standalone AD ownership/cancellation tests pass. All recorded fixtures were independently
+  inspected as stopped. `/tmp/pabawi-p7-session-evidence.json` indexes versions, image IDs,
+  shutdown state and injected-failure evidence.
+- `/tmp/pabawi-p7-runner-final.log`: 14 offline/configuration/workflow/runner contracts pass.
+  `/tmp/pabawi-p7-runner-real-final.log` retains the actual Docker failure/cancellation checks.
+  Their CLI/test/scanner failures are intentional; successful tests assert nonzero child results.
+  The final log also includes real Docker creation interrupted before its wrapper returns.
+- `/tmp/pabawi-p7-ad-types.log`, `ad-unit.log`, `actionlint.log` and `actionlint-clamav.log`,
+  each with the `/tmp/pabawi-p7-` prefix, retain fixture typechecking, ownership tests, actionlint
+  1.7.12 and the clean post-execution scanner result for its verified release archive/binary.
+- `/tmp/pabawi-p7-next-build-backend.log`, `build-frontend.log`, `lint.log`, `components.log`,
+  `contracts.log`, `secrets.log` and `secrets-changed.log`, each with the
+  `/tmp/pabawi-p7-next-` prefix, retain production builds and repository gates. Scanner checks use
+  the unchanged reviewed baseline; synthetic invalid-configuration vectors have line-local pragmas.
+- `/tmp/pabawi-p7-failure-clamav.log` retains an independent real scan of injected-failure artifacts,
+  including files retained after intentional scanner rejection. Containers, databases, backups,
+  public CAs, browser output and command evidence remain retained outside the repository.
+
+The workflow was parsed, checked with actionlint and its runner/build/browser behavior executed locally.
+No GitHub Actions execution, remote workflow trigger, actual AD session or deployment is claimed.
