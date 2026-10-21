@@ -29,15 +29,15 @@ vi.mock('./toast.svelte', () => ({
 import * as api from './api';
 import { authManager } from './auth.svelte';
 import { router } from './router.svelte';
+import { authProviders } from './authProviders.svelte';
 import { entraIdAuth } from './entraIdAuth.svelte';
 
 describe('EntraIdAuthStore', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     // Reset store state between tests
-    entraIdAuth.isEntraIdEnabled = false;
-    entraIdAuth.entraIdProviderName = 'Microsoft Entra ID';
-    entraIdAuth.providerDiscoveryError = false;
+    authProviders.entraId = undefined;
+    authProviders.error = false;
     entraIdAuth.isExchangingCode = false;
     entraIdAuth.exchangeError = null;
   });
@@ -53,35 +53,35 @@ describe('EntraIdAuthStore', () => {
         entraId: { enabled: true, name: 'Contoso SSO' },
       });
 
-      await entraIdAuth.discoverProviders();
+      await authProviders.discover();
 
-      expect(entraIdAuth.isEntraIdEnabled).toBe(true);
-      expect(entraIdAuth.entraIdProviderName).toBe('Contoso SSO');
-      expect(entraIdAuth.providerDiscoveryError).toBe(false);
+      expect(authProviders.entraId?.enabled ?? false).toBe(true);
+      expect(authProviders.entraId?.name).toBe('Contoso SSO');
+      expect(authProviders.error).toBe(false);
     });
 
     it('sets isEntraIdEnabled to false when entraId is not in response', async () => {
       vi.mocked(api.get).mockResolvedValue({ local: true });
 
-      await entraIdAuth.discoverProviders();
+      await authProviders.discover();
 
-      expect(entraIdAuth.isEntraIdEnabled).toBe(false);
-      expect(entraIdAuth.providerDiscoveryError).toBe(false);
+      expect(authProviders.entraId?.enabled ?? false).toBe(false);
+      expect(authProviders.error).toBe(false);
     });
 
     it('sets providerDiscoveryError on timeout/failure', async () => {
       vi.mocked(api.get).mockRejectedValue(new Error('Request timed out'));
 
-      await entraIdAuth.discoverProviders();
+      await authProviders.discover();
 
-      expect(entraIdAuth.providerDiscoveryError).toBe(true);
-      expect(entraIdAuth.isEntraIdEnabled).toBe(false);
+      expect(authProviders.error).toBe(true);
+      expect(authProviders.entraId?.enabled ?? false).toBe(false);
     });
 
     it('calls /api/auth/providers with 5s timeout', async () => {
       vi.mocked(api.get).mockResolvedValue({ local: true });
 
-      await entraIdAuth.discoverProviders();
+      await authProviders.discover();
 
       expect(api.get).toHaveBeenCalledWith('/api/auth/providers', {
         timeout: 5000,

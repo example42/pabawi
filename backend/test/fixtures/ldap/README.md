@@ -36,3 +36,20 @@ The service is read-only. Fixture setup uses slapadd before starting slapd.
 The test credentials are fixture-reader, fixture-user and fixture-admin. They have
 no meaning outside this disposable directory. No real AD interoperability is
 claimed by this fixture.
+
+## Browser contract fixture
+
+Run from the repository root with the supported Node 24 runtime:
+
+~~~bash
+npx playwright test --config playwright.ldap.config.ts
+~~~
+
+This separate suite starts an in-memory database and loopback-only HTTP server with
+synthetic directory responses, builds the frontend, and exercises real auth, mapping,
+user/role routes and sessions through Chromium. It uses no developer database or real
+directory. It covers short LDAP credentials, provider isolation, local login, page
+permissions, mappings, failed diagnostics and read-only nullable directory profiles.
+It does not establish LDAP protocol or AD interoperability. The regular Playwright
+configuration excludes this directory so it cannot run against infrastructure fixtures.
+Browser artifacts and screenshots are retained under /tmp/pabawi-ldap-p6-*.

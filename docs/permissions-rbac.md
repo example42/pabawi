@@ -301,3 +301,27 @@ The `mcp-service` user:
 - Is reused on subsequent restarts (idempotent provisioning)
 
 To grant additional permissions to MCP tools, assign more permissions to the `MCP Service` role via the Role Management page or API.
+
+## LDAP grants and administration
+
+LDAP groups map directly to roles in **Role Management** or a role detail dialog.
+There is no full-directory import, local-group mirror or default LDAP role.
+Enabled mapping grants combine with explicit manual roles. Removing one source preserves
+other grants for that role.
+
+Every LDAP search, mapping and diagnostic API requires `rbac:admin`. Existing
+administrator page guards remain in force. Delegated API administration alone does not
+bypass them. Controls check loaded permissions and stay unavailable until grants load.
+
+User administration requires `users:read` and shows source, current directory login,
+display name and profile ownership. LDAP profile/password writes are rejected server-side,
+including for administrators. Suspension and explicit manual roles remain local.
+User details distinguish manual/external grants and allow removal of manual assignments.
+
+Mapping mutations audit and invalidate affected validation state across workers, withdrawing
+attributable grants transactionally. New grants require fresh membership proof. Stored
+labels remain readable during outages. Diagnostics use configured endpoints and the lookup
+account, never a user password.
+
+See [LDAP authentication](integrations/ldap.md) for setup, limits, status visibility,
+outages, provider-bound sessions and upgrade reauthentication.

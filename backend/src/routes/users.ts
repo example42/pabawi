@@ -236,7 +236,11 @@ export function createUsersRouter(
         });
 
         // Convert users to DTOs (remove passwords)
-        const userDTOs = result.items.map(user => userService.toUserDTO(user));
+        const metadata = await userService.getAdministrationMetadata(
+          result.items, container.resolve('config').getLdapConfig() ?? undefined);
+        const userDTOs = result.items.map(user => ({
+          ...userService.toUserDTO(user), authentication: metadata.get(user.id),
+        }));
 
         // Calculate total pages
         const totalPages = Math.ceil(result.total / validatedQuery.limit);
@@ -348,9 +352,15 @@ export function createUsersRouter(
           },
         });
 
+        const metadata = await userService.getAdministrationMetadata(
+          [user], container.resolve('config').getLdapConfig() ?? undefined);
+        const roleSources = await userService.getUserRoleSources(userId);
+
         // Return user with groups and roles
         res.status(200).json({
           ...userDTO,
+          authentication: metadata.get(userId),
+          roleSources,
           groups: groups,
           roles: roles,
         });

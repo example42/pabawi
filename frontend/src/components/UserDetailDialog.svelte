@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { UserAdministrationMetadata, UserRoleSource } from '../lib/userAdministration';
   import { onMount } from 'svelte';
   import { get, post, put, del } from '../lib/api';
   import { showError, showSuccess } from '../lib/toast.svelte';
@@ -31,6 +32,8 @@
     id: string;
     username: string;
     email: string | null;
+    displayName: string | null;
+    authentication: UserAdministrationMetadata;
     firstName: string;
     lastName: string;
     isActive: boolean;
@@ -40,6 +43,7 @@
     lastLoginAt: string | null;
     groups: GroupDTO[];
     roles: RoleDTO[];
+    roleSources: UserRoleSource[];
   }
 
   interface GroupsResponse {
@@ -70,7 +74,7 @@
 
   let unassignedRoles = $derived(
     availableRoles.filter(
-      (role) => !user?.roles.some((ur) => ur.id === role.id)
+      (role) => !user?.roleSources?.some((source) => source.roleId === role.id && source.source === 'manual')
     )
   );
 
@@ -171,11 +175,7 @@
     try {
       await post(`/api/users/${userId}/roles/${selectedRoleId}`);
 
-      // Add role to user's roles list
-      const addedRole = availableRoles.find((r) => r.id === selectedRoleId);
-      if (addedRole) {
-        user.roles = [...user.roles, addedRole];
-      }
+      await loadUserDetails();
 
       selectedRoleId = '';
       showSuccess('Role assigned', 'Role has been assigned to the user');
@@ -188,7 +188,7 @@
   }
 
   async function handleRemoveRole(roleId: string, roleName: string): Promise<void> {
-    if (!userId || !user) return;
+    if (!userId || !user || !user.roleSources?.some(source => source.roleId === roleId && source.source === 'manual')) return;
 
     if (!confirm(`Remove role "${roleName}" from user?`)) {
       return;
@@ -198,8 +198,7 @@
     try {
       await del(`/api/users/${userId}/roles/${roleId}`);
 
-      // Remove role from user's roles list
-      user.roles = user.roles.filter((r) => r.id !== roleId);
+      await loadUserDetails();
 
       showSuccess('Role removed', 'Role has been removed from the user');
     } catch (error) {
@@ -342,7 +341,7 @@
                 <dl class="grid grid-cols-1 gap-x-4 gap-y-3 sm:grid-cols-2">
                   <div>
                     <dt class="text-xs font-medium text-gray-500 dark:text-gray-400">Username</dt>
-                    <dd class="mt-1 text-sm text-gray-900 dark:text-white">{user.username}</dd>
+                    <dd class="mt-1 text-sm text-gray-900 dark:text-white break-all">{user.username}</dd>
                   </div>
                   <div>
                     <dt class="text-xs font-medium text-gray-500 dark:text-gray-400">Email</dt>
@@ -450,6 +449,20 @@
                 {/if}
               </div>
 
+              {#if user.authentication}
+                <section aria-label="Authentication source" class="rounded border dark:border-gray-600 p-4 space-y-2">
+                  <h4 class="font-medium">Authentication source</h4>
+                  <p>Display name: {user.displayName ?? 'Not provided'}</p>
+                  {#each user.authentication.sources as source}
+                    <p>{source.name}{source.directoryId ? ' / ' + source.directoryId : ''}{source.loginName ? ': ' + source.loginName : ''}</p>
+                  {/each}
+                  {#if user.authentication.profileReadOnly}
+                    <p>Directory profile fields are read-only. Names and contact email refresh from LDAP. Local password changes are unavailable.</p>
+                    <p>Suspension and manual role assignments remain managed in Pabawi.</p>
+                  {/if}
+                </section>
+              {/if}
+
               <!-- Roles Section -->
               <div>
                 <div class="flex items-center justify-between mb-3">
@@ -507,13 +520,17 @@
                           <p class="text-xs text-gray-500 dark:text-gray-400">
                             {role.description}
                           </p>
+                          {#each user.roleSources?.filter(source => source.roleId === role.id) ?? [] as source}
+                            <p class="text-xs">Source: {source.source}{source.directoryId ? ' / ' + source.directoryId : ''}{source.groupName ? ' / ' + source.groupName : ''}</p>
+                          {/each}
                         </div>
                         <button
                           type="button"
                           onclick={() => handleRemoveRole(role.id, role.name)}
-                          disabled={!canManageEntitlements || isSaving}
+                          disabled={!canManageEntitlements || isSaving || !user.roleSources?.some(source => source.roleId === role.id && source.source === 'manual')}
                           class="ml-3 text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300 disabled:opacity-50 disabled:cursor-not-allowed"
-                          title="Remove role"
+                          title="Remove manual role assignment"
+                          aria-label={'Remove manual assignment for ' + role.name}
                         >
                           <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />

@@ -795,7 +795,7 @@ are rejected with HTTP 403 and code `DIRECTORY_ACCOUNT_READ_ONLY` through
 `PUT /api/users/:id` and `POST /api/auth/change-password`, including for
 administrators. Directory password changes must be performed at the directory.
 Local suspension, administrative status and manual role assignments remain
-managed in Pabawi. LDAP login is not yet available.
+managed in Pabawi. LDAP login is available when configured.
 
 | Method | Endpoint | Description |
 |---|---|---|
@@ -806,6 +806,34 @@ managed in Pabawi. LDAP login is not yet available.
 | `DELETE` | `/api/users/:id` | Delete user |
 | `POST` | `/api/users/:id/roles/:roleId` | Assign role to user |
 | `DELETE` | `/api/users/:id/roles/:roleId` | Remove role from user |
+
+User list and detail responses include `authentication` administration metadata:
+
+```json
+{
+  "authentication": {
+    "profileReadOnly": true,
+    "sources": [{
+      "provider": "ldap",
+      "name": "Corporate directory",
+      "directoryId": "corporate",
+      "loginName": "alice"
+    }]
+  }
+}
+```
+
+Local and Entra sources use `provider: "local"` and `"entra-id"`.
+LDAP names use the current directory display label, otherwise `LDAP`.
+These fields appear only on existing `users:read` routes, not public discovery
+or authentication user DTOs. No passwords, tokens, user DNs or immutable subjects appear.
+
+User details also include `roleSources`: an array of `{ roleId, source }` where
+source is `manual`, `ldap` or `entra-id`. LDAP entries may include
+`directoryId` and authoritative `groupName`. Multiple sources can refer to
+one role; `roles` remains the effective union. Removing an assignment through
+the user-role endpoint removes only its manual source.
+See the [LDAP operator guide](integrations/ldap.md).
 
 ### Roles
 

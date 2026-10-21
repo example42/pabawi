@@ -2,69 +2,21 @@
  * Entra ID (Azure AD) authentication state management using Svelte 5 runes
  *
  * Handles:
- * - Provider discovery via /api/auth/providers
  * - SSO callback code extraction and token exchange
- * - Error state for discovery and token exchange failures
+ * - Token exchange errors
  *
  * Requirements: 10.1, 10.2, 10.5, 10.6, 10.7
  */
 
-import { get, post } from './api';
+import { post } from './api';
 import { authManager } from './auth.svelte';
 import type { AuthResponse } from './auth.svelte';
 import { router } from './router.svelte';
 import { showError } from './toast.svelte';
 
-const PROVIDER_DISCOVERY_TIMEOUT_MS = 5000;
-
-interface ProvidersResponse {
-  local: boolean;
-  entraId?: {
-    enabled: boolean;
-    name: string;
-  };
-}
-
 class EntraIdAuthStore {
-  isEntraIdEnabled = $state(false);
-  entraIdProviderName = $state('Microsoft Entra ID');
-  providerDiscoveryError = $state(false);
-  isDiscovering = $state(false);
   isExchangingCode = $state(false);
   exchangeError = $state<string | null>(null);
-
-  /**
-   * Discover available authentication providers.
-   * Calls GET /api/auth/providers with a 5s timeout.
-   * On failure or timeout, sets providerDiscoveryError = true and
-   * leaves isEntraIdEnabled = false (show only local login).
-   *
-   * Requirement: 10.1, 10.2, 10.7
-   */
-  async discoverProviders(): Promise<void> {
-    this.isDiscovering = true;
-    this.providerDiscoveryError = false;
-
-    try {
-      const response = await get<ProvidersResponse>('/api/auth/providers', {
-        timeout: PROVIDER_DISCOVERY_TIMEOUT_MS,
-        maxRetries: 0,
-        showRetryNotifications: false,
-      });
-
-      if (response.entraId?.enabled) {
-        this.isEntraIdEnabled = true;
-        this.entraIdProviderName = response.entraId.name || 'Microsoft Entra ID';
-      } else {
-        this.isEntraIdEnabled = false;
-      }
-    } catch {
-      this.providerDiscoveryError = true;
-      this.isEntraIdEnabled = false;
-    } finally {
-      this.isDiscovering = false;
-    }
-  }
 
   /**
    * Handle the SSO callback redirect.

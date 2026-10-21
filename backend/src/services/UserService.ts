@@ -80,9 +80,17 @@ export interface UserDTO {
   lastLoginAt: string | null;
 }
 
-/**
- * Create user data transfer object
- */
+export interface UserAdministrationMetadata {
+  profileReadOnly: boolean;
+  sources: { provider: 'local' | 'ldap' | 'entra-id'; name: string; directoryId?: string; loginName?: string }[];
+}
+
+export interface UserRoleSource {
+  roleId: string; source: 'manual' | 'ldap' | 'entra-id';
+  directoryId?: string; groupName?: string;
+}
+
+/** Create user data transfer object. */
 export interface CreateUserDTO {
   username: string;
   email: string;
@@ -713,6 +721,53 @@ export class UserService {
       updatedAt: user.updatedAt,
       lastLoginAt: user.lastLoginAt
     };
+  }
+
+  public async getAdministrationMetadata(
+    users: User[], directory?: { directoryId: string; displayName: string },
+  ): Promise<Map<string, UserAdministrationMetadata>> {
+    const result = new Map<string, UserAdministrationMetadata>(users.map(user => [user.id, {
+      profileReadOnly: false,
+      sources: user.localAuthEnabled === 1 ? [{ provider: 'local', name: 'Local' }] : [],
+    }]));
+    if (users.length === 0) return result;
+    const rows = await this.db.query<{ userId: string; provider: string; issuer: string; loginName: string | null }>(
+      'SELECT f.user_id AS "userId", f.provider, f.issuer, m.login_name AS "loginName" ' +
+      'FROM federated_identities f LEFT JOIN ldap_identity_metadata m ON m.identity_id = f.id ' +
+      'WHERE f.user_id IN (' + users.map(() => '?').join(',') + ') ORDER BY f.provider, f.issuer, f.id',
+      users.map(user => user.id));
+    for (const row of rows) {
+      const metadata = result.get(row.userId);
+      if (!metadata) continue;
+      if (row.provider === 'ldap') {
+        metadata.profileReadOnly = true;
+        metadata.sources.push({
+          provider: 'ldap', name: directory?.directoryId === row.issuer ? directory.displayName : 'LDAP',
+          directoryId: row.issuer, ...(row.loginName === null ? {} : { loginName: row.loginName }),
+        });
+      } else if (row.provider === 'entra-id') {
+        metadata.sources.push({ provider: 'entra-id', name: 'Microsoft Entra ID' });
+      }
+    }
+    return result;
+  }
+
+  public async getUserRoleSources(userId: string): Promise<UserRoleSource[]> {
+    const manual = await this.db.query<{ roleId: string }>(
+      'SELECT role_id AS "roleId" FROM user_roles WHERE user_id = ?', [userId]);
+    const external = await this.db.query<{ roleId: string; source: 'ldap' | 'entra-id'; directoryId: string | null; groupName: string | null }>(
+      'SELECT g.role_id AS "roleId", f.provider AS source, m.directory_id AS "directoryId", m.group_name AS "groupName" ' +
+      'FROM federated_user_roles g JOIN federated_identities f ON f.id = g.identity_id ' +
+      'LEFT JOIN external_group_mappings m ON m.id = g.mapping_id WHERE g.user_id = ?', [userId]);
+    const legacy = await this.db.query<{ roleId: string }>(
+      'SELECT role_id AS "roleId" FROM legacy_federated_user_roles WHERE user_id = ?', [userId]);
+    return [
+      ...manual.map(row => ({ roleId: row.roleId, source: 'manual' as const })),
+      ...external.map(row => ({ roleId: row.roleId, source: row.source,
+        ...(row.directoryId === null ? {} : { directoryId: row.directoryId }),
+        ...(row.groupName === null ? {} : { groupName: row.groupName }) })),
+      ...legacy.map(row => ({ roleId: row.roleId, source: 'entra-id' as const })),
+    ];
   }
 
   /** Reject directory-owned writes even for administrators and legacy mixed accounts. */

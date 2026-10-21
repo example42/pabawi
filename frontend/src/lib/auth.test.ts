@@ -70,6 +70,28 @@ describe('AuthManager', () => {
   });
 
   describe('login', () => {
+    it.each([401, 403, 429, 503])('keeps HTTP %s LDAP failure isolated without retry or fallback', async status => {
+      fetchMock.mockResolvedValueOnce({ ok: false, status, json: async () => ({
+        error: { code: 'DIRECTORY_DENIED', message: 'Directory sign-in unavailable' },
+      }) });
+      expect(await authManager.login({ username: ' a ', password: 'x' }, 'ldap')).toBe(false);
+      expect(fetchMock).toHaveBeenCalledExactlyOnceWith('/api/auth/ldap/login', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: ' a ', password: 'x' }),
+      });
+      expect(authManager.error).toEqual({ code: 'DIRECTORY_DENIED', message: 'Directory sign-in unavailable' });
+    });
+
+    it('stores LDAP tokens and nullable profile through the existing auth state', async () => {
+      fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({
+        ...mockAuthResponse, user: { ...mockUser, email: null, displayName: 'Directory User' },
+      }) });
+      expect(await authManager.login({ username: 'a', password: 'x' }, 'ldap')).toBe(true);
+      expect(authManager.user?.email).toBeNull();
+      expect(authManager.user?.displayName).toBe('Directory User');
+      expect(localStorage.getItem('authToken')).toBe(mockAuthResponse.token);
+    });
+
     it('should successfully login with valid credentials', async () => {
       fetchMock.mockResolvedValueOnce({
         ok: true,
@@ -284,6 +306,26 @@ describe('AuthManager', () => {
       await authManager.refreshAccessToken();
 
       expect(localStorage.getItem('authToken')).toBe('new-access-token');
+    });
+
+    it.each([429, 503])('retains tokens at temporary refresh HTTP %s and recovers on retry', async status => {
+      fetchMock.mockResolvedValueOnce({ ok: false, status });
+      expect(await authManager.refreshAccessToken()).toBe(false);
+      expect(authManager.isAuthenticated).toBe(true);
+      expect(authManager.token).toBe(mockAuthResponse.token);
+      expect(authManager.refreshToken).toBe(mockAuthResponse.refreshToken);
+      expect(localStorage.getItem('refreshToken')).toBe(mockAuthResponse.refreshToken);
+      expect(authManager.error?.code).toBe('AUTH_TEMPORARILY_UNAVAILABLE');
+      fetchMock.mockResolvedValueOnce({ ok: true, json: async () => mockAuthResponse });
+      expect(await authManager.refreshAccessToken()).toBe(true);
+      expect(authManager.error).toBeNull();
+    });
+
+    it('preserves the refresh credential when a network failure prevents verification', async () => {
+      fetchMock.mockRejectedValueOnce(new TypeError('Failed to fetch'));
+      expect(await authManager.refreshAccessToken()).toBe(false);
+      expect(authManager.refreshToken).toBe(mockAuthResponse.refreshToken);
+      expect(authManager.error?.code).toBe('AUTH_TEMPORARILY_UNAVAILABLE');
     });
 
     it('should clear auth data if refresh fails', async () => {

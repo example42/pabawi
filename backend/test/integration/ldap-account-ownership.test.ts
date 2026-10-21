@@ -86,6 +86,24 @@ describe('LDAP account ownership at HTTP boundaries', () => {
     expect(await database.getAdapter().query('SELECT * FROM login_attempt_counters')).toEqual([]);
   });
 
+  it('exposes source and profile ownership only through protected administration DTOs', async () => {
+    const detail = await request(harness.use(app)).get('/api/users/' + ldapUser.id)
+      .set('Authorization', 'Bearer ' + adminToken).expect(200);
+    expect(detail.body.authentication).toEqual({ profileReadOnly: true, sources: [
+      { provider: 'ldap', name: 'LDAP', directoryId: 'directory', loginName: 'alice' },
+    ] });
+    expect(detail.body.roleSources).toEqual([]);
+    expect(detail.body).not.toHaveProperty('passwordHash');
+    expect(detail.body.authentication.sources[0]).not.toHaveProperty('dn');
+    const list = await request(harness.use(app)).get('/api/users')
+      .set('Authorization', 'Bearer ' + adminToken).expect(200);
+    expect(list.body.users.find((user: { id: string }) => user.id === ldapUser.id).authentication)
+      .toEqual(detail.body.authentication);
+    await request(harness.use(app)).get('/api/users/' + ldapUser.id).expect(401);
+    const local = list.body.users.find((user: { id: string }) => user.id !== ldapUser.id);
+    expect(local.authentication).toEqual({ profileReadOnly: false, sources: [{ provider: 'local', name: 'Local' }] });
+  });
+
   it('does not advertise LDAP or expose an authentication endpoint', async () => {
     const response = await request(harness.use(app)).get('/api/auth/providers').expect(200);
     expect(response.body).toEqual({ local: true });
