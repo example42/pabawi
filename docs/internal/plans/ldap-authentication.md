@@ -1,6 +1,6 @@
 # LDAP authentication implementation plan
 
-**Status:** Package 1 complete; packages 2 through 7 pending  
+**Status:** Packages 1 and 2 complete; packages 3 through 7 pending
 **Date:** 2026-10-21  
 **Scope:** OpenLDAP and Active Directory authentication, directory group authorization, and provider-bound session revalidation
 
@@ -448,8 +448,8 @@ Update this table as work proceeds. Status values: `pending`, `in_progress`, `bl
 
 | Package | Status | Completion commit or working tree reference | Latest handoff |
 | --- | --- | --- | --- |
-| 1 Identity and schema | complete | Branch `151`, base `2c23a95`, uncommitted migration 031 and consumers | [2026-10-21 Codex](#handoff-2026-10-21-codex-package-1) |
-| 2 Shared provisioning | pending | Not started | None |
+| 1 Identity and schema | complete | Commit `a739cf2`, migration 031 and consumers | [2026-10-21 Codex](#handoff-2026-10-21-codex-package-1) |
+| 2 Shared provisioning | complete | Branch `151`, base `a739cf2`, uncommitted paths in handoff | [2026-10-21 Codex](#handoff-2026-10-21-codex-package-2) |
 | 3 Directory configuration and service | pending | Not started | None |
 | 4 RBAC mapping administration | pending | Not started | None |
 | 5A Provider context and wiring | pending | Not started | None |
@@ -600,3 +600,65 @@ Commands ran from the repository root. The append-only command log is `~/.agents
 **Decisions or discoveries affecting the next package:** Use provider `ldap` and stable directory ID as issuer when creating LDAP identities. Reserve deterministic internal usernames beneath `ldap:` and use immutable subjects, not DN or login. Preserve the explicit local scope and the scoped email APIs. Entra's default role remains a manual `user_roles` assignment, and its legacy-marker behavior is unchanged. Mapping updates already withdraw old grants and invalidate persisted state through database triggers; callers must use a transaction and later add revision/fencing comparisons rather than relying only on cached permissions. Existing sessions are preserved by 031; intentional release invalidation remains package 5A. Validation and lease tables exist without any enabled runtime LDAP enforcement.
 
 **Next action and acceptance criterion still to satisfy:** Start package 2. Extract shared transactional provisioning, implement deterministic immutable LDAP account creation without default roles or implicit linking, preserve suspension/manual grants and Entra enrollment behavior, and enforce complete LDAP profile/password ownership. Verify concurrent first login creates one account, zero-role LDAP provisioning issues no tokens, and local/Entra regressions still pass.
+
+
+## Handoff 2026-10-21 Codex package 2
+
+**Date and agent:** 2026-10-21, Codex.
+
+**Package and checkpoint:** Package 2, shared provisioning, complete. Package 3 is the next eligible package. LDAP network access, public authentication, group reconciliation and session freshness enforcement remain in their assigned later packages.
+
+**Branch, base commit, completion commit or uncommitted paths:** Branch `151`, base `a739cf296fb01b872ed4b234eba971e51f0bb783`. The initial working tree was clean. Package 1's previously uncommitted changes are now committed in that base; its schema and compatibility claims were verified against the current source and both database adapters. No package-2 completion commit was created. The package-2 working tree contains:
+
+```text
+backend/src/routes/auth.ts
+backend/src/routes/users.ts
+backend/src/services/EntraIdService.ts
+backend/src/services/UserService.ts
+backend/test/database/federated-provisioning.test.ts
+backend/test/integration/ldap-account-ownership.test.ts
+backend/test/properties/EntraIdProvisioning.property.test.ts
+backend/test/unit/services/EntraIdService.test.ts
+docs/api.md
+docs/internal/plans/ldap-authentication.md
+docs/openapi.yaml
+```
+
+**Completed scope and changed interfaces:**
+
+- `UserService.createFederatedUser(input: FederatedProvisioningInput): Promise<User>` is now provider-neutral and idempotent. Its input contains immutable `provider`, `issuer`, `subject` and explicit nullable contact/display name plus given name/surname. The discriminated input requires `defaultRole: 'configured'` and a provider-derived username for Entra, or `defaultRole: 'none'` and current `loginName`/`dn` for LDAP. The shared service no longer imports Entra token claims.
+- This method owns the transaction. SQLite serializes through the adapter's existing BEGIN IMMEDIATE transaction; PostgreSQL provisioning writers lock the shared default-role configuration row before rereading identity and checking collisions. An upsert ensures the lock exists even if the configuration row is absent, preserving SetupService's existing Viewer fallback without overwriting configured values. Independent-connection tests start without that row and converge twelve simultaneous LDAP calls to one account.
+- New LDAP usernames are `ldap:` followed by SHA-256 of the JSON tuple `[provider, issuer, subject]`. Mutable login/DN and email never select an account. Reused locators, shared or absent email, equal subjects in different directories and local/Entra contact matches create separate accounts. Missing issuer, immutable subject or locators fail before writes. Direct LDAP linking to existing users is forbidden; LDAP-owned accounts also reject subsequent federated enrollment.
+- User, identity, configured initial Entra role, LDAP metadata and initially unvalidated LDAP state are committed atomically. LDAP creates no default/manual/federated grant and issues no token. Its validation timestamp remains null, generation 0 and config revision empty. The primitive does not claim directory eligibility or freshness. Metadata write failures roll back all newly created records.
+- Returning LDAP identities refresh email, display name, given name, surname, login and DN. They preserve internal username, Pabawi suspension, administrative status, manual grants, credentials and existing validation state. Profile refresh preserves existing valid sessions. A provisioned zero-role account remains available for manual assignment and subsequent provisioning retains the assignment.
+- EntraIdService is the only production caller migrated from raw token claims to the shared input. Username derivation moved into that caller. Existing Entra profile immutability, default-role policy, explicit local-account enrollment and local password administration remain intact. Shared identity conflicts use `FederatedAccountError`; Entra translates collision errors to its established error code. Both the initial and transactional returning paths still check suspension.
+- `UserService.requireLocalProfileOwnership(userId)` rejects LDAP-owned contact/name/password writes, including legacy mixed accounts and administrators. `updateUser` uses that guard before any mutation, protecting HTTP administration and the existing password-reset CLI. Authenticated password changes check ownership before password verification or lockout accounting. The affected user/password routes return HTTP 403 with `DIRECTORY_ACCOUNT_READ_ONLY`. Suspension, admin status and manual roles remain locally editable.
+- Updated API/OpenAPI user update contracts, Entra unit/property assertions and two new acceptance files. LDAP remains absent from provider discovery and has no public login route. No dependency or migration was added.
+
+**Verification: exact commands, outcomes, and external log reference:**
+
+All commands ran from the repository root and were recorded in `~/.agents/logs/pabawi.jsonl`. Host Node was 26.8.1, outside the declared >=24.21.0 and <25 engine range; supported-engine release evidence remains outstanding. PostgreSQL was 17.11, using the already-present package-1 fixture. No packages or fixture artifacts were downloaded.
+
+- `npm run test --workspace=backend -- test/database/external-identity-boundaries.test.ts test/database/sso-concurrency.test.ts > /tmp/pabawi-ldap-p2-baseline.log 2>&1`: PASS before edits, ten SQLite tests; nine PostgreSQL tests skipped until starting the fixture.
+- `docker start pabawi-ldap-p1-postgres`: restarted the existing isolated fixture, now exposed at loopback port 55612. `docker exec pabawi-ldap-p1-postgres createdb -U postgres ldap_package2_verified` created a fresh acceptance database. The fixture was stopped with `docker stop pabawi-ldap-p1-postgres` after verification; the stopped container and acceptance database were retained.
+- `TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:55612/postgres npm run test --workspace=backend -- test/database/federated-provisioning.test.ts test/database/external-identity-boundaries.test.ts test/database/sso-concurrency.test.ts > /tmp/pabawi-ldap-p2-focused.log 2>&1`: PASS, 35 tests across SQLite/PostgreSQL.
+- `npm run test --workspace=backend -- test/integration/ldap-account-ownership.test.ts test/unit/services/EntraIdService.test.ts test/properties/EntraIdProvisioning.property.test.ts test/integration/EntraIdAuthFlow.test.ts > /tmp/pabawi-ldap-p2-compat-final.log 2>&1`: PASS, four files and 50 tests.
+- `TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:55612/ldap_package2_verified npm run test --workspace=backend > /tmp/pabawi-ldap-p2-backend-acceptance.log 2>&1`: PASS on the final production code, 241 files passed, one skipped; 3883 tests passed, two skipped, one todo. This includes migration upgrades, PostgreSQL/SQLite concurrency, Entra group synchronization/auth flows, local authentication, user updates and password/CLI regressions.
+- `npm run build:backend > /tmp/pabawi-ldap-p2-build-acceptance.log 2>&1 && npm run lint > /tmp/pabawi-ldap-p2-lint-acceptance.log 2>&1`: PASS, backend compilation and both workspace linters.
+- `node --test scripts/documentation/contracts.test.mjs > /tmp/pabawi-ldap-p2-doc-contracts.log 2>&1`: six contracts pass; the unchanged release/changelog mismatch fails as recorded below.
+- `PATH=/Users/al/.cache/pre-commit/repovdso_3ip/py_env-python3/bin:$PATH bash scripts/quality/secret-scan.sh > /tmp/pabawi-ldap-p2-secrets-full.log 2>&1`: the same four pre-existing findings, detailed below. An additional scanner pass covers all changed and untracked package-2 files and compares their hashes with the reviewed baseline; the baseline is unchanged. PASS, zero new unreviewed findings. Its exact Python/scanner commands and results are in the external command log.
+- `npm run test --workspace=backend -- test/integration/ldap-account-ownership.test.ts > /tmp/pabawi-ldap-p2-http-final.log 2>&1`: PASS, four tests after the final synthetic fixture adjustment.
+- `git diff --check`: PASS. Frontend source did not change; frontend tests/component checks were not rerun for this backend package.
+
+Initial new-code verification found a short synthetic JWT secret in the new HTTP test fixture and four lint diagnostics. These were corrected before acceptance. The changed-file scan also identified an inline synthetic test password, which now reuses the annotated fixture constant.
+
+**Pre-existing failures:**
+
+- Release metadata remains version 1.5.1, while CHANGELOG.md has no dated 1.5.1 entry and starts with 1.6.0 Unreleased. All six other documentation contracts pass.
+- Full tracked-tree secret scan reports four unchanged findings: one in `backend/package.json`, two in `backend/src/cli/resetUserPassword.ts`, and one in `backend/test/unit/cli/resetUserPassword.test.ts`. These files and the relevant version/changelog files match the starting commit. No baseline entries were approved or changed.
+
+**Remaining work and blockers:** No package-2 acceptance blocker remains. The two repository-wide check failures above remain release blockers outside this package. The supported Node engine, live OpenLDAP and real AD evidence remain outstanding for their later packages. No live directory was accessed.
+
+**Decisions or discoveries affecting the next package:** Supply LDAP directory ID as issuer and only a proven immutable subject from the future directory service. That service must canonicalize/validate directory identifiers and supply profile fields without splitting display names. The provisioning primitive owns its transaction and the adapters reject nested transactions. Package 5B must extend the same transaction to reconcile LDAP-owned grants and publish revision/fencing-checked freshness atomically; wrapping the current public method in another transaction is invalid. Its current null validation state is intentional and must never be treated as session eligibility. Existing validation rows are preserved during profile refresh.
+
+**Next action and acceptance criterion still to satisfy:** Start package 3. Add validated disabled-by-default directory configuration, the reviewed/pinned ldapts dependency, bounded read-only directory operations, immutable ID codecs and reproducible real OpenLDAP fixtures for verified LDAPS and StartTLS. Keep public LDAP authentication unavailable. Record real AD evidence still deferred if no actual AD environment is available.

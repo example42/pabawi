@@ -3,7 +3,7 @@ import { AuditLoggingService } from "../services/AuditLoggingService";
 import { Router, type Request, type Response } from "express";
 import { z } from "zod";
 import { asyncHandler } from "./asyncHandler";
-import { UserService } from "../services/UserService";
+import { FederatedAccountError, UserService } from "../services/UserService";
 import { AuthenticationService } from "../services/AuthenticationService";
 import { PermissionService } from "../services/PermissionService";
 import type { DatabaseService } from "../database/DatabaseService";
@@ -477,6 +477,10 @@ export function createUsersRouter(
         // Return updated user
         res.status(200).json(userDTO);
       } catch (error) {
+        if (error instanceof FederatedAccountError && error.code === 'DIRECTORY_ACCOUNT_READ_ONLY') {
+          res.status(403).json({ error: { code: error.code, message: error.message } });
+          return;
+        }
         // Handle user not found
         if (error instanceof Error && error.message === 'User not found') {
           logger.warn("User not found for update", {

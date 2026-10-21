@@ -5,7 +5,7 @@ import jwt from 'jsonwebtoken';
 import type { DatabaseAdapter } from '../database/DatabaseAdapter';
 import type { EntraIdConfig } from '../config/schema';
 import type { AuthenticationService } from './AuthenticationService';
-import type { UserService, User } from './UserService';
+import { FederatedAccountError, type UserService, type User } from './UserService';
 import type { UserDTO } from './UserService';
 import type { RoleService } from './RoleService';
 import type { AuditLoggingService } from './AuditLoggingService';
@@ -350,7 +350,16 @@ export class EntraIdService {
 
     // 6. No match — create new federated user
     try {
-      const newUser = await this.userService.createFederatedUser(claims);
+      const newUser = await this.userService.createFederatedUser({
+        provider: 'entra-id', issuer: claims.iss, subject: claims.sub,
+        username: /^[a-zA-Z0-9_]{3,50}$/.test(claims.preferred_username)
+          ? claims.preferred_username
+          : claims.email.split('@')[0].replace(/[^a-zA-Z0-9_]/g, '_').slice(0, 50),
+        email: claims.email || null, displayName: null,
+        firstName: claims.given_name || '', lastName: claims.family_name || '',
+        defaultRole: 'configured',
+      });
+      this.requireActiveUser(newUser);
 
       this.logger.info('New federated user created', {
         ...logMeta,
@@ -363,6 +372,9 @@ export class EntraIdService {
       if (winner) {
         this.requireActiveUser(winner);
         return winner;
+      }
+      if (err instanceof FederatedAccountError && err.code === 'IDENTITY_COLLISION') {
+        throw new EntraIdError(ENTRA_ID_ERROR_CODES.IDENTITY_COLLISION, err.message);
       }
       const message = err instanceof Error ? err.message : String(err);
       this.logger.error('Failed to create federated user', {

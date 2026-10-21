@@ -3000,6 +3000,10 @@ paths:
                 $ref: '#/components/schemas/Error'
     put:
       summary: Update user
+      description: >
+        Directory-owned profile and password writes return 403 with
+        DIRECTORY_ACCOUNT_READ_ONLY, including for administrators.
+        Suspension remains locally managed.
       tags:
         - RBAC
       parameters:
@@ -3013,15 +3017,33 @@ paths:
           application/json:
             schema:
               type: object
+              additionalProperties: false
               properties:
-                username:
+                email:
                   type: string
+                  format: email
+                firstName:
+                  type: string
+                  minLength: 1
+                  maxLength: 100
+                lastName:
+                  type: string
+                  minLength: 1
+                  maxLength: 100
+                isActive:
+                  type: boolean
                 password:
                   type: string
                   format: password
       responses:
         '200':
           description: User updated successfully
+        '403':
+          description: Missing permissions or directory-owned profile/password write
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '404':
           description: User not found
           content:

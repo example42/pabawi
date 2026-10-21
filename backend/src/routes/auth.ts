@@ -2,7 +2,7 @@ import { PermissionService } from "../services/PermissionService";
 import { Router, type Request, type Response } from "express";
 import { z } from "zod";
 import { asyncHandler } from "./asyncHandler";
-import { UserService } from "../services/UserService";
+import { FederatedAccountError, UserService } from "../services/UserService";
 import { AuthenticationService } from "../services/AuthenticationService";
 import { SetupService } from "../services/SetupService";
 import { AuditLoggingService } from "../services/AuditLoggingService";
@@ -672,6 +672,8 @@ export function createAuthRouter(
           return;
         }
 
+        await userService.requireLocalProfileOwnership(user.id);
+
         // Verify current password
         const isCurrentPasswordValid = await authService.verifyPassword(
           validatedData.currentPassword,
@@ -728,6 +730,10 @@ export function createAuthRouter(
           message: "Password changed successfully. Please log in again with your new password.",
         });
       } catch (error) {
+        if (error instanceof FederatedAccountError && error.code === 'DIRECTORY_ACCOUNT_READ_ONLY') {
+          res.status(403).json({ error: { code: error.code, message: error.message } });
+          return;
+        }
         // Handle Zod validation errors (Requirement 16.3)
         if (error instanceof ZodError) {
           logger.warn("Password change validation failed", {
