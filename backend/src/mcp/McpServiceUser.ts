@@ -16,9 +16,9 @@ export interface McpServiceUserResult {
 /**
  * Idempotent provisioning of the mcp-service user at startup.
  *
- * If the user already exists, looks up the existing role and returns IDs.
- * If not, creates the user, an "MCP Service" built-in role with all read
- * permissions, and assigns the role to the user.
+ * Repairs missing users, roles, and assignments after incomplete provisioning.
+ * New roles receive all read permissions; existing roles retain their permissions
+ * because administrators may have customized machine access.
  */
 export async function provisionMcpServiceUser(
   userService: UserService,
@@ -37,11 +37,9 @@ export async function provisionMcpServiceUser(
     const roles = await userService.getUserRoles(existing.id);
     const mcpRole = roles.find((r) => r.name === MCP_ROLE_NAME);
 
-    if (!mcpRole) {
-      throw new Error('MCP service user exists but MCP Service role not found');
+    if (mcpRole) {
+      return { userId: existing.id, roleId: mcpRole.id };
     }
-
-    return { userId: existing.id, roleId: mcpRole.id };
   }
 
   logger.info('Provisioning MCP service user', {
@@ -51,7 +49,7 @@ export async function provisionMcpServiceUser(
 
   // Create user with random password (never used for login)
   const password = `Mcp!${randomUUID()}`; // pragma: allowlist secret
-  const user = await userService.createUser({
+  const user = existing ?? await userService.createUser({
     username: MCP_USERNAME,
     email: `${MCP_USERNAME}@localhost`,
     password,
@@ -61,21 +59,22 @@ export async function provisionMcpServiceUser(
     isAdmin: false,
   });
 
-  // Create built-in role
-  const role = await roleService.createRole({
-    name: MCP_ROLE_NAME,
-    description: 'Built-in role for MCP server with read-only access',
-    isBuiltIn: true,
-  });
+  let role = await roleService.getRoleByName(MCP_ROLE_NAME);
+  if (!role) {
+    role = await roleService.createRole({
+      name: MCP_ROLE_NAME,
+      description: 'Built-in role for MCP server with read-only access',
+      isBuiltIn: true,
+    });
 
-  // Assign all read permissions to the role
-  const readPermissions = await permissionService.listPermissions({
-    action: 'read',
-    limit: 1000,
-  });
+    const readPermissions = await permissionService.listPermissions({
+      action: 'read',
+      limit: 1000,
+    });
 
-  for (const perm of readPermissions.items) {
-    await roleService.assignPermissionToRole(role.id, perm.id);
+    for (const perm of readPermissions.items) {
+      await roleService.assignPermissionToRole(role.id, perm.id);
+    }
   }
 
   // Assign role to user

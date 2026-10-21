@@ -159,7 +159,7 @@ export class RoleService {
    * @param name - Role name
    * @returns Role or null if not found
    */
-  private async getRoleByName(name: string): Promise<Role | null> {
+  public async getRoleByName(name: string): Promise<Role | null> {
     return this.db.queryOne<Role>(
       `SELECT ${ROLE_COLUMNS} FROM roles WHERE name = ?`,
       [name]

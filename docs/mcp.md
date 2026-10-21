@@ -29,6 +29,10 @@ When enabled, Pabawi:
 3. Assigns the role to the service user
 4. Starts the MCP server and registers the `/mcp` endpoint
 
+Startup reuses existing service users and roles, and repairs a missing role or
+role assignment after incomplete provisioning. Only newly created roles receive
+the default read permissions; existing role permissions retain any customizations.
+
 All MCP endpoints require bearer authentication, using an access JWT or the configured static token. The MCP server calls services directly within the backend process. Every tool uses the authenticated caller's current permissions. JWT callers use their own account; only the configured static credential uses `mcp-service`.
 
 ## Authentication
