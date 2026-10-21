@@ -7,6 +7,7 @@
     "dev": "tsx watch src/server.ts",
     "build": "node ../scripts/compilation/backend.mjs",
     "start": "node dist/server.js",
+    "reset-password": "tsx src/cli/reset-password.ts",
     "test": "vitest --run --passWithNoTests",
     "test:watch": "vitest",
     "lint": "eslint src --ext .ts --max-warnings 0",

@@ -1,6 +1,15 @@
 # Changelog
 
-## [1.5.1] - 2026-09-16
+## [1.6.0] - Unreleased
+
+### Added
+
+- `reset-password` CLI for account recovery: `npm run reset-password --workspace=backend -- --username admin`
+  (or `node dist/cli/reset-password.js` in built installs and containers). It
+  reads the password from a hidden prompt, stdin or `--generate`, applies the
+  password policy, clears lockouts, revokes all existing sessions and writes a
+  `cli_password_reset` audit entry. See
+  [troubleshooting](docs/troubleshooting.md#reset-a-local-users-password-account-recovery).
 
 ### Container images
 
