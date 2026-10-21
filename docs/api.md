@@ -875,6 +875,81 @@ State and final codes are single-use. Enrollment requires both `rbac:admin` and
 
 ---
 
+## LDAP administration
+
+Available when `LDAP_ENABLED=true`. Every endpoint requires a Pabawi access JWT
+and `rbac:admin`, independently of page-level controls. An authorized request gets
+404 when LDAP is disabled. Public LDAP discovery and login remain unavailable
+until the authentication/session package is complete.
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/auth/ldap/groups` | Search configured group scope with required `query`, optional opaque `cursor` |
+| `GET` | `/api/auth/ldap/mappings` | List stored mappings for the configured directory, including during outages |
+| `POST` | `/api/auth/ldap/mappings` | Create a mapping from `{ "groupSubject": "<immutable UUID>", "roleId": "<role ID>" }` |
+| `PUT` | `/api/auth/ldap/mappings/:id` | Change `roleId` and/or boolean `enabled` |
+| `DELETE` | `/api/auth/ldap/mappings/:id` | Delete mapping and withdraw only its attributable grants |
+| `POST` | `/api/auth/ldap/test` | Diagnose configured TLS/lookup; optionally exact `username` and mapped `groupSubjects` |
+
+Search matches escaped substrings of the configured group lookup or display-name
+attribute. `query` is nonempty and at most 1024 UTF-8 bytes. Only `{ subject, dn,
+name }` is returned per group. The whole directory search must complete within
+`LDAP_GROUP_SEARCH_LIMIT`; truncation returns 503 with `LIMIT_EXCEEDED`, without
+partial results. A successful response is `{ items, nextCursor }`, with pages of
+up to 50 groups. The cursor is a random opaque reference to the same bounded
+snapshot, tied to the administrator, exact query and configured router instance.
+It expires after 60 seconds; paging never extends that deadline. Each process
+retains at most 64 continuation references. Expiry, eviction, restart or routing
+to another process returns 400 `INVALID_CURSOR`; restart the search. All routes
+return `Cache-Control: no-store` to authorized callers.
+
+Mapping lists return `{ items }`. Each item contains `id`, `source: "ldap"`,
+`directoryId`, `groupSubject`, `groupDn`, `groupName`, `roleId`, `roleName`, boolean
+`enabled`, `createdAt` and `updatedAt`. Group locators and names come from the
+directory when created or reverified; listing uses stored labels. Submitted
+DNs, labels, directory IDs and other undeclared input properties are rejected.
+Creation returns 201, update 200 and deletion 204. Multiple roles for a group
+use separate mappings. Duplicate group/role mappings return 409 `CONFLICT`.
+Absent roles and mappings, including mappings belonging to another directory,
+return 404. An unresolvable group subject returns 422 `INVALID_IDENTITY`.
+
+Creation, role changes and enabling require fresh immutable group resolution.
+Disabling with only `{ "enabled": false }` and deletion remain available during
+outages. Every successful mutation transaction increments the directory mapping
+revision, invalidates persisted validation timestamps and withdraws the edited
+mapping's grants. Manual roles, local RBAC groups, Entra grants and other mappings
+are preserved. New/enabled mappings do not materialize grants until future
+successful membership validation. Audit actions are `createLdapMapping`,
+`updateLdapMapping` and `deleteLdapMapping`, with actor and directory/mapping/group/
+role IDs and enabled state. Audit failure rolls back the entire mutation.
+Concurrent mapping changes during directory resolution return 409
+`STALE_REVISION`; reload the list and retry.
+
+Diagnostics accept `{}` or `{ "username": "alice" }`. Adding `groupSubjects`
+requires `username`, at most 20 immutable UUIDs and only currently enabled mapped
+groups. Unknown/disabled selections return 400 `INVALID_GROUP_SELECTION`.
+The directory checks selected group existence and direct/nested membership under
+the configured policy and bounds. Responses contain `authenticated: false`,
+`stages` and, when membership completes, the matching `groupSubjects`. Each stage
+has `stage` (`tls`, `lookup`, `identity`, `eligibility`, `groups`), `status`
+(`passed` or `failed`), `durationMs`, and a safe failure `code` when failed.
+Later stages are omitted after failure. No user bind, user import, grants or token
+issuance occurs. Identity lookup is separate from eligibility: a visible inactive
+user fails eligibility; absent/ambiguous identity fails identity. AD attributes
+that are not readable yield `POLICY_UNREADABLE`. OpenLDAP's configured filter
+cannot always distinguish inactive policy from missing policy attributes.
+
+No password, arbitrary filter or endpoint override is accepted. Reports omit
+profile fields, raw LDAP messages and connection configuration. Success returns
+200; `INVALID_IDENTITY`, `INELIGIBLE` and `IDENTITY_CHANGED` return 422 in this
+restricted administration context. `BUSY` returns 429. Other directory failures
+(`UNAVAILABLE`, `TIMEOUT`, `POLICY_UNREADABLE`, `INCOMPLETE_RESULT`,
+`LIMIT_EXCEEDED`, and lookup credential rejection) return 503. Validation errors
+return 400, unauthenticated/unauthorized requests 401/403, and unexpected server
+errors a redacted 500. Diagnostics allow 10 requests per minute per administrator;
+the router also applies the existing 100 requests/minute authenticated-user
+budget. These requests do not consume the local-login attempt budget.
+
 ## Debug
 
 Used internally by the frontend for expert mode log collection.

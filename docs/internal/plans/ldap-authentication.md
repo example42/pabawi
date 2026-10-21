@@ -1,6 +1,6 @@
 # LDAP authentication implementation plan
 
-**Status:** Packages 1 through 3 complete; packages 4 through 7 pending
+**Status:** Packages 1 through 4 complete; packages 5 through 7 pending
 **Date:** 2026-10-21  
 **Scope:** OpenLDAP and Active Directory authentication, directory group authorization, and provider-bound session revalidation
 
@@ -450,8 +450,8 @@ Update this table as work proceeds. Status values: `pending`, `in_progress`, `bl
 | --- | --- | --- | --- |
 | 1 Identity and schema | complete | Commit `a739cf2`, migration 031 and consumers | [2026-10-21 Codex](#handoff-2026-10-21-codex-package-1) |
 | 2 Shared provisioning | complete | Commit `2d37548`, verified against current source | [2026-10-21 Codex](#handoff-2026-10-21-codex-package-2) |
-| 3 Directory configuration and service | complete | Branch `151`, base `2d37548`, uncommitted paths in handoff | [2026-10-21 Codex](#handoff-2026-10-21-codex-package-3) |
-| 4 RBAC mapping administration | pending | Not started | None |
+| 3 Directory configuration and service | complete | Commit `4fac169`, verified against current source | [2026-10-21 Codex](#handoff-2026-10-21-codex-package-3) |
+| 4 RBAC mapping administration | complete | Branch `151`, base `4fac169`, uncommitted paths in handoff | [2026-10-21 Codex](#handoff-2026-10-21-codex-package-4) |
 | 5A Provider context and wiring | pending | Not started | None |
 | 5B LDAP login and transport enforcement | pending | Not started | None |
 | 6 Frontend and operator documentation | pending | Not started | None |
@@ -770,3 +770,133 @@ PATH=/tmp/pabawi-node24/node-v24.21.0-darwin-arm64/bin:$PATH node --test --test-
 **Decisions or discoveries affecting the next package:** Use service-returned immutable subjects and authoritative current DN/name for mappings; never browser labels/locators as identity. Supply the case-sensitive directory ID as issuer. Safe error codes are INVALID_CREDENTIALS, INELIGIBLE, IDENTITY_CHANGED, INVALID_IDENTITY, POLICY_UNREADABLE, INCOMPLETE_RESULT, LIMIT_EXCEEDED, BUSY, TIMEOUT and UNAVAILABLE. Preserve confirmed ineligibility versus transient/incomplete results. Failures change no stored grants. Construction is lazy and does not make startup depend on directory availability. Preserve the transport/filter guards when upgrading ldapts and rerun real truncation, TLS and binary/UTF-8 checks. Package-2 transaction ownership and package-5B atomic reconciliation/fencing requirements remain unchanged.
 
 **Next action and acceptance criterion still to satisfy:** Start package 4. Implement restricted search/diagnostics and mapping persistence/routes through existing RBAC/container patterns. Require rbac:admin, audit changes, resolve immutable group subjects through this service, and prove revision/fencing-safe grant withdrawal on both adapters. Keep public LDAP login unavailable. Complete permission/error/provenance/revision-race tests and backend contracts before mapping UI or session work.
+
+
+## Handoff 2026-10-21 Codex package 4
+
+**Date and agent:** 2026-10-21, Codex.
+
+**Package and checkpoint:** Package 4, RBAC mapping administration, complete. Package 5A is next eligible. Public LDAP discovery/login and LDAP token issuance remain unavailable. Mapping UI belongs to package 6.
+
+**Branch, base commit, completion commit or uncommitted paths:** Branch `151`, base `4fac169ef75c9882c106728faa6d2c1717565f3e`. Starting tree was clean. Package 3 is committed in that base, correcting its previous uncommitted progress reference. Read AGENTS.md, code-change/git/Context7 instructions, progress and latest handoffs. Verified migration 031, shared provisioning, local/Entra boundaries, directory configuration/service, container, route guards and audit patterns against current source. KiroGraph reported 204 pending files and could not find LdapDirectoryService, so source inspection supplied the missing context. No completion commit was created. Changed/new paths:
+
+~~~text
+backend/src/container/DIContainer.ts
+backend/src/server.ts
+backend/src/services/LdapDirectoryService.ts
+backend/src/services/LdapMappingService.ts
+backend/src/routes/ldapAdministration.ts
+backend/test/database/ldap-mappings.test.ts
+backend/test/integration/ldap-administration.test.ts
+backend/test/integration/ldap-directory.test.ts
+backend/test/unit/services/LdapDirectoryService.test.ts
+docs/api.md
+docs/openapi.yaml
+docs/configuration.md
+docs/internal/plans/ldap-authentication.md
+~~~
+
+**Completed scope and changed interfaces:**
+
+- LdapMappingService(db, directoryId, directory) implements list(), get(id), create(groupSubject, roleId, actor), update(id, { roleId?, enabled? }, actor), remove(id, actor), revision() and withRevision(snapshot, databaseWork). Mappings expose immutable group subject, authoritative stored DN/name, role ID/name, boolean enabled, timestamps and source: ldap. Every lookup is scoped to the configured case-sensitive directory ID.
+- Creation and role/re-enable updates resolve the immutable group through the directory service before opening a database transaction. Browser DNs, labels and directory IDs are rejected. Absent roles/mappings return NOT_FOUND; duplicate subject/role mappings return CONFLICT. Disabling alone and deletion need no directory connection, preserving withdrawal during outages.
+- Existing migration-031 triggers perform attributable grant withdrawal, mapping-revision increment, persisted timestamp invalidation and global authorization-revision changes in the same transaction. Other mappings, manual roles, local group permissions and Entra-owned grants survive. Creating or enabling a mapping never materializes a grant.
+- revision() supplies directory ID and string-preserving mapping/config revisions. withRevision() owns its transaction and conditionally updates the directory row with those revisions, acquiring the PostgreSQL row lock or SQLite writer lock before databaseWork runs. A stale result returns STALE_REVISION before any grant/profile/freshness write. Mapping edits use this same lock and compare the revision captured before directory I/O, preventing stale edits as well as stale validation publication. Scope/config mismatch also fails closed.
+- AuditLoggingService records createLdapMapping, updateLdapMapping and deleteLdapMapping atomically with mutation and withdrawal. Payloads include actor, directory/mapping/group/role IDs and enabled state, omitting group locators and personal profiles. Audit persistence failure rolls everything back. Existing middleware audits denied permissions.
+- Six implemented endpoints: GET groups, GET mappings, POST mappings, PUT mappings/:id, DELETE mappings/:id and POST test, mounted under /api/auth/ldap. Each independently authenticates and enforces rbac:admin, including delegated non-is_admin roles. Authorized disabled-directory requests return 404. All authorized responses use Cache-Control: no-store. Lazy service/container wiring opens no startup directory connection and does not enter the infrastructure plugin registry.
+- Group search matches escaped configured lookup/display-name substrings and accepts only a nonempty query of at most 1024 UTF-8 bytes plus optional opaque cursor. The complete directory result must satisfy the configured search limit before returning anything. Responses are { items, nextCursor }, at most 50 groups per page. Random 256-bit continuation references bind a bounded snapshot to administrator, exact query and configured router lifetime. Expiry is 60 seconds from snapshot creation and paging cannot extend it. At most 64 references are retained per router. Cursors are deliberately process-local: expiry/eviction/restart/another process returns INVALID_CURSOR and requires a new search. This is documented.
+- LdapDirectoryService.diagnose({ username?, groupSubjects? }) reports TLS, lookup, identity, eligibility and selected group-resolution stages with status, durationMs and safe error code. It uses one bounded lookup transaction, performs no user bind and always returns authenticated: false. Identity lookup is separate from policy filtering; a visible inactive account differs from a missing/ambiguous identity. Selected group identity is resolved before membership checks. Failed/incomplete work returns no partial membership. Deadline reports are detached from late protocol bookkeeping.
+- Diagnostic HTTP input allows no password, arbitrary filter, endpoint or connection override. Group diagnostics require an exact username, at most 20 subjects and enabled mappings. Reports omit profile data, raw directory exceptions and connection configuration. The router uses the existing 100/minute authenticated-user limiter; diagnostics add 10/minute per administrator. Mounting before generic /api/auth prevents administration from consuming the local-login budget.
+- Restricted administrative errors use 400 for invalid input/cursor/selected mappings, 404 for disabled support or absent scoped records, 409 for duplicate/stale revision, 422 for invalid directory identity/confirmed ineligibility/identity change, 429 for admission/rate limits and 503 for directory outage, incomplete resolution, policy visibility or lookup credential rejection. Unexpected errors are redacted 500 responses. These restricted diagnostic statuses do not define the future public-login failure behavior.
+- API/OpenAPI and configuration references describe the implemented contract. No migration, dependency, token format or frontend source changed.
+
+**Verification: exact commands, outcomes, and external log reference:**
+
+All state-changing, tool-network and verification commands are recorded in append-only ~/.agents/logs/pabawi.jsonl. Test evidence is retained under /tmp/pabawi-ldap-p4-*.log. Acceptance used the already verified official Node 24.21.0 archive from package 3, PostgreSQL 17.11 and the already reviewed local OpenLDAP image; no new package/archive/image download was needed.
+
+- Prerequisites, PASS: 107 tests covering SQLite/PostgreSQL migration boundaries, shared provisioning, Entra concurrency, LDAP profile/password ownership and directory configuration/service.
+
+~~~bash
+PATH=/tmp/pabawi-node24/node-v24.21.0-darwin-arm64/bin:$PATH TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:55751/postgres npm run test --workspace=backend -- test/database/federated-provisioning.test.ts test/database/external-identity-boundaries.test.ts test/database/sso-concurrency.test.ts test/integration/ldap-account-ownership.test.ts test/config/LdapConfig.test.ts test/unit/services/LdapDirectoryService.test.ts > /tmp/pabawi-ldap-p4-prerequisites.log 2>&1
+~~~
+
+- Restarting retained pabawi-ldap-p1-postgres succeeded. Restarting the old OpenLDAP container failed because its entrypoint reruns slapadd against the retained database. Its log showed MDB_KEYEXIST. No repository code changed for this fixture limitation. Created a fresh loopback fixture from the existing verified image, which passed:
+
+~~~bash
+docker run --detach --name pabawi-ldap-p4-openldap --pull never -p 127.0.0.1::1389 -p 127.0.0.1::1636 pabawi-ldap-fixture:package3-verified
+mkdir -p /tmp/pabawi-ldap-p4-tls && docker cp pabawi-ldap-p4-openldap:/fixture/tls/ca.pem /tmp/pabawi-ldap-p4-tls/ca.pem
+~~~
+
+Published ports were PostgreSQL 55751, LDAPS 55900 and StartTLS 55899. Containers, image, certificate and evidence were retained.
+
+- Focused package acceptance, PASS: 76 tests across four files, including 26 mapping tests on both adapters, 14 HTTP cases and live directory behavior.
+
+~~~bash
+PATH=/tmp/pabawi-node24/node-v24.21.0-darwin-arm64/bin:$PATH TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:55751/postgres TEST_LDAP_LDAPS_PORT=55900 TEST_LDAP_STARTTLS_PORT=55899 TEST_LDAP_CA_FILE=/tmp/pabawi-ldap-p4-tls/ca.pem npm run test --workspace=backend -- test/database/ldap-mappings.test.ts test/integration/ldap-administration.test.ts test/unit/services/LdapDirectoryService.test.ts test/integration/ldap-directory.test.ts > /tmp/pabawi-ldap-p4-focused-acceptance.log 2>&1
+~~~
+
+Evidence includes all six endpoint guards before directory work, delegated administration, forged identities/locators, role conflicts, outage-safe withdrawal, opaque cursor actor/query/router/deadline binding, diagnostic limits/redaction and public login/discovery remaining unavailable. Both-adapter tests cover provenance, authorization-cache invalidation, stale revisions after insertion/disablement/replacement/deletion, an edit queued behind validation publication, changes during directory I/O, configuration/scope mismatch and complete audit rollback. Live HTTP search/mapping/diagnostics create no identity, grant, OAuth code or imported user. Real LDAPS/StartTLS diagnostics and previous TLS/bind/membership/limit regressions pass.
+
+- Full backend acceptance on final production source, PASS: 246 files passed, one skipped; 4005 tests passed, two skipped, one todo. Includes local/Entra authentication, migrations/upgrades, SQLite/PostgreSQL concurrency and real OpenLDAP.
+
+~~~bash
+docker exec pabawi-ldap-p1-postgres createdb -U postgres ldap_package4_verified
+PATH=/tmp/pabawi-node24/node-v24.21.0-darwin-arm64/bin:$PATH TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:55751/ldap_package4_verified TEST_LDAP_LDAPS_PORT=55900 TEST_LDAP_STARTTLS_PORT=55899 TEST_LDAP_CA_FILE=/tmp/pabawi-ldap-p4-tls/ca.pem npm run test --workspace=backend > /tmp/pabawi-ldap-p4-backend-acceptance.log 2>&1
+PATH=/tmp/pabawi-node24/node-v24.21.0-darwin-arm64/bin:$PATH npm run build:backend > /tmp/pabawi-ldap-p4-build-acceptance.log 2>&1
+PATH=/tmp/pabawi-node24/node-v24.21.0-darwin-arm64/bin:$PATH npm run lint > /tmp/pabawi-ldap-p4-lint-acceptance.log 2>&1
+~~~
+
+Backend build and both workspace linters pass. Frontend source is unchanged, so frontend tests/component checks were not rerun. Initial verification found forbidden non-null assertions and test-fixture assumptions about default Viewer roles, permission timestamps, PostgreSQL BIGINT strings and a queued one-time mock. These were corrected before acceptance.
+
+- Documentation contracts: all six route/API/security/configuration/architecture contracts pass. The unfiltered run retains only the pre-existing release/changelog failure.
+
+~~~bash
+PATH=/tmp/pabawi-node24/node-v24.21.0-darwin-arm64/bin:$PATH node --test scripts/documentation/contracts.test.mjs > /tmp/pabawi-ldap-p4-doc-contracts.log 2>&1
+~~~
+
+- The full tracked-tree scan retains exactly the four existing findings below. Additional changed/untracked-file comparison passes with zero new unreviewed findings; .secrets.baseline is unchanged. The comparison also verifies the existing flagged files and release/changelog files byte-for-byte against base 4fac169.
+
+~~~bash
+PATH=/Users/al/.cache/pre-commit/repovdso_3ip/py_env-python3/bin:$PATH bash scripts/quality/secret-scan.sh > /tmp/pabawi-ldap-p4-secrets-full.log 2>&1
+python3 /tmp/pabawi-ldap-p4-secret-check.py > /tmp/pabawi-ldap-p4-secret-comparison.log 2>&1
+~~~
+
+The comparison script and exact scanner arguments are retained in /tmp and in the external command log. Final documentation-only verification passed all six relevant contracts (/tmp/pabawi-ldap-p4-doc-contracts-final.log) and the changed/untracked secret comparison (/tmp/pabawi-ldap-p4-secret-comparison-final.log). git diff --check passed after removing a trailing blank line in this handoff. docker stop pabawi-ldap-p4-openldap pabawi-ldap-p1-postgres stopped both acceptance servers while retaining containers and evidence. No remote push, PR, deployment, cleanup deletion or real directory access occurred.
+
+**Pre-existing failures:**
+
+- Shipped release metadata is 1.5.1; CHANGELOG.md has no dated 1.5.1 entry. This remains the sole failing documentation contract.
+- Full tracked-tree scan reports four unchanged unreviewed findings: one in backend/package.json, two in backend/src/cli/resetUserPassword.ts and one in backend/test/unit/cli/resetUserPassword.test.ts. All three files and the reviewed baseline match base 4fac169. No baseline exception was added.
+
+**Remaining work and blockers:** No package-4 acceptance blocker remains. The two repository-wide check failures above remain release blockers outside this package. Real AD environment/credentials are still unavailable; actual AD TLS/status/GUID/matching-rule/large-directory evidence remains required for package 7. The previously recorded decommissioned DN-parser dependency still needs maintenance review before release. Retained OpenLDAP containers cannot be restarted with the current seed-on-start entrypoint; use a fresh container from the verified fixture image.
+
+**Decisions or discoveries affecting the next package:** withRevision() owns its transaction, so callers must not nest transactions or call the existing transaction-owning createFederatedUser() inside it. Package 5B must design one atomic provisioning/profile/grant/freshness transaction and combine mapping/config revision checks with identity lease ownership, expiry and fencing-generation checks using database time. This package proves mapping-revision serialization; it does not implement validation leases or treat null/unvalidated state as session eligibility. Capture revision before mapping reads/directory I/O and compare it while holding the directory lock before publishing. Other-source grants and local suspension remain independent.
+
+Frontend integration example (synthetic group ID, no user import):
+
+~~~http
+GET /api/auth/ldap/groups?query=operators
+Authorization: Bearer <access-token>
+
+POST /api/auth/ldap/mappings
+Authorization: Bearer <access-token>
+Content-Type: application/json
+
+{"groupSubject":"10112233-4455-6677-8899-aabbccddeeff","roleId":"role-viewer-001"}
+
+PUT /api/auth/ldap/mappings/<mapping-id>
+Authorization: Bearer <access-token>
+Content-Type: application/json
+
+{"enabled":false}
+
+POST /api/auth/ldap/test
+Authorization: Bearer <access-token>
+Content-Type: application/json
+
+{"username":"alice"}
+~~~
+
+Use source/directory/group/role labels returned by the API. Never submit browser locators as identity. Continue local/Entra discovery unchanged until package 5B.
+
+**Next action and acceptance criterion still to satisfy:** Start package 5A. Add verified provider/identity context for existing local/Entra access and refresh tokens, shared configured authentication dependencies and intentional one-time legacy-session invalidation via a forward migration on both adapters. Keep LDAP tokens/login unavailable until package 5B completes all transport and freshness checks.

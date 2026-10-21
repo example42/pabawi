@@ -1,6 +1,6 @@
 import { DN } from '@ldapjs/dn';
 import {
-  AndFilter, EqualityFilter, ExtensibleFilter, SubstringFilter,
+  AndFilter, OrFilter, EqualityFilter, ExtensibleFilter, SubstringFilter,
   InappropriateMatchingError, InvalidCredentialsError,
   SizeLimitExceededError, TimeLimitExceededError, UnavailableCriticalExtensionError,
 } from 'ldapts';
@@ -22,9 +22,24 @@ export interface LdapDirectoryUser {
 }
 export interface LdapDirectoryGroup { subject: string; dn: string; name: string }
 export interface LdapDirectoryResult { user: LdapDirectoryUser; groupSubjects: string[] }
+export interface LdapDiagnosticStage {
+  stage: 'tls' | 'lookup' | 'identity' | 'eligibility' | 'groups';
+  status: 'passed' | 'failed'; durationMs: number; code?: string;
+}
+export interface LdapDiagnostics {
+  authenticated: false; stages: LdapDiagnosticStage[]; groupSubjects?: string[];
+}
 interface Transaction {
   signal: AbortSignal; endpoint: LdapEndpoint; lookup: LdapConnection;
   connections: LdapConnection[];
+}
+
+function safeDirectoryError(error: unknown): LdapDirectoryError {
+  if (error instanceof LdapDirectoryError) return error;
+  if (error instanceof InvalidCredentialsError) return new LdapDirectoryError('INVALID_CREDENTIALS');
+  if (error instanceof SizeLimitExceededError) return new LdapDirectoryError('LIMIT_EXCEEDED');
+  if (error instanceof TimeLimitExceededError) return new LdapDirectoryError('TIMEOUT');
+  return new LdapDirectoryError('UNAVAILABLE');
 }
 
 export class LdapDirectoryService {
@@ -83,7 +98,8 @@ export class LdapDirectoryService {
     if (!query || Buffer.byteLength(query) > 1024) throw new LdapDirectoryError('LIMIT_EXCEEDED');
     return this.transaction('searchGroups', async tx => {
       const filter = this.and(this.equality('objectClass', this.config.groupObjectClass),
-        new SubstringFilter({ attribute: this.config.groupLookupAttr, any: [query] }));
+        new OrFilter({ filters: [...new Set([this.config.groupLookupAttr, this.config.groupNameAttr])]
+          .map(attribute => new SubstringFilter({ attribute, any: [query] })) }));
       const entries = await this.search(tx, this.groupBase, filter, this.groupAttributes(), this.config.groupSearchLimit);
       return entries.map(entry => this.group(entry));
     });
@@ -94,7 +110,64 @@ export class LdapDirectoryService {
     return this.transaction('resolveGroup', async tx => this.resolveGroupInTransaction(tx, filter));
   }
 
-  private async transaction<T>(operation: string, work: (tx: Transaction) => Promise<T>): Promise<T> {
+  public async diagnose(input: { username?: string; groupSubjects?: string[] }): Promise<LdapDiagnostics> {
+    const started = Date.now();
+    const stages: LdapDiagnosticStage[] = [];
+    const result: LdapDiagnostics = { authenticated: false, stages };
+    try {
+      await this.transaction('diagnose', async tx => {
+        const username = input.username;
+        if (username === undefined) return;
+        if (!username || Buffer.byteLength(username) > 1024) throw new LdapDirectoryError('LIMIT_EXCEEDED');
+        const subject = await this.diagnosticStage(stages, 'identity', async () => {
+          const entries = await this.search(tx, this.userBase,
+            this.and(this.equality('objectClass', this.config.userObjectClass), this.equality(this.config.userLookupAttr, username)),
+            [this.config.userIdAttr], 2);
+          if (entries.length !== 1) throw new LdapDirectoryError('INVALID_IDENTITY');
+          if (!this.inScope(entries[0].dn, this.userBase)) throw new LdapDirectoryError('INCOMPLETE_RESULT');
+          return this.identity(entries[0], this.config.userIdAttr);
+        });
+        const user = await this.diagnosticStage(stages, 'eligibility', () => this.user(tx, this.subjectFilter(this.config.userIdAttr, subject), false));
+        const groups = input.groupSubjects;
+        if (groups?.length) {
+          result.groupSubjects = await this.diagnosticStage(stages, 'groups', async () => {
+            for (const subject of groups) await this.resolveGroupInTransaction(tx, this.subjectFilter(this.config.groupIdAttr, subject));
+            return this.memberships(tx, user.dn, groups);
+          });
+        }
+      }, stages);
+    } catch (error) {
+      const code = safeDirectoryError(error).code;
+      const failed = stages.find(stage => stage.status === 'failed');
+      if (failed) {
+        failed.code = code;
+        failed.durationMs = Math.max(failed.durationMs, Date.now() - started - stages.filter(stage => stage.status === 'passed')
+          .reduce((sum, stage) => sum + stage.durationMs, 0));
+      } else stages.push({ stage: 'lookup', status: 'failed', durationMs: Date.now() - started, code });
+      delete result.groupSubjects;
+    }
+    // Aborted protocol promises can settle later; their bookkeeping must not change the returned report.
+    return { ...result, stages: stages.map(stage => ({ ...stage })) };
+  }
+
+  private async diagnosticStage<T>(stages: LdapDiagnosticStage[], stage: LdapDiagnosticStage['stage'], work: () => Promise<T>): Promise<T> {
+    const started = Date.now();
+    const entry: LdapDiagnosticStage = { stage, status: 'failed', durationMs: 0, code: 'TIMEOUT' };
+    stages.push(entry);
+    try {
+      const result = await work();
+      entry.status = 'passed';
+      entry.durationMs = Date.now() - started;
+      delete entry.code;
+      return result;
+    } catch (error) {
+      entry.code = safeDirectoryError(error).code;
+      entry.durationMs = Date.now() - started;
+      throw error;
+    }
+  }
+
+  private async transaction<T>(operation: string, work: (tx: Transaction) => Promise<T>, stages?: LdapDiagnosticStage[]): Promise<T> {
     if (this.active >= this.config.maxConcurrentOperations) throw new LdapDirectoryError('BUSY');
     this.active++;
     const started = Date.now();
@@ -109,25 +182,33 @@ export class LdapDirectoryService {
       let lookup: LdapConnection | undefined;
       let selected: LdapEndpoint | undefined;
       const endpoints = [{ hostname: this.config.hostname, port: this.config.port }, ...this.config.failoverEndpoints];
-      for (const [index, endpoint] of endpoints.entries()) {
-        controller.signal.throwIfAborted();
-        try {
-          const connection = await this.connect(this.config, endpoint, controller.signal);
-          if (controller.signal.aborted) { connection.close(); controller.signal.throwIfAborted(); }
-          lookup = connection;
-          connections.push(connection);
-          selected = endpoint;
-          if (index > 0) this.logger.info('LDAP endpoint failover', {
-            component: 'LdapDirectoryService', operation, metadata: { directoryId: this.config.directoryId, endpointIndex: index },
-          });
-          break;
-        } catch {
-          if (controller.signal.aborted) throw new LdapDirectoryError('TIMEOUT');
+      const establish = async (): Promise<void> => {
+        for (const [index, endpoint] of endpoints.entries()) {
+          controller.signal.throwIfAborted();
+          try {
+            const connection = await this.connect(this.config, endpoint, controller.signal);
+            if (controller.signal.aborted) { connection.close(); controller.signal.throwIfAborted(); }
+            lookup = connection;
+            connections.push(connection);
+            selected = endpoint;
+            if (index > 0) this.logger.info('LDAP endpoint failover', {
+              component: 'LdapDirectoryService', operation, metadata: { directoryId: this.config.directoryId, endpointIndex: index },
+            });
+            break;
+          } catch {
+            if (controller.signal.aborted) throw new LdapDirectoryError('TIMEOUT');
+          }
         }
-      }
+        if (!lookup || !selected) throw new LdapDirectoryError('UNAVAILABLE');
+      };
+      if (stages) await this.diagnosticStage(stages, 'tls', establish);
+      else await establish();
       if (!lookup || !selected) throw new LdapDirectoryError('UNAVAILABLE');
       // Failover ends before any credential-bearing bind. User passwords are never retried.
-      await lookup.bind(this.config.lookupUser, this.config.lookupPassword);
+      const lookupConnection = lookup;
+      const bind = (): Promise<void> => lookupConnection.bind(this.config.lookupUser, this.config.lookupPassword);
+      if (stages) await this.diagnosticStage(stages, 'lookup', bind);
+      else await bind();
       return work({ signal: controller.signal, endpoint: selected, lookup, connections });
     };
     try {
@@ -137,12 +218,7 @@ export class LdapDirectoryService {
       });
       return result;
     } catch (error) {
-      const safeError = controller.signal.aborted ? new LdapDirectoryError('TIMEOUT')
-        : error instanceof LdapDirectoryError ? error
-        : error instanceof InvalidCredentialsError ? new LdapDirectoryError('INVALID_CREDENTIALS')
-        : error instanceof SizeLimitExceededError ? new LdapDirectoryError('LIMIT_EXCEEDED')
-        : error instanceof TimeLimitExceededError ? new LdapDirectoryError('TIMEOUT')
-        : new LdapDirectoryError('UNAVAILABLE');
+      const safeError = controller.signal.aborted ? new LdapDirectoryError('TIMEOUT') : safeDirectoryError(error);
       this.logger.warn('LDAP operation failed', {
         component: 'LdapDirectoryService', operation, metadata: { directoryId: this.config.directoryId,
         reason: safeError.code, durationMs: Date.now() - started },

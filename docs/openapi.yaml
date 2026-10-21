@@ -108,6 +108,244 @@ tags:
     description: Frontend log collection and troubleshooting
 
 paths:
+  /auth/ldap/groups:
+    get:
+      tags: [RBAC]
+      summary: Search configured LDAP groups
+      description: >-
+        Requires rbac:admin. Complete bounded snapshot paged in batches of 50.
+        Opaque process-local cursors expire after 60 seconds, are bound to caller,
+        query and configuration, and return INVALID_CURSOR on another process or after eviction.
+        No LDAP login or account import occurs.
+      parameters:
+        - in: query
+          name: query
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 1024 }
+          description: Literal substring, maximum 1024 UTF-8 bytes
+        - in: query
+          name: cursor
+          schema: { type: string, pattern: '^[a-f0-9]{64}$' }
+      responses:
+        '200':
+          description: Complete search snapshot page
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LdapGroupPage'
+        '400':
+          description: Invalid request or cursor
+        '401':
+          description: Authentication required
+        '403':
+          description: Requires rbac admin permission
+        '404':
+          description: LDAP disabled or mapping or role absent
+        '409':
+          description: Duplicate mapping or stale revision
+        '422':
+          description: Invalid group identity or diagnostic policy denial
+        '429':
+          description: Request rate or directory capacity exceeded
+        '503':
+          description: Directory unavailable or incomplete resolution
+        '500':
+          description: Redacted internal server error
+
+
+  /auth/ldap/mappings:
+    get:
+      tags: [RBAC]
+      summary: List stored LDAP role mappings
+      description: Requires rbac:admin. Lists the configured directory only, including during an outage.
+      responses:
+        '200':
+          description: Stored mappings with source and role labels
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/LdapGroupMapping'
+        '400':
+          description: Invalid request or cursor
+        '401':
+          description: Authentication required
+        '403':
+          description: Requires rbac admin permission
+        '404':
+          description: LDAP disabled or mapping or role absent
+        '409':
+          description: Duplicate mapping or stale revision
+        '422':
+          description: Invalid group identity or diagnostic policy denial
+        '429':
+          description: Request rate or directory capacity exceeded
+        '503':
+          description: Directory unavailable or incomplete resolution
+        '500':
+          description: Redacted internal server error
+
+    post:
+      tags: [RBAC]
+      summary: Create verified LDAP group role mapping
+      description: >-
+        Requires rbac:admin. Resolves immutable group subject against configured
+        directory. Browser labels and locators are rejected. Does not materialize grants.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LdapMappingCreate'
+      responses:
+        '201':
+          description: Mapping and audit committed atomically
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LdapGroupMapping'
+        '400':
+          description: Invalid request or cursor
+        '401':
+          description: Authentication required
+        '403':
+          description: Requires rbac admin permission
+        '404':
+          description: LDAP disabled or mapping or role absent
+        '409':
+          description: Duplicate mapping or stale revision
+        '422':
+          description: Invalid group identity or diagnostic policy denial
+        '429':
+          description: Request rate or directory capacity exceeded
+        '503':
+          description: Directory unavailable or incomplete resolution
+        '500':
+          description: Redacted internal server error
+
+
+  /auth/ldap/mappings/{id}:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: { type: string }
+    put:
+      tags: [RBAC]
+      summary: Update LDAP group role mapping
+      description: >-
+        Requires rbac:admin and at least one field. Revalidates group identity for
+        role edits and enabling. Disabling alone works during outages.
+        Atomically withdraws attributable grants and invalidates directory validation.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LdapMappingUpdate'
+      responses:
+        '200':
+          description: Updated mapping with authoritative stored labels
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LdapGroupMapping'
+        '400':
+          description: Invalid request or cursor
+        '401':
+          description: Authentication required
+        '403':
+          description: Requires rbac admin permission
+        '404':
+          description: LDAP disabled or mapping or role absent
+        '409':
+          description: Duplicate mapping or stale revision
+        '422':
+          description: Invalid group identity or diagnostic policy denial
+        '429':
+          description: Request rate or directory capacity exceeded
+        '503':
+          description: Directory unavailable or incomplete resolution
+        '500':
+          description: Redacted internal server error
+
+    delete:
+      tags: [RBAC]
+      summary: Delete LDAP group role mapping
+      description: >-
+        Requires rbac:admin. Works during directory outages and atomically removes
+        only attributable grants, invalidates validation and records an audit event.
+      responses:
+        '204':
+          description: Deleted with attributable grants withdrawn
+        '400':
+          description: Invalid request or cursor
+        '401':
+          description: Authentication required
+        '403':
+          description: Requires rbac admin permission
+        '404':
+          description: LDAP disabled or mapping or role absent
+        '409':
+          description: Duplicate mapping or stale revision
+        '422':
+          description: Invalid group identity or diagnostic policy denial
+        '429':
+          description: Request rate or directory capacity exceeded
+        '503':
+          description: Directory unavailable or incomplete resolution
+        '500':
+          description: Redacted internal server error
+
+
+  /auth/ldap/test:
+    post:
+      tags: [RBAC]
+      summary: Diagnose configured LDAP read-only access
+      description: >-
+        Requires rbac:admin. Limited to 10 requests per minute per administrator.
+        Tests configured TLS and lookup; optional exact user checks immutable
+        identity and eligibility. Optional group subjects must be enabled mapped
+        groups and require username. No user bind, profile output, grants or tokens.
+        Failure reports retain completed stages and a safe failed-stage code.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LdapDiagnosticInput'
+      responses:
+        '200':
+          description: All requested diagnostic stages passed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LdapDiagnosticReport'
+        '400':
+          description: Invalid request or cursor
+        '401':
+          description: Authentication required
+        '403':
+          description: Requires rbac admin permission
+        '404':
+          description: LDAP disabled or mapping or role absent
+        '409':
+          description: Duplicate mapping or stale revision
+        '422':
+          description: Invalid group identity or diagnostic policy denial
+        '429':
+          description: Request rate or directory capacity exceeded
+        '503':
+          description: Directory unavailable or incomplete resolution
+        '500':
+          description: Redacted internal server error
+
+
   /health:
     get:
       summary: Health check
@@ -4321,6 +4559,87 @@ components:
         default: false
 
   schemas:
+    LdapDirectoryGroup:
+      type: object
+      required: [subject, dn, name]
+      properties:
+        subject: { type: string, format: uuid }
+        dn: { type: string }
+        name: { type: string }
+    LdapGroupPage:
+      type: object
+      required: [items, nextCursor]
+      properties:
+        items:
+          type: array
+          maxItems: 50
+          items:
+            $ref: '#/components/schemas/LdapDirectoryGroup'
+        nextCursor: { type: string, nullable: true, pattern: '^[a-f0-9]{64}$' }
+    LdapGroupMapping:
+      type: object
+      required: [id, source, directoryId, groupSubject, groupDn, groupName, roleId, roleName, enabled, createdAt, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        source: { type: string, enum: [ldap] }
+        directoryId: { type: string }
+        groupSubject: { type: string, format: uuid }
+        groupDn: { type: string }
+        groupName: { type: string }
+        roleId: { type: string }
+        roleName: { type: string }
+        enabled: { type: boolean }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    LdapMappingCreate:
+      type: object
+      additionalProperties: false
+      required: [groupSubject, roleId]
+      properties:
+        groupSubject: { type: string, format: uuid }
+        roleId: { type: string, minLength: 1, maxLength: 128 }
+    LdapMappingUpdate:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        roleId: { type: string, minLength: 1, maxLength: 128 }
+        enabled: { type: boolean }
+    LdapDiagnosticInput:
+      type: object
+      additionalProperties: false
+      properties:
+        username:
+          type: string
+          minLength: 1
+          maxLength: 1024
+          description: Exact login name, maximum 1024 UTF-8 bytes
+        groupSubjects:
+          type: array
+          maxItems: 20
+          description: Requires username and only enabled mapped immutable group subjects
+          items: { type: string, format: uuid }
+    LdapDiagnosticReport:
+      type: object
+      required: [authenticated, stages]
+      properties:
+        authenticated: { type: boolean, enum: [false] }
+        stages:
+          type: array
+          items:
+            type: object
+            required: [stage, status, durationMs]
+            properties:
+              stage: { type: string, enum: [tls, lookup, identity, eligibility, groups] }
+              status: { type: string, enum: [passed, failed] }
+              durationMs: { type: number, minimum: 0 }
+              code:
+                type: string
+                enum: [INVALID_CREDENTIALS, INELIGIBLE, IDENTITY_CHANGED, INVALID_IDENTITY, POLICY_UNREADABLE, INCOMPLETE_RESULT, LIMIT_EXCEEDED, BUSY, TIMEOUT, UNAVAILABLE]
+        groupSubjects:
+          type: array
+          items: { type: string, format: uuid }
+
     Node:
       type: object
       properties:

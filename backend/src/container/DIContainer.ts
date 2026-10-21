@@ -2,12 +2,16 @@ import { LoggerService } from "../services/LoggerService";
 import { ExpertModeService } from "../services/ExpertModeService";
 import { ConfigService } from "../config/ConfigService";
 import type { EntraIdService } from "../services/EntraIdService";
+import type { LdapDirectoryService } from "../services/LdapDirectoryService";
+import type { LdapMappingService } from "../services/LdapMappingService";
 
 export interface ServiceRegistry {
   logger: LoggerService;
   expertMode: ExpertModeService;
   config: ConfigService;
   entraId?: EntraIdService;
+  ldapDirectory?: LdapDirectoryService;
+  ldapMappings?: LdapMappingService;
 }
 
 export class DIContainer {

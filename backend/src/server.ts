@@ -18,6 +18,9 @@ import { createLogsRouter } from "./routes/logs";
 import { createConfigRouter } from "./routes/config";
 import { asyncHandler } from "./routes/asyncHandler";
 import { createAuthRouter } from "./routes/auth";
+import { createLdapAdministrationRouter } from "./routes/ldapAdministration";
+import { LdapDirectoryService } from "./services/LdapDirectoryService";
+import { LdapMappingService } from "./services/LdapMappingService";
 import { createSetupRouter } from "./routes/setup";
 import { createUsersRouter } from "./routes/users";
 import { createGroupsRouter } from "./routes/groups";
@@ -609,6 +612,14 @@ async function startServer(): Promise<Express> {
 
     // Setup routes (no authentication required - only accessible when setup is incomplete)
     app.use("/api/setup", createSetupRouter(databaseService, container));
+
+    const ldapConfig = configService.getLdapConfig();
+    if (ldapConfig) {
+      const directory = new LdapDirectoryService(ldapConfig, logger);
+      container.register("ldapDirectory", directory);
+      container.register("ldapMappings", new LdapMappingService(databaseService.getAdapter(), ldapConfig.directoryId, directory));
+    }
+    app.use("/api/auth/ldap", createLdapAdministrationRouter(databaseService, container));
 
     // Authentication routes with stricter rate limiting
     const authRateLimitMiddleware = createAuthRateLimitMiddleware();
