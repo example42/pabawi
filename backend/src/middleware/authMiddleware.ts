@@ -1,5 +1,6 @@
 import type { Request, Response, NextFunction } from "express";
 import type { AuthenticationService } from "../services/AuthenticationService";
+import { ldapAuthenticationFailure } from "../services/LdapAuthenticationService";
 import { ERROR_CODES, sendAuthenticationError, sendDatabaseError, isDatabaseConnectionError } from "../utils/errorHandling";
 
 // Express.Request.user augmentation is defined in src/types/express.d.ts
@@ -64,12 +65,18 @@ export function createAuthMiddleware(authService: AuthenticationService) {
         exp: payload.exp
       };
       req.authContext = payload.authContext;
+      req.authSessionVersion = payload.sessionVersion;
 
       req.revalidateAuth = async (): Promise<void> => { await authService.verifyToken(token); };
 
       // Continue to next middleware
       next();
     } catch (error) {
+      const failure = ldapAuthenticationFailure(error);
+      if (failure) {
+        res.status(failure.status).json({ error: { code: failure.code, message: failure.message } });
+        return;
+      }
       // Check for database connection errors (Requirement 16.5)
       if (isDatabaseConnectionError(error)) {
         sendDatabaseError(res, error, "Authentication service temporarily unavailable");

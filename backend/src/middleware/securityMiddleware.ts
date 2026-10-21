@@ -141,7 +141,8 @@ export function inputSanitizationMiddleware(
 ): void {
   try {
     // Sanitize request body
-    if (req.body && typeof req.body === "object") {
+    // LDAP login has a strict bounded schema. Preserve directory login values as well as passwords.
+    if (req.body && typeof req.body === "object" && !(req.method === 'POST' && req.path === '/api/auth/ldap/login')) {
       req.body = sanitizeObject(req.body);
     }
 

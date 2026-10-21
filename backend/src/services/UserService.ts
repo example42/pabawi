@@ -732,6 +732,13 @@ export class UserService {
    * No token is issued here, including when a committed account has no effective roles.
    */
   public async createFederatedUser(input: FederatedProvisioningInput): Promise<User> {
+    return this.withFederatedUser(input, user => Promise.resolve(user));
+  }
+
+  /** Publish provider-owned authorization in the same transaction as account/profile changes.
+   * The callback performs database work only and must not open another transaction.
+   */
+  public async withFederatedUser<T>(input: FederatedProvisioningInput, publish: (user: User) => Promise<T>): Promise<T> {
     if (!input.issuer.trim() || !input.subject.trim() ||
         (input.provider === 'ldap' && (!input.loginName.trim() || !input.dn.trim())) ||
         (input.provider === 'entra-id' && input.username.toLowerCase().startsWith('ldap:'))) {
@@ -753,7 +760,7 @@ export class UserService {
       let userId: string;
       let identityId: string;
       if (existing) {
-        if (input.provider === 'entra-id') return existing;
+        if (input.provider === 'entra-id') return publish(existing);
         userId = existing.id;
         const identity = await this.db.queryOne<{ id: string }>(
           'SELECT id FROM federated_identities WHERE provider = ? AND issuer = ? AND subject = ?',
@@ -808,7 +815,7 @@ export class UserService {
       }
       const user = await this.getUserById(userId);
       assert(user);
-      return user;
+      return publish(user);
     });
   }
 

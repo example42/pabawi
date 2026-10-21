@@ -1,3 +1,4 @@
+import { consoleAuthentication } from "../helpers/consoleUser";
 /**
  * Property-Based Tests for RBAC Enforcement for Cross-User Termination
  *
@@ -109,6 +110,7 @@ describe("Feature: console-integration, Property 6: RBAC enforcement for cross-u
       makeConsoleConfig(),
       new LoggerService(),
       makeAuditLogger(),
+      authService,
     );
 
     // Find or create console:access and console:admin permissions
@@ -213,6 +215,7 @@ describe("Feature: console-integration, Property 6: RBAC enforcement for cross-u
    */
   async function createOwnedSession(ownerId: string): Promise<string> {
     const reservation = await sessionManager.reserveSession({
+      ...await consoleAuthentication(db, ownerId),
       userId: ownerId,
       nodeId: `node-${randomUUID().substring(0, 8)}`,
       provider: "proxmox",

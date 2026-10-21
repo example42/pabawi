@@ -146,9 +146,8 @@ When `ENTRA_ID_ENABLED=true`, all four required variables must be set or the ser
 LDAP configuration, read-only directory operations and restricted group-mapping
 administration are implemented. The [LDAP administration API](api.md#ldap-administration)
 requires `rbac:admin` for group search, stored mappings and diagnostics.
-Public LDAP login and provider discovery remain unavailable
-until the authentication/session package is complete. Enabling this configuration
-does not enable an authentication endpoint or grant any role.
+Enabling complete configuration advertises LDAP and enables explicit LDAP login
+with shared session eligibility enforcement. It does not grant any role automatically.
 
 LDAP is disabled by default. When disabled, only LDAP_ENABLED is parsed. Enabled
 invalid configuration fails startup. Construction performs no directory connection;
@@ -211,7 +210,8 @@ for LDAPS and StartTLS. A configured PEM bundle adds certificates to Node's defa
 trust roots (including configured system/extra roots). A failed StartTLS negotiation never falls back to plaintext. Default
 wildcard restrictions supplement normal hostname verification. User binds use a
 separate connection to the selected endpoint. No reconnect or password replay is
-permitted. Failover applies only to transport establishment before lookup binding.
+permitted. Failover applies only to transient transport establishment failures before lookup binding;
+certificate, hostname and protocol validation failures stop the operation.
 
 Searches use server limits, no paging, no alias dereferencing and no referral
 following. Server truncation, referrals and traversal/depth bounds fail the whole
@@ -245,6 +245,26 @@ are excluded. Actual AD interoperability remains unverified.
 
 Reproducible OpenLDAP TLS tests and commands are in
 [the fixture guide](../backend/test/fixtures/ldap/README.md).
+
+When enabled, LDAP is advertised by `/api/auth/providers` and accepts explicit password
+authentication at `/api/auth/ldap/login`. Directory unavailability does not prevent startup or local/Entra access.
+The login UI and operator walkthrough are tracked separately in the LDAP implementation plan.
+No default role is assigned: configure group mappings or manually grant an account a role after its first
+proven login. An account without any explicit role receives no tokens.
+
+Successful eligibility state is persisted with mapping/configuration revisions and measured from the
+start of the directory read using database time. Its maximum age is `LDAP_REVALIDATION_INTERVAL_SECONDS`.
+Refresh forces validation; ordinary REST and active stream/websocket checks share persisted freshness,
+single-flight work and bounded database leases. Changed mappings or configuration invalidate freshness.
+All processes serving one directory must use the same configuration; replace older workers during a
+configuration rollout. A stale worker cannot reinstate its old configuration on an authentication request.
+Configuration hashing includes the configured CA bundle contents and lookup credential configuration.
+
+Transient directory failures preserve materialized grants and existing token versions. Expired sessions
+stop protected access until validation succeeds. Confirmed ineligibility or no remaining explicit role
+revokes LDAP sessions; directory recovery then requires a new login. Profile refresh preserves local
+suspension, administrative state and manual assignments. Migration 032 requires reauthentication once;
+migration 034 rejects legacy console credentials lacking a verified provider context.
 
 ## Bolt
 

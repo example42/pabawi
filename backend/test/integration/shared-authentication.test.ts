@@ -58,7 +58,7 @@ describe('configured authentication dependency boundary', () => {
     app.use('/api/auth/ldap', createLdapAdministrationRouter(database, container));
     app.use('/api/auth/entra-id', createEntraIdAuthRouter(database, container));
     const logger = new LoggerService();
-    const manager = new ConsoleSessionManager(db, ConsoleConfigSchema.parse({}), logger, new AuditLoggingService(db));
+    const manager = new ConsoleSessionManager(db, ConsoleConfigSchema.parse({}), logger, new AuditLoggingService(db), auth);
     app.use('/api/console', createConsoleRouter(container, new IntegrationManager({ logger }), manager, db));
     const middleware = createAuthMiddleware(auth);
     app.get('/mcp-auth', createMcpAuthMiddleware(undefined, 'machine', middleware, db), (_req, res) => { res.json({ ok: true }); });

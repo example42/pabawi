@@ -195,8 +195,13 @@ export class LdapDirectoryService {
               component: 'LdapDirectoryService', operation, metadata: { directoryId: this.config.directoryId, endpointIndex: index },
             });
             break;
-          } catch {
+          } catch (error) {
             if (controller.signal.aborted) throw new LdapDirectoryError('TIMEOUT');
+            const code = error instanceof Error ? (error as NodeJS.ErrnoException).code : undefined;
+            const transient = code && ['ECONNREFUSED', 'ECONNRESET', 'ETIMEDOUT', 'EHOSTUNREACH', 'ENETUNREACH', 'EAI_AGAIN', 'ENOTFOUND'].includes(code);
+            if (!transient && !(error instanceof LdapDirectoryError && error.code === 'TIMEOUT')) {
+              throw new LdapDirectoryError('UNAVAILABLE');
+            }
           }
         }
         if (!lookup || !selected) throw new LdapDirectoryError('UNAVAILABLE');
@@ -206,7 +211,14 @@ export class LdapDirectoryService {
       if (!lookup || !selected) throw new LdapDirectoryError('UNAVAILABLE');
       // Failover ends before any credential-bearing bind. User passwords are never retried.
       const lookupConnection = lookup;
-      const bind = (): Promise<void> => lookupConnection.bind(this.config.lookupUser, this.config.lookupPassword);
+      const bind = async (): Promise<void> => {
+        try { await lookupConnection.bind(this.config.lookupUser, this.config.lookupPassword); }
+        catch (error) {
+          // A service credential failure says nothing about the submitted user's password.
+          if (error instanceof InvalidCredentialsError) throw new LdapDirectoryError('UNAVAILABLE');
+          throw error;
+        }
+      };
       if (stages) await this.diagnosticStage(stages, 'lookup', bind);
       else await bind();
       return work({ signal: controller.signal, endpoint: selected, lookup, connections });
@@ -276,7 +288,8 @@ export class LdapDirectoryService {
       this.and(this.equality('objectClass', c.userObjectClass), identityFilter, this.eligibilityFilter),
       [c.userIdAttr, c.userLookupAttr, c.userEmailAttr, c.userDisplayNameAttr, c.userGivenNameAttr, c.userSurnameAttr,
         ...(c.directoryType === 'ad' ? adPolicyAttributes : [])], 2);
-    if (entries.length !== 1) throw new LdapDirectoryError(credentials ? 'INVALID_CREDENTIALS' : 'INELIGIBLE');
+    if (entries.length !== 1) throw new LdapDirectoryError(credentials ? 'INVALID_CREDENTIALS'
+      : entries.length === 0 ? 'INELIGIBLE' : 'INCOMPLETE_RESULT');
     const entry = entries[0];
     const subject = this.identity(entry, c.userIdAttr);
     if (c.directoryType === 'ad') checkAdEligibility(entry);

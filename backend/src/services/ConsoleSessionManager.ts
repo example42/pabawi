@@ -1,4 +1,5 @@
 import { PermissionService } from "./PermissionService";
+import { isAuthenticationContext, type AuthenticationService, type AuthenticationContext } from './AuthenticationService';
 import { randomBytes, randomUUID } from "crypto";
 
 import type { ConsoleConfig } from "../config/schema";
@@ -110,6 +111,7 @@ export class ConsoleSessionManager {
     private config: ConsoleConfig,
     private logger: LoggerService,
     private auditLogger: AuditLoggingService,
+    private authentication: Pick<AuthenticationService, 'assertSessionEligible'>,
     private broker?: ConsoleConnectionBroker,
     private providerCleanup?: ConsoleProviderCleanup,
   ) {
@@ -117,13 +119,18 @@ export class ConsoleSessionManager {
   }
 
   async assertSessionAuthorized(sessionId: string): Promise<void> {
-    const session = await this.db.queryOne<{ userId: string }>(
-      `SELECT c.user_id AS "userId" FROM console_sessions c JOIN users u ON u.id = c.user_id
+    const session = await this.db.queryOne<{ userId: string; authContext: string | null; sessionVersion: string }>(
+      `SELECT c.user_id AS "userId", c.auth_context AS "authContext", c.session_version AS "sessionVersion"
+       FROM console_sessions c JOIN users u ON u.id = c.user_id
        WHERE c.id = ? AND c.state IN ('creating', 'active') AND u.is_active = 1
          AND c.session_version = u.session_version`,
       [sessionId],
     );
-    if (!session || !await this.permissionService.hasPermission(session.userId, 'console', 'access')) {
+    if (!session?.authContext) throw new ConsoleAccountError('Console session authorization revoked');
+    const context: unknown = JSON.parse(session.authContext);
+    if (!isAuthenticationContext(context)) throw new ConsoleAccountError('Console session authorization revoked');
+    await this.authentication.assertSessionEligible(session.userId, context, session.sessionVersion);
+    if (!await this.permissionService.hasPermission(session.userId, 'console', 'access')) {
       throw new Error('Console session authorization revoked');
     }
   }
@@ -155,7 +162,10 @@ export class ConsoleSessionManager {
     nodeId: string;
     provider: string;
     transport: ConsoleTransport;
+    authContext: AuthenticationContext;
+    sessionVersion: string;
   }): Promise<ConsoleReservation> {
+    await this.authentication.assertSessionEligible(request.userId, request.authContext, request.sessionVersion);
     const sessionId = randomUUID();
     const token = this.generateToken();
     const now = new Date().toISOString();
@@ -166,8 +176,8 @@ export class ConsoleSessionManager {
       // explicit row lock.
       const account = await this.db.queryOne<{ sessionVersion: string }>(
         `SELECT session_version AS "sessionVersion" FROM users
-          WHERE id = ? AND is_active = 1${this.db.getDialect() === "postgres" ? " FOR UPDATE" : ""}`,
-        [request.userId],
+          WHERE id = ? AND is_active = 1 AND session_version = ?${this.db.getDialect() === "postgres" ? " FOR UPDATE" : ""}`,
+        [request.userId, request.sessionVersion],
       );
       if (!account) throw new ConsoleAccountError("User not found or inactive");
 
@@ -186,11 +196,11 @@ export class ConsoleSessionManager {
         `INSERT INTO console_sessions (
           id, user_id, node_id, provider, transport, state,
           token, token_created_at, token_consumed,
-          started_at, last_heartbeat_at, session_version
-        ) VALUES (?, ?, ?, ?, ?, 'creating', ?, ?, 0, ?, ?, ?)`,
+          started_at, last_heartbeat_at, session_version, auth_context
+        ) VALUES (?, ?, ?, ?, ?, 'creating', ?, ?, 0, ?, ?, ?, ?)`,
         [
           sessionId, request.userId, request.nodeId, request.provider, request.transport,
-          token, now, now, now, account.sessionVersion,
+          token, now, now, now, account.sessionVersion, JSON.stringify(request.authContext),
         ],
       );
     });

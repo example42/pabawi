@@ -84,7 +84,7 @@ test('OpenAPI version, references, path parameters and security declarations are
 test('public exchanges, bootstrap ownership and stream credentials match their implemented boundaries', () => {
   assert.deepEqual(spec.security, [{ bearerAuth: [] }]);
   for (const [path, method] of [
-    ['/health', 'get'], ['/setup/status', 'get'], ['/auth/login', 'post'],
+    ['/health', 'get'], ['/setup/status', 'get'], ['/auth/login', 'post'], ['/auth/ldap/login', 'post'],
     ['/auth/register', 'post'], ['/auth/refresh', 'post'], ['/auth/providers', 'get'],
     ['/auth/entra-id/login', 'get'], ['/auth/entra-id/callback', 'get'], ['/auth/entra-id/token', 'post'],
   ]) assert.deepEqual(spec.paths[path][method].security, [], path);

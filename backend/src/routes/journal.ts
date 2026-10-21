@@ -20,6 +20,8 @@ import { JournalEventTypeSchema, JournalSourceSchema, type JournalEntry } from "
 import type { IntegrationManager } from "../integrations/IntegrationManager";
 import type { DatabaseService } from "../database/DatabaseService";
 import { sendValidationError, ERROR_CODES } from "../utils/errorHandling";
+import { SessionAuthorization } from "../services/SessionAuthorization";
+import { PermissionService } from "../services/PermissionService";
 import { createAuthMiddleware } from "../middleware/authMiddleware";
 import { createRbacMiddleware } from "../middleware/rbacMiddleware";
 import { type DIContainer, createDefaultContainer, resolveAuthenticationService } from "../container/DIContainer";
@@ -218,9 +220,18 @@ export function createJournalRouter(
       res.setHeader("X-Accel-Buffering", "no");
       res.flushHeaders();
 
+      const authorization = new SessionAuthorization(async () => {
+        if (!req.revalidateAuth || !req.user) throw new Error('Authentication required');
+        await req.revalidateAuth();
+        if (!await new PermissionService(db).hasPermission(req.user.userId, 'journal', 'read')) {
+          throw new Error('Journal permission revoked');
+        }
+      }, () => { res.end(); });
+      res.on('close', () => { authorization.close(); });
+
       function send(eventName: string, data: unknown): void {
         if (res.writableEnded) return;
-        res.write(`event: ${eventName}\ndata: ${JSON.stringify(data)}\n\n`);
+        authorization.run(() => { if (!res.writableEnded) res.write(`event: ${eventName}\ndata: ${JSON.stringify(data)}\n\n`); });
       }
 
       const heartbeat = setInterval(() => {
@@ -246,7 +257,7 @@ export function createJournalRouter(
               send("source_error", { source: "global", message: "Group not found" });
               clearInterval(heartbeat);
               send("complete", {});
-              res.end();
+              await authorization.finish(() => { res.end(); });
               return;
             }
             nodeIds = group.nodes;
@@ -356,7 +367,7 @@ export function createJournalRouter(
           clearInterval(heartbeat);
           if (!res.writableEnded) {
             send("complete", {});
-            res.end();
+            await authorization.finish(() => { res.end(); });
           }
         }
       })();
@@ -399,9 +410,18 @@ export function createJournalRouter(
       res.setHeader("X-Accel-Buffering", "no");
       res.flushHeaders();
 
+      const authorization = new SessionAuthorization(async () => {
+        if (!req.revalidateAuth || !req.user) throw new Error('Authentication required');
+        await req.revalidateAuth();
+        if (!await new PermissionService(db).hasPermission(req.user.userId, 'journal', 'read')) {
+          throw new Error('Journal permission revoked');
+        }
+      }, () => { res.end(); });
+      res.on('close', () => { authorization.close(); });
+
       function send(eventName: string, data: unknown): void {
         if (res.writableEnded) return;
-        res.write(`event: ${eventName}\ndata: ${JSON.stringify(data)}\n\n`);
+        authorization.run(() => { if (!res.writableEnded) res.write(`event: ${eventName}\ndata: ${JSON.stringify(data)}\n\n`); });
       }
 
       // Heartbeat to prevent proxies from closing idle connections
@@ -615,11 +635,11 @@ export function createJournalRouter(
           }
         }
 
-        await Promise.all(tasks).finally(() => {
+        await Promise.all(tasks).finally(async () => {
           clearInterval(heartbeat);
           if (!res.writableEnded) {
             send("complete", {});
-            res.end();
+            await authorization.finish(() => { res.end(); });
           }
         });
       })();

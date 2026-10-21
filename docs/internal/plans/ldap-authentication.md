@@ -1,6 +1,6 @@
 # LDAP authentication implementation plan
 
-**Status:** Packages 1 through 4 and 5A complete; packages 5B, 6 and 7 pending
+**Status:** Packages 1 through 5B complete; packages 6 and 7 pending
 **Date:** 2026-10-21  
 **Scope:** OpenLDAP and Active Directory authentication, directory group authorization, and provider-bound session revalidation
 
@@ -92,7 +92,7 @@ TLS certificate verification and hostname checking are mandatory, with TLS 1.2 o
 
 ### Active Directory example
 
-Directory-service configuration is implemented in package 3; public authentication remains assigned to package 5B. Example:
+Directory-service configuration and public authentication are implemented through package 5B. Frontend provider selection remains package 6 work. Example:
 
 ```dotenv
 LDAP_ENABLED=true
@@ -270,7 +270,7 @@ Deploy the token-context change with an intentional one-time session invalidatio
 
 ## HTTP and frontend contracts
 
-All routes below are proposed except existing provider discovery and token refresh. Use existing async route helpers, request validation, typed errors, audit infrastructure, and RBAC middleware.
+The backend route contracts below are implemented through package 5B. Frontend controls remain package 6 work. Use existing async route helpers, request validation, typed errors, audit infrastructure, and RBAC middleware.
 
 | Method and path | Access | Contract |
 | --- | --- | --- |
@@ -452,8 +452,8 @@ Update this table as work proceeds. Status values: `pending`, `in_progress`, `bl
 | 2 Shared provisioning | complete | Commit `2d37548`, verified against current source | [2026-10-21 Codex](#handoff-2026-10-21-codex-package-2) |
 | 3 Directory configuration and service | complete | Commit `4fac169`, verified against current source | [2026-10-21 Codex](#handoff-2026-10-21-codex-package-3) |
 | 4 RBAC mapping administration | complete | Commit `4a5c2b4`, verified against current source | [2026-10-21 Codex](#handoff-2026-10-21-codex-package-4) |
-| 5A Provider context and wiring | complete | Branch `151`, base `ac20696`, uncommitted paths in handoff | [2026-10-21 Codex](#handoff-2026-10-21-codex-package-5a) |
-| 5B LDAP login and transport enforcement | pending | Not started | None |
+| 5A Provider context and wiring | complete | Commit `7f58092`, verified against current source | [2026-10-21 Codex](#handoff-2026-10-21-codex-package-5a) |
+| 5B LDAP login and transport enforcement | complete | Branch `151`, base `3fee4b3`, uncommitted paths in handoff | [2026-10-21 Codex](#handoff-2026-10-21-codex-package-5b) |
 | 6 Frontend and operator documentation | pending | Not started | None |
 | 7 Interoperability and rollout | pending | Not started | None |
 
@@ -1034,3 +1034,116 @@ Final documentation-only checks retain the same two metadata failures (`/tmp/pab
 - Migration 032 is now part of the sequence and intentionally invalidates legacy sessions. Do not edit 031 or 032 when adding console context or other new schema requirements; add another forward migration.
 
 **Next action and acceptance criterion still to satisfy:** Start package 5B. Implement explicit LDAP login/discovery and provider-aware throttling, atomic grant/profile reconciliation, persisted freshness with cross-process leases/fencing, forced refresh and every REST/SSE/MCP/console enforcement path. Keep LDAP login/token issuance unavailable until all package-5B transport, deadline, revocation and race acceptance checks pass.
+
+
+## Handoff 2026-10-21 Codex package 5B
+
+**Date and agent:** 2026-10-21, Codex.
+
+**Package and checkpoint:** Package 5B, LDAP login and all transport checks, complete. Package 5 is complete. Package 6 is next eligible. LDAP HTTP authentication is now available when configured; frontend provider selection and mapping/diagnostic controls remain package 6 work.
+
+**Branch, base commit, completion commit or uncommitted paths:** Branch `151`, base `3fee4b3ab95ac158a26eaf4110ab3d077a880455`. Starting tree was clean. Package 5A is committed as `7f58092`; its table reference has been corrected. Read AGENTS.md, code-change/git/Context7 instructions, progress and latest handoffs. Verified migration 031, provisioning ownership, mappings/revisions, provider-bound sessions and configured authentication wiring against source and focused tests on both adapters. KiroGraph reported 210 pending files and omitted LDAP services; used filesystem inspection without changing its index. No completion commit was created. Changed/new paths:
+
+~~~text
+backend/.env.example
+backend/src/container/DIContainer.ts
+backend/src/database/migrations/033_ldap_validation_decisions.postgres.sql
+backend/src/database/migrations/033_ldap_validation_decisions.sqlite.sql
+backend/src/database/migrations/034_console_authentication_context.postgres.sql
+backend/src/database/migrations/034_console_authentication_context.sqlite.sql
+backend/src/middleware/authMiddleware.ts
+backend/src/middleware/securityMiddleware.ts
+backend/src/routes/auth.ts
+backend/src/routes/console.ts
+backend/src/routes/journal.ts
+backend/src/server.ts
+backend/src/services/AuthenticationService.ts
+backend/src/services/ConsoleSessionManager.ts
+backend/src/services/LdapAuthenticationService.ts
+backend/src/services/LdapDirectoryService.ts
+backend/src/services/LdapMappingService.ts
+backend/src/services/SessionAuthorization.ts
+backend/src/services/UserService.ts
+backend/src/types/express.d.ts
+backend/test/database/BatchLifecycleMigration.test.ts
+backend/test/database/ldap-authentication.test.ts
+backend/test/database/migration-integration.test.ts
+backend/test/database/provider-bound-sessions.test.ts
+backend/test/helpers/consoleUser.ts
+backend/test/helpers/ldapAuthentication.ts
+backend/test/integration/ldap-authentication.test.ts
+backend/test/integration/shared-authentication.test.ts
+backend/test/properties/consoleAuditLog.property.test.ts
+backend/test/properties/consoleConcurrentLimit.property.test.ts
+backend/test/properties/consoleRbacTermination.property.test.ts
+backend/test/properties/consoleSessionRecord.property.test.ts
+backend/test/properties/consoleTokenValidation.property.test.ts
+backend/test/security/console-lifecycle.test.ts
+backend/test/security/ldap-transports.test.ts
+backend/test/security/session-revocation.test.ts
+backend/test/unit/services/LdapDirectoryService.test.ts
+docs/api.md
+docs/configuration.md
+docs/internal/plans/ldap-authentication.md
+docs/openapi.yaml
+scripts/documentation/contracts.test.mjs
+~~~
+
+**Completed scope and changed interfaces:**
+
+- `LdapAuthenticationService.authenticate(loginName, password)` returns a committed proof containing the account, exact identity/directory and session version only after credential, eligibility and explicit-role validation. It never implements JWT signing. `assertEligible(userId, identityId, directoryId, expectedVersion, force)` verifies exact ownership/configuration and is injected into the existing AuthenticationService through the configured container. There is no provider inference, implicit linking, default LDAP role or credential replay. A proven zero-role account is committed without tokens for later manual assignment. Suspension remains locally owned.
+- `UserService.withFederatedUser(input, publish)` owns one transaction for account/identity/profile creation or refresh and the database-only publication callback. `createFederatedUser` delegates to it and preserves existing Entra behavior. `LdapMappingService.lockRevision` participates in that transaction; `withRevision` still owns its standalone transaction. No nested transactions or directory I/O inside database transactions were introduced. Publication reconciles only the authenticating identity's grants and retains separate mapping provenance. Manual grants and other identity sources survive. Effective role and permission-cache invalidation continue through the existing view and database triggers.
+- New forward migration 033 adds `decision_started_at` and `decision_sequence` to LDAP validation state and `validation_sequence` to directory state on both adapters. The directory counter orders reads even when timestamps are identical. Migration 034 adds nullable `console_sessions.auth_context`; existing rows survive but cannot upgrade without provable context. Migrations 031/032 and existing identity/grant keys are unchanged. Fresh and populated upgrade tests pass on SQLite and PostgreSQL. Historic migration-count assertions now include 033/034.
+- Successful freshness is persisted from database time before directory I/O, with mapping/configuration revisions. Strict freshness is `last_validated_at + interval > database_now`, including the exact deadline. Null state never authorizes access. Config fingerprints include validated settings and configured CA contents; startup initializes the fingerprint once and invalidates incompatible freshness. Serving processes must share configuration; an older running process cannot switch the stored revision back during a request.
+- Lookup-only revalidation is single-flight per identity/session version in process. Cross-process conditional leases use database time, owner/expiry and monotonically increasing fencing generation. Remote waiters compare a completed validation generation under the same directory lock before acquiring another lease, closing the publication/reacquisition race found during acceptance. Successful and positive-negative publication checks current mapping/config revisions, account session version, lease ownership/expiry/generation and decision order. Expired or superseded work rolls back profile/grant changes. Release is owner/generation conditional. Credential proofs are independent and fence older work when published.
+- Confirmed ineligibility or loss of all explicit roles withdraws LDAP-owned grants, clears freshness, advances the decision generation and rotates the existing account-wide session version. Previously revoked tokens remain invalid after recovery/new login. Transient, incomplete, limited and malformed directory work neither advances freshness nor erases grants. Existing otherwise valid tokens recover after a fresh check. Unchanged periodic validation emits no audit event; entitlement changes and positive revocation emit safe identity/directory/mapping IDs and reason codes.
+- Access/refresh context now accepts exactly `{ provider: 'ldap', identityId, directoryId }` in addition to the existing local/Entra shapes. Issuance, verification, refresh, REST request revalidation and console use the shared eligibility dependency. Refresh always forces validation; subsequent pair issuance reuses authoritative persisted freshness without resetting its timestamp. Refresh validation failure leaves the inbound refresh token available for retry. Local and Entra remain independent of directory availability.
+- `POST /api/auth/ldap/login` accepts only nonempty username/password with 1024/4096 UTF-8 byte limits, preserves submitted login case/whitespace and password, and never falls through. Its strict schema replaces generic body sanitization for this exact path. Provider discovery advertises only enabled/name/help URL and remains visible during outages. Safe statuses are 401 for generic credential rejection, 403 for proven denied access, 429 for throttling/capacity and 503 for unavailable/incomplete validation; disabled LDAP returns 404. API/OpenAPI/configuration/env contracts are current.
+- Existing IP authentication throttling includes LDAP. Existing database failure/temporary-lockout accounting uses a distinct `ldap:` key followed by SHA-256 of JSON `["ldap", directoryId, submittedLogin]`. Five failures in fifteen minutes lock that provider/directory/login key for fifteen minutes. A valid successful login clears its key. Other directories and local accounts have independent counters. LDAP login audit labels include the safe directory ID, not passwords or complete directory entries.
+- Console reservations now require verified auth context and the originating session version, check the shared service before reservation, compare that version under the account lock, and persist the context. ConsoleSessionManager receives the shared authentication dependency and revalidates exact persisted context on upgrade, initial relay, idle checks and both delivery directions through the existing proxy/SessionAuthorization path. Legacy/null/malformed context fails closed.
+- Corrected the previous handoff's journal claim: the request carried `req.revalidateAuth`, but neither journal SSE send loop invoked it. Both node/global journal streams now use SessionAuthorization for idle and per-delivery checks plus current journal permission. `finish()` drains authorized queued sends before ending a finite response. Execution SSE and MCP already reached the shared seam; LDAP tests now prove blocked pending output, delayed-result rejection and idle enforcement. Already dispatched infrastructure work is not cancelled.
+- Prerequisite service review found three boundary errors relevant to public login: TLS/protocol failures previously retried all endpoints, ambiguous immutable revalidation was classified as positive ineligibility, and rejected lookup credentials looked like a bad user password. Failover now permits only known transient transport errors/timeouts; ambiguity is INCOMPLETE_RESULT; lookup credential rejection is UNAVAILABLE and does not consume a submitted user's failure budget. Dedicated directory tests preserve user-bind rejection without retries and diagnostic redaction.
+
+**Verification: exact commands, outcomes, and external log reference:**
+
+All state-changing, fixture and verification commands are recorded in append-only `~/.agents/logs/pabawi.jsonl`. Evidence is retained under `/tmp/pabawi-ldap-p5b-*`. Used the retained, previously verified Node 24.21.0 installation, PostgreSQL 17.11 fixture and synthetic OpenLDAP image. No package, image or archive download occurred; no new downloaded artifact required a ClamAV scan.
+
+- Initial prerequisite run passed 43 tests; 28 PostgreSQL cases were initially skipped until the fixture started. Later focused provisioning/mapping/authentication tests passed all 78 cases across both adapters. Dedicated LDAP HTTP/core/transport acceptance passed 63 tests, including real LDAPS/StartTLS HTTP issuance and refresh.
+- Started the retained PostgreSQL fixture and created new `ldap_package5b_verified` and `ldap_package5b_acceptance` databases. Restarting the old OpenLDAP container failed because its entrypoint reseeds an existing database; it was retained unchanged. Created a fresh retained container from the existing image and copied only its generated public CA:
+
+~~~bash
+docker start pabawi-ldap-p1-postgres
+docker exec pabawi-ldap-p1-postgres createdb -U postgres ldap_package5b_verified
+docker exec pabawi-ldap-p1-postgres createdb -U postgres ldap_package5b_acceptance
+docker run --detach --name pabawi-ldap-p5b-openldap --pull never -p 127.0.0.1::1389 -p 127.0.0.1::1636 pabawi-ldap-fixture:package3-verified
+mkdir -p /tmp/pabawi-ldap-p5b-tls && docker cp pabawi-ldap-p5b-openldap:/fixture/tls/ca.pem /tmp/pabawi-ldap-p5b-tls/ca.pem
+~~~
+
+Acceptance endpoints were PostgreSQL 49305, LDAP StartTLS 50819 and LDAPS 50820 on loopback. These ports may change when fixtures are restarted; create another fresh OpenLDAP container rather than reseeding retained data.
+
+- Final full backend acceptance on final production source passed: 251 files passed, one skipped; 4085 tests passed, two skipped, one todo. Includes local/Entra regressions, both database adapters/upgrades/concurrency, real OpenLDAP directory and HTTP flows, fake database-clock deadline tests, revision/fencing races, REST, execution/journal SSE, MCP and VNC/terminal console enforcement.
+
+~~~bash
+PATH=/tmp/pabawi-node24/node-v24.21.0-darwin-arm64/bin:$PATH TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:49305/ldap_package5b_acceptance TEST_LDAP_LDAPS_PORT=50820 TEST_LDAP_STARTTLS_PORT=50819 TEST_LDAP_CA_FILE=/tmp/pabawi-ldap-p5b-tls/ca.pem npm run test --workspace=backend > /tmp/pabawi-ldap-p5b-backend-verified.log 2>&1
+PATH=/tmp/pabawi-node24/node-v24.21.0-darwin-arm64/bin:$PATH npm run build:backend > /tmp/pabawi-ldap-p5b-build-final.log 2>&1
+PATH=/tmp/pabawi-node24/node-v24.21.0-darwin-arm64/bin:$PATH npm run lint > /tmp/pabawi-ldap-p5b-lint-final.log 2>&1
+~~~
+
+Build and both workspace linters pass. Frontend source/DTOs are unchanged, so frontend tests/component checks were not rerun. Initial acceptance caught and corrected a remote coalescing race, old migration-count/console-context fixtures, scanner annotation placement and the lookup diagnostic expectation. Initial source lint findings were corrected before final acceptance.
+
+- All seven documentation contracts pass, including release metadata and public LDAP route coverage. The tracked-tree secret scan is clean with 176 reviewed findings. A separate all-files scan covers all 42 changed/new files, including untracked source/test/migration files, and compares hashes against the unchanged reviewed baseline and starting HEAD. It reports zero new findings. The stronger all-files mode also exposes the unchanged synthetic PostgreSQL URL at backend/.env.example:40, excluded by the default scanner. A retained HEAD copy proves that sample line and finding hash are unchanged; no baseline exception or unrelated sample edit was made. Exact commands and outcomes are in the external log. No new baseline entry was accepted. Final documentation and scan evidence is recorded in `/tmp/pabawi-ldap-p5b-doc-contracts-handoff.log`, `/tmp/pabawi-ldap-p5b-secrets-handoff.log` and `/tmp/pabawi-ldap-p5b-secrets-changed.log`.
+
+~~~bash
+PATH=/tmp/pabawi-node24/node-v24.21.0-darwin-arm64/bin:$PATH node --test scripts/documentation/contracts.test.mjs > /tmp/pabawi-ldap-p5b-doc-contracts-handoff.log 2>&1
+PATH=/Users/al/.cache/pre-commit/repovdso_3ip/py_env-python3/bin:$PATH bash scripts/quality/secret-scan.sh > /tmp/pabawi-ldap-p5b-secrets-handoff.log 2>&1
+~~~
+
+**Pre-existing failures:** All-files scanning additionally reports the unchanged synthetic database URL described above; the standard tracked-tree scan passes. The previous handoff's release metadata and tracked-scan blockers were resolved by base commit `3fee4b3`, which updates release metadata and the reviewed secret baseline. They no longer reproduce; neither the baseline nor release metadata was changed in this package. One full run reproduced the already recorded logging field-order property defect: seed -1583974006, path `97:0:0:0`, vector `["error", " ", "R", "bolt", "R"]`. Both LoggerService and its property test match HEAD byte-for-byte. The property uses the same first `indexOf('[R]')` for component and operation; the logger emits both correctly. Deterministic compiled-logger evidence in `/tmp/pabawi-ldap-p5b-logging-reproducer.log` reports component index 33, incorrect property operation index 33, actual operation index 44. No logging source/test was changed. The final full rerun passes; the intermittent verification defect remains recorded.
+
+Fixture shutdown completed with `docker stop pabawi-ldap-p5b-openldap pabawi-ldap-p1-postgres`; both exited successfully. Containers, databases, public CA and evidence remain retained. Current versions were verified as Node 24.21.0, PostgreSQL 17.11 and Debian OpenLDAP 2.6.10+dfsg-1. `git diff --check` passes and the external command log parses as JSON Lines.
+
+**Remaining work and blockers:** No package-5B acceptance blocker remains. Package 6 is pending and blocks the login/mapping/diagnostics UI and full operator walkthrough. Actual AD access/credentials remain unavailable and block package-7 interoperability/support claims. The previously recorded decommissioned DN-parser dependency still requires maintenance review before release. Real Proxmox console compatibility remains unverified; local websocket fixtures prove authorization enforcement only. The old retained PostgreSQL database with historic checksum drift must not be reused for acceptance. No push, PR, deployment or destructive repository cleanup occurred.
+
+**Decisions or discoveries affecting the next package:** Use the implemented discovery metadata and explicit LDAP route, preserve credentials without local password-creation rules, and do not add fallback between providers. User/group identity and mapping labels come from the server. Null contacts and LDAP-owned profile/password restrictions remain server-enforced. The common container must remain the authentication composition root; console callers must supply verified context/version, never infer a provider from enrollments. SQL freshness/decision/lease state is authoritative across workers. Configuration changes require coordinated restart; directory ID remains stable across endpoints. Keep API/configuration contracts aligned while completing frontend/operator docs.
+
+**Next action and acceptance criterion still to satisfy:** Start package 6. Add common discovery and explicit password-provider selection, role mapping and restricted diagnostics controls, source/profile ownership UI, and the operator guide/RBAC documentation. Verify browser/UI flows, nullable contacts, directory-valid short credentials, permission guards, local/Entra regressions, frontend tests/build/lint, component checks and documentation contracts. Preserve the real AD and dependency-review release blockers until evidence resolves them.
