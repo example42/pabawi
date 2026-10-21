@@ -144,7 +144,8 @@ When `ENTRA_ID_ENABLED=true`, all four required variables must be set or the ser
 ## LDAP directory service
 
 LDAP configuration, read-only directory operations and restricted group-mapping
-administration are implemented. The [LDAP administration API](api.md#ldap-administration)
+administration and frontend controls are implemented. See the [operator guide](integrations/ldap.md).
+The [LDAP administration API](api.md#ldap-administration)
 requires `rbac:admin` for group search, stored mappings and diagnostics.
 Enabling complete configuration advertises LDAP and enables explicit LDAP login
 with shared session eligibility enforcement. It does not grant any role automatically.

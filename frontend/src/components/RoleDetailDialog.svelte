@@ -11,6 +11,8 @@
     type PermissionResource,
     type PermissionAction,
   } from '../lib/permissions';
+  import LdapAdministration from './LdapAdministration.svelte';
+  import { authProviders } from '../lib/authProviders.svelte';
   import LoadingSpinner from './LoadingSpinner.svelte';
 
   interface Props {
@@ -373,6 +375,10 @@
                   </div>
                 {/if}
               </div>
+
+              {#if authManager.isAdmin && canManageEntitlements && authProviders.ldap?.enabled && roleId}
+                <LdapAdministration {roleId} />
+              {/if}
 
               <!-- Action Buttons -->
               <div class="flex gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">

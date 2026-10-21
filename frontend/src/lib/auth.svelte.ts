@@ -11,6 +11,7 @@
  */
 
 import { logger } from './logger.svelte';
+import { showWarning } from './toast.svelte';
 
 const API_BASE_URL = '/api';
 const TOKEN_KEY = 'authToken';
@@ -34,6 +35,8 @@ export interface UserDTO {
   updatedAt: string;
   lastLoginAt: string | null;
 }
+
+export type PasswordProvider = 'local' | 'ldap'; // pragma: allowlist secret
 
 export interface LoginCredentials {
   username: string;
@@ -128,7 +131,7 @@ class AuthManager {
    * Login with username and password
    * Requirement: 1.1, 1.2, 6.1
    */
-  async login(credentials: LoginCredentials): Promise<boolean> {
+  async login(credentials: LoginCredentials, provider: PasswordProvider = 'local'): Promise<boolean> { // pragma: allowlist secret
     this._isLoading = true;
     this._error = null;
 
@@ -137,7 +140,7 @@ class AuthManager {
     });
 
     try {
-      const response = await fetch(`${API_BASE_URL}/auth/login`, {
+      const response = await fetch(API_BASE_URL + (provider === 'ldap' ? '/auth/ldap/login' : '/auth/login'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -146,8 +149,11 @@ class AuthManager {
       });
 
       if (!response.ok) {
-        const errorData = (await response.json().catch(() => ({}))) as { error?: string };
-        const errorMessage: string = errorData.error ?? 'Login failed';
+        const errorData = (await response.json().catch(() => ({}))) as {
+          error?: string | { message?: string; code?: string } | null;
+        };
+        const errorMessage = typeof errorData.error === 'string' ? errorData.error
+          : errorData.error?.message ?? 'Login failed';
 
         logger.warn('Auth', 'login', 'Login failed', {
           status: response.status,
@@ -156,7 +162,7 @@ class AuthManager {
 
         this._error = {
           message: errorMessage,
-          code: `HTTP_${String(response.status)}`,
+          code: (typeof errorData.error === 'object' ? errorData.error?.code : undefined) ?? 'HTTP_' + String(response.status),
         };
         return false;
       }
@@ -267,7 +273,12 @@ class AuthManager {
           status: response.status,
         });
 
-        // If refresh fails, clear auth data and require re-login
+        if ([429, 503].includes(response.status)) {
+          this.markRefreshUnavailable();
+          return false;
+        }
+
+        // Definitive rejection requires reauthentication.
         this.clearAuthData();
         return false;
       }
@@ -282,8 +293,7 @@ class AuthManager {
     } catch (error) {
       logger.error('Auth', 'refreshAccessToken', 'Token refresh error', error as Error);
 
-      // Clear auth data on error
-      this.clearAuthData();
+      this.markRefreshUnavailable();
       return false;
     }
   }
@@ -325,7 +335,14 @@ class AuthManager {
 
   // Private methods
 
+  private markRefreshUnavailable(): void {
+    const message = 'Session verification is temporarily unavailable. Try again shortly.';
+    if (this._error?.code !== 'AUTH_TEMPORARILY_UNAVAILABLE') showWarning(message);
+    this._error = { code: 'AUTH_TEMPORARILY_UNAVAILABLE', message };
+  }
+
   private setAuthData(data: AuthResponse): void {
+    this._error = null;
     this._permissions = [];
     this._token = data.token;
     this._refreshToken = data.refreshToken;

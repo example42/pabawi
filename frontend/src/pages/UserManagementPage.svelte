@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { UserAdministrationMetadata } from '../lib/userAdministration';
   import { onMount } from 'svelte';
   import { get, del } from '../lib/api';
   import { showError, showSuccess } from '../lib/toast.svelte';
@@ -12,6 +13,8 @@
     id: string;
     username: string;
     email: string | null;
+    displayName: string | null;
+    authentication: UserAdministrationMetadata;
     firstName: string;
     lastName: string;
     isActive: boolean;
@@ -52,6 +55,10 @@
       : users.filter(
           (user) =>
             user.username.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            (user.displayName ?? '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+            (user.authentication?.sources ?? []).some(source =>
+              (source.loginName ?? '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+              source.name.toLowerCase().includes(searchQuery.toLowerCase())) ||
             (user.email ?? '').toLowerCase().includes(searchQuery.toLowerCase()) ||
             user.firstName.toLowerCase().includes(searchQuery.toLowerCase()) ||
             user.lastName.toLowerCase().includes(searchQuery.toLowerCase())
@@ -256,10 +263,13 @@
                       </div>
                       <div class="ml-4">
                         <div class="text-sm font-medium text-gray-900 dark:text-white">
-                          {user.firstName} {user.lastName}
+                          {user.displayName ?? ([user.firstName, user.lastName].filter(Boolean).join(' ') || user.username)}
                         </div>
-                        <div class="text-sm text-gray-500 dark:text-gray-400">
+                        <div class="text-sm text-gray-500 dark:text-gray-400 whitespace-normal break-all max-w-sm">
                           @{user.username}
+                      {#each user.authentication?.sources ?? [] as source}
+                        <span class="block text-xs">{source.name}{source.directoryId ? ' / ' + source.directoryId : ''}{source.loginName ? ': ' + source.loginName : ''}</span>
+                      {/each}
                         </div>
                       </div>
                     </div>

@@ -1,6 +1,6 @@
 # LDAP authentication implementation plan
 
-**Status:** Packages 1 through 5B complete; packages 6 and 7 pending
+**Status:** Packages 1 through 6 complete; package 7 pending
 **Date:** 2026-10-21  
 **Scope:** OpenLDAP and Active Directory authentication, directory group authorization, and provider-bound session revalidation
 
@@ -92,7 +92,7 @@ TLS certificate verification and hostname checking are mandatory, with TLS 1.2 o
 
 ### Active Directory example
 
-Directory-service configuration and public authentication are implemented through package 5B. Frontend provider selection remains package 6 work. Example:
+Directory-service configuration, public authentication and frontend provider selection are implemented through package 6. See [the operator guide](../../integrations/ldap.md). Example:
 
 ```dotenv
 LDAP_ENABLED=true
@@ -270,7 +270,7 @@ Deploy the token-context change with an intentional one-time session invalidatio
 
 ## HTTP and frontend contracts
 
-The backend route contracts below are implemented through package 5B. Frontend controls remain package 6 work. Use existing async route helpers, request validation, typed errors, audit infrastructure, and RBAC middleware.
+The route contracts and frontend controls below are implemented through package 6. Use existing async route helpers, request validation, typed errors, audit infrastructure, and RBAC middleware.
 
 | Method and path | Access | Contract |
 | --- | --- | --- |
@@ -453,8 +453,8 @@ Update this table as work proceeds. Status values: `pending`, `in_progress`, `bl
 | 3 Directory configuration and service | complete | Commit `4fac169`, verified against current source | [2026-10-21 Codex](#handoff-2026-10-21-codex-package-3) |
 | 4 RBAC mapping administration | complete | Commit `4a5c2b4`, verified against current source | [2026-10-21 Codex](#handoff-2026-10-21-codex-package-4) |
 | 5A Provider context and wiring | complete | Commit `7f58092`, verified against current source | [2026-10-21 Codex](#handoff-2026-10-21-codex-package-5a) |
-| 5B LDAP login and transport enforcement | complete | Branch `151`, base `3fee4b3`, uncommitted paths in handoff | [2026-10-21 Codex](#handoff-2026-10-21-codex-package-5b) |
-| 6 Frontend and operator documentation | pending | Not started | None |
+| 5B LDAP login and transport enforcement | complete | Commit `56ea384`, verified against current source | [2026-10-21 Codex](#handoff-2026-10-21-codex-package-5b) |
+| 6 Frontend and operator documentation | complete | Branch `151`, base `56ea384`, uncommitted paths in handoff | [2026-10-21 Codex](#handoff-2026-10-21-codex-package-6) |
 | 7 Interoperability and rollout | pending | Not started | None |
 
 Append a record using the following fields after each implementation session. Use an actual commit hash when available, otherwise identify the branch/base and changed paths explicitly. Preserve prior records and correct outdated findings with a new entry.
@@ -1147,3 +1147,104 @@ Fixture shutdown completed with `docker stop pabawi-ldap-p5b-openldap pabawi-lda
 **Decisions or discoveries affecting the next package:** Use the implemented discovery metadata and explicit LDAP route, preserve credentials without local password-creation rules, and do not add fallback between providers. User/group identity and mapping labels come from the server. Null contacts and LDAP-owned profile/password restrictions remain server-enforced. The common container must remain the authentication composition root; console callers must supply verified context/version, never infer a provider from enrollments. SQL freshness/decision/lease state is authoritative across workers. Configuration changes require coordinated restart; directory ID remains stable across endpoints. Keep API/configuration contracts aligned while completing frontend/operator docs.
 
 **Next action and acceptance criterion still to satisfy:** Start package 6. Add common discovery and explicit password-provider selection, role mapping and restricted diagnostics controls, source/profile ownership UI, and the operator guide/RBAC documentation. Verify browser/UI flows, nullable contacts, directory-valid short credentials, permission guards, local/Entra regressions, frontend tests/build/lint, component checks and documentation contracts. Preserve the real AD and dependency-review release blockers until evidence resolves them.
+
+
+## Handoff 2026-10-21 Codex package 6
+
+**Date and agent:** 2026-10-21, Codex.
+
+**Package and checkpoint:** Package 6, frontend and operator documentation, complete. Package 7 is next eligible. No package-6 acceptance blocker remains. LDAP release readiness still requires the real AD and dependency-maintenance work recorded below.
+
+**Branch, base commit, completion commit or uncommitted paths:** Branch `151`, base `56ea384192f1e9baf53911549b05be20bf257b6d`. Starting tree was clean. Package 5B is now committed as `56ea384`, correcting its earlier working-tree reference. Read AGENTS.md, code-change/git/Context7 instructions, progress and latest handoffs. Verified prerequisite routes, provisioning, ownership, mapping/revision contracts, provider-bound sessions and shared eligibility seams against source and tests. KiroGraph reported 215 pending files and omitted LDAP services; used filesystem inspection without changing its index. No completion commit was created. Changed/new paths:
+
+~~~text
+backend/.env.example
+backend/src/routes/users.ts
+backend/src/services/UserService.ts
+backend/test/database/ldap-mappings.test.ts
+backend/test/fixtures/ldap/README.md
+backend/test/fixtures/ldap/ui-server.ts
+backend/test/integration/ldap-account-ownership.test.ts
+docs/api.md
+docs/configuration.md
+docs/integrations/ldap.md
+docs/internal/plans/ldap-authentication.md
+docs/openapi.yaml
+docs/permissions-rbac.md
+e2e/ldap-ui/ldap.spec.ts
+frontend/src/components/LdapAdministration.svelte
+frontend/src/components/LdapAdministration.test.ts
+frontend/src/components/RoleDetailDialog.svelte
+frontend/src/components/UserDetailDialog.svelte
+frontend/src/components/user-contact-nullability.test.ts
+frontend/src/lib/auth.svelte.ts
+frontend/src/lib/auth.test.ts
+frontend/src/lib/authProviders.svelte.test.ts
+frontend/src/lib/authProviders.svelte.ts
+frontend/src/lib/entraIdAuth.svelte.test.ts
+frontend/src/lib/entraIdAuth.svelte.ts
+frontend/src/lib/ldapApi.test.ts
+frontend/src/lib/ldapApi.ts
+frontend/src/lib/userAdministration.ts
+frontend/src/pages/LoginPage.svelte
+frontend/src/pages/LoginPage.test.ts
+frontend/src/pages/RoleManagementPage.svelte
+frontend/src/pages/UserManagementPage.svelte
+playwright.config.ts
+playwright.ldap.config.ts
+~~~
+
+**Completed scope and changed interfaces:**
+
+- `authProviders.svelte.ts` now owns common provider discovery, five-second timeout, disabled-provider reset, safe HTTP(S) help URLs and local emergency fallback on discovery failure. `entraIdAuth.svelte.ts` retains only SSO code exchange and its errors. Login explicitly selects Local or the configured directory; Entra keeps its redirect button. Switching clears password/validation state. LDAP uses nonempty 1024/4096-byte input limits, preserves submitted case/whitespace and accepts short directory credentials. Failed login never changes provider, retries or falls through.
+- `authManager.login(credentials, provider = 'local')` uses exactly the selected endpoint and the existing token/localStorage state. Both legacy string and structured error responses render safe messages. Temporary refresh HTTP 429/503 and network errors now retain credentials for a later retry and show a warning; they establish no fresh authorization. Definitive refresh rejection still clears the session. Successful refresh clears the warning. Local/Entra regressions and retry recovery are covered.
+- `LdapAdministration.svelte` is mounted in Role Management and role details only with the existing administrator page boundary plus loaded `rbac:admin`. It supports scoped group search, empty results, opaque cursor continuation with the original filter, create/change-role/enable/disable/remove mappings, stored outage labels and reload. Creation submits only group subject and role ID. Diagnostics use configured lookup-only endpoints, exact optional username and up to 20 enabled mapped groups. Passed/failed stages, timings and safe codes remain visible even for HTTP 422/429/503 reports. The dedicated client never replays directory work. UI removal requires confirmation; every backend administration guard remains independently enforced.
+- Added protected, additive user-administration DTO fields without schema or authentication-contract changes. `UserService.getAdministrationMetadata(users, directory?)` batches sources, current directory login and profile ownership. `GET /api/users` and `GET /api/users/:id` expose `authentication: { profileReadOnly, sources }` through existing `users:read` guards. Source objects contain server-supplied provider/name and optional directory ID/login; no user subject, DN, token or credential. Public authentication user DTOs remain unchanged.
+- User details also expose `roleSources` from manual, identity-owned and retained legacy grants. The UI labels provenance and removes only manual assignments, reloading the effective union so an overlapping LDAP grant survives. LDAP account display/login/source is searchable in user management; null email, absent names and read-only profile/password behavior render correctly. Long reserved usernames wrap without overlapping email. Suspension and manual entitlement controls remain available under their existing permissions.
+- Added `docs/integrations/ldap.md` with OpenLDAP/AD examples, actual defaults, positive policy/status visibility, TLS/failover, exclusions, diagnostics, mapping/manual enrollment, outage/recovery and upgrade reauthentication. Configuration/env, API/OpenAPI and RBAC docs link or describe implemented behavior. The guide explicitly retains unverified AD and Proxmox claims and the DN-parser maintenance gate.
+- Added a reproducible loopback-only browser fixture using an in-memory database, real auth/session/admin HTTP code and synthetic directory responses. `playwright.ldap.config.ts` starts its own server on 127.0.0.1:3186 and builds the frontend. The default Playwright config excludes this suite. Browser evidence is UI/HTTP contract coverage, not LDAP protocol or AD evidence. No production authentication seam was weakened for fixtures.
+
+**Verification: exact commands, outcomes, and external log reference:**
+
+All mutating, fixture, network-documentation and verification commands are recorded in append-only `~/.agents/logs/pabawi.jsonl`. Evidence is retained under `/tmp/pabawi-ldap-p6-*`. Used the retained Node 24.21.0 runtime and PostgreSQL fixture. No packages, archives or images were downloaded; no new artifact required a ClamAV scan.
+
+- Initial prerequisite check passed 34 tests with three live LDAP cases skipped. Its command and output are in the external log and `/tmp/pabawi-ldap-p6-prerequisites.log`. Focused user HTTP/ownership verification passed 147 tests.
+- Restarted the retained PostgreSQL container, created a new acceptance database, and verified its loopback endpoint as 55712. Both-adapter provisioning/session/mapping acceptance, including the new source/provenance case, passed all 56 tests:
+
+~~~bash
+docker start pabawi-ldap-p1-postgres
+docker port pabawi-ldap-p1-postgres
+docker exec pabawi-ldap-p1-postgres createdb -U postgres ldap_package6_verified
+PATH=/tmp/pabawi-node24/node-v24.21.0-darwin-arm64/bin:$PATH TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:55712/ldap_package6_verified npm run test --workspace=backend -- test/database/ldap-mappings.test.ts test/database/federated-provisioning.test.ts test/database/provider-bound-sessions.test.ts > /tmp/pabawi-ldap-p6-adapters.log 2>&1
+~~~
+
+- Full backend regression passed: 250 files passed, two skipped; 4075 tests passed, 15 skipped and one todo. Includes SQLite/PostgreSQL migrations and concurrency plus local/Entra/auth/transport regressions. Live OpenLDAP endpoints were not supplied in this session, so the live directory cases were skipped. Earlier package-5B real LDAP evidence remains historical evidence, not a fresh run here.
+- Final full frontend regression passed all 63 files and 1079 tests. Focused refresh/provider/API regressions passed 53 tests. Final workspace lint passed with zero warnings; component checking reports zero errors with an unchanged zero baseline.
+- Both production builds passed. Used separate frontend/backend build commands; the browser fixture also builds the production frontend. Vite retains its existing large-chunk warning.
+
+~~~bash
+PATH=/tmp/pabawi-node24/node-v24.21.0-darwin-arm64/bin:$PATH TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:55712/ldap_package6_verified npm run test --workspace=backend > /tmp/pabawi-ldap-p6-backend-final.log 2>&1
+PATH=/tmp/pabawi-node24/node-v24.21.0-darwin-arm64/bin:$PATH npm run test --workspace=frontend > /tmp/pabawi-ldap-p6-frontend-final-source.log 2>&1
+PATH=/tmp/pabawi-node24/node-v24.21.0-darwin-arm64/bin:$PATH npm run build:backend > /tmp/pabawi-ldap-p6-build-backend-final.log 2>&1
+PATH=/tmp/pabawi-node24/node-v24.21.0-darwin-arm64/bin:$PATH npm run build:frontend > /tmp/pabawi-ldap-p6-build-frontend-final.log 2>&1
+PATH=/tmp/pabawi-node24/node-v24.21.0-darwin-arm64/bin:$PATH npm run lint > /tmp/pabawi-ldap-p6-lint-complete.log 2>&1
+PATH=/tmp/pabawi-node24/node-v24.21.0-darwin-arm64/bin:$PATH npm run check:components > /tmp/pabawi-ldap-p6-components-final-source.log 2>&1
+~~~
+
+- Browser skill setup and documented recovery reported no available browser connection. Used the existing repository Playwright test runner with the new isolated fixture. All three Chromium cases passed: explicit short LDAP credentials and denial without fallback; local administrator mapping/diagnostics/null-contact profile flows; and denied non-administrator page access. Inspected retained screenshots `/tmp/pabawi-ldap-p6-mappings.png` and `/tmp/pabawi-ldap-p6-profile.png`.
+- Browser acceptance found and corrected a restored-session race: provider discovery must not depend on permissions having finished loading at page mount. Public discovery now starts independently; private controls still wait for both guards. Initial fixture startup also exposed CommonJS top-level-await incompatibility; it now uses an async entrypoint. Initial static/scanner findings and a shadowed test variable were corrected before final gates.
+
+~~~bash
+PATH=/tmp/pabawi-node24/node-v24.21.0-darwin-arm64/bin:$PATH node_modules/.bin/playwright test --config playwright.ldap.config.ts > /tmp/pabawi-ldap-p6-browser-final-source.log 2>&1
+~~~
+
+- All seven documentation contracts pass. Standard tracked secret scanning passes with 176 reviewed findings. Separate all-files scanning covers all changed and untracked files and reports zero new findings without changing `.secrets.baseline`. It exposes the same pre-existing synthetic PostgreSQL URL at `backend/.env.example:40` previously recorded by package 5B; the exact line matches starting HEAD. The retained scan script/report are `/tmp/pabawi-ldap-p6-final-scan.py` and `/tmp/pabawi-ldap-p6-secrets-changed-report.json`. Password-state/type/string literals flagged by the scanner were annotated as nonsecrets, without adding baseline exceptions.
+- `git diff --check` and external JSON Lines log validation pass. The PostgreSQL fixture was stopped with `docker stop pabawi-ldap-p1-postgres`; its container/database and all evidence are retained. Playwright stopped its isolated HTTP server normally.
+
+**Pre-existing failures:** No blocking repository gate reproduced. The full frontend suite emits existing jsdom document-navigation notices, and Vite emits its existing bundle-size warning. All-files scanning still exposes the unchanged synthetic environment URL described above. The prior handoff's intermittent logger property defect did not reproduce and was not changed.
+
+**Remaining work and blockers:** No package-6 blocker. Actual AD access/credentials remain unavailable and block package-7 interoperability and support claims. Review or replace the decommissioned DN-parser dependency before release. Live OpenLDAP end-to-end and the full rollout acceptance matrix remain package-7 work in this session. Real Proxmox console interoperability remains unverified separately from authorization fixtures. Do not reuse the historic PostgreSQL database with checksum drift. No push, PR, deployment, real-directory access or destructive repository cleanup occurred.
+
+**Decisions or discoveries affecting the next package:** Keep provider discovery separate from directory availability and asynchronously loaded permissions. Use server-provided administration metadata, never infer account source from reserved usernames or email. Preserve manual and mapped grant provenance when rendering or editing users. Temporary client refresh failure must not discard the server-retryable credential or imply new eligibility. The browser fixture deliberately tests HTTP/UI contracts with synthetic directory responses; real LDAP and AD evidence must remain separate.
+
+**Next action and acceptance criterion still to satisfy:** Start package 7. Audit every acceptance row, rerun real OpenLDAP in both TLS modes, obtain real AD access for GUID/account-policy/nested/large-membership/failover cases, verify both adapters and worker/transport races on the final release candidate, resolve dependency maintenance, and finish the observed deployment procedure. Missing real AD evidence is an explicit blocker, not a waived test.

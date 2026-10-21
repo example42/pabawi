@@ -4,6 +4,8 @@
   import { showError, showSuccess } from '../lib/toast.svelte';
   import { authManager } from '../lib/auth.svelte';
   import { router } from '../lib/router.svelte';
+  import LdapAdministration from '../components/LdapAdministration.svelte';
+  import { authProviders } from '../lib/authProviders.svelte';
   import LoadingSpinner from '../components/LoadingSpinner.svelte';
   import RoleDetailDialog from '../components/RoleDetailDialog.svelte';
   import CreateRoleDialog from '../components/CreateRoleDialog.svelte';
@@ -60,6 +62,7 @@
       return;
     }
 
+    void authProviders.discover();
     // Load initial data
     loadRoles();
   });
@@ -166,6 +169,10 @@
         Manage roles and their permissions
       </p>
     </div>
+
+    {#if authManager.isAdmin && authManager.hasPermission('rbac', 'admin') && authProviders.ldap?.enabled && !isRoleDialogOpen}
+      <LdapAdministration />
+    {/if}
 
     <!-- Search and Actions Bar -->
     <div class="mb-6 flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">

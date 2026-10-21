@@ -85,6 +85,29 @@ for (const dialect of ['sqlite', 'postgres'] as const) {
         [(await mappings.revision()).mappingRevision, identityId]);
     }
 
+    it('returns current source labels and independent manual/mapped grant provenance for administration', async () => {
+      const users = new UserService(db, new AuthenticationService(db, 'administration-metadata-fixture-signing-secret'));
+      const user = await users.getUserById(userId);
+      expect(user).not.toBeNull();
+      const metadata = await users.getAdministrationMetadata([user!], { directoryId: 'directory', displayName: 'Corporate' });
+      expect(metadata.get(userId)).toEqual({ profileReadOnly: true, sources: [
+        { provider: 'ldap', name: 'Corporate', directoryId: 'directory', loginName: 'alice' },
+      ] });
+      expect(await users.getAdministrationMetadata([])).toEqual(new Map());
+      const mapping = await mappings.create(groupSubject, viewer, actor);
+      await grant(mapping);
+      await users.assignRoleToUser(userId, viewer);
+      expect(await users.getUserRoleSources(userId)).toEqual([
+        { roleId: viewer, source: 'manual' },
+        { roleId: viewer, source: 'ldap', directoryId: 'directory', groupName: 'Operators' },
+      ]);
+      await users.removeRoleFromUser(userId, viewer);
+      expect(await users.getUserRoleSources(userId)).toEqual([
+        { roleId: viewer, source: 'ldap', directoryId: 'directory', groupName: 'Operators' },
+      ]);
+      expect(await users.getUserRoles(userId)).toHaveLength(1);
+    });
+
     it('persists authoritative immutable identity, source, role and atomic audit without granting access', async () => {
       const mapping = await mappings.create(groupSubject.toUpperCase(), viewer, actor);
       expect(resolveGroup).toHaveBeenCalledWith(groupSubject);

@@ -3248,6 +3248,18 @@ paths:
       responses:
         '200':
           description: Users retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  users:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        authentication:
+                          $ref: '#/components/schemas/UserAdministrationMetadata'
         '401':
           description: Unauthorized
           content:
@@ -3269,6 +3281,17 @@ paths:
       responses:
         '200':
           description: User retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  authentication:
+                    $ref: '#/components/schemas/UserAdministrationMetadata'
+                  roleSources:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/UserRoleSource'
         '404':
           description: User not found
           content:
@@ -5232,6 +5255,32 @@ components:
         vmSize: Standard_B1s
         powerState: running
         osType: Linux
+
+    UserAdministrationMetadata:
+      type: object
+      required: [profileReadOnly, sources]
+      properties:
+        profileReadOnly:
+          type: boolean
+        sources:
+          type: array
+          items:
+            type: object
+            required: [provider, name]
+            properties:
+              provider: { type: string, enum: [local, ldap, entra-id] }
+              name: { type: string }
+              directoryId: { type: string }
+              loginName: { type: string }
+
+    UserRoleSource:
+      type: object
+      required: [roleId, source]
+      properties:
+        roleId: { type: string }
+        source: { type: string, enum: [manual, ldap, entra-id] }
+        directoryId: { type: string }
+        groupName: { type: string }
 
     AuthenticationResult:
       type: object

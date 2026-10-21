@@ -85,7 +85,7 @@ export default defineConfig({
       use: { ...devices["Desktop Chrome"] },
       // Everything that is not the setup project or an authenticated spec, so
       // a new spec file lands in a project instead of silently never running.
-      testIgnore: /(auth\.setup|\.authenticated\.spec)\.ts/,
+      testIgnore: [/(auth\.setup|\.authenticated\.spec)\.ts/, /ldap-ui/],
       dependencies: ["setup"],
     },
   ],

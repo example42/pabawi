@@ -1,12 +1,14 @@
 <script lang="ts">
-  import { authManager } from '../lib/auth.svelte';
+  import { authManager, type PasswordProvider } from '../lib/auth.svelte';
   import { router } from '../lib/router.svelte';
   import { showError, showSuccess } from '../lib/toast.svelte';
+  import { authProviders } from '../lib/authProviders.svelte';
   import { entraIdAuth } from '../lib/entraIdAuth.svelte';
   import LoadingSpinner from '../components/LoadingSpinner.svelte';
   import EntraIdLoginButton from '../components/EntraIdLoginButton.svelte';
   import { get } from '../lib/api';
 
+  let provider = $state<PasswordProvider>('local');
   let username = $state('');
   let password = $state(''); // pragma: allowlist secret
   let isSubmitting = $state(false);
@@ -33,15 +35,22 @@
     // First, check if this is an SSO callback with ?code= parameter
     const handled = await entraIdAuth.handleSsoCallback();
     if (handled) {
-      // Callback was handled (code was exchanged or failed) — don't proceed with discovery
+      // Callback was handled (code was exchanged or failed): don't proceed with discovery
       return;
     }
 
     // Discover available auth providers and check self-registration in parallel
     await Promise.all([
-      entraIdAuth.discoverProviders(),
+      authProviders.discover(),
       checkSelfRegistration(),
     ]);
+    if (!authProviders.local && authProviders.ldap?.enabled) provider = 'ldap';
+  }
+
+  function changeProvider(): void {
+    password = ''; // pragma: allowlist secret
+    validationErrors = {};
+    authManager.clearError();
   }
 
   async function checkSelfRegistration(): Promise<void> {
@@ -58,16 +67,20 @@
   function validateForm(): boolean {
     const errors: { username?: string; password?: string } = {};
 
-    if (!username.trim()) {
+    if (provider === 'local' ? !username.trim() : !username) {
       errors.username = 'Username is required';
-    } else if (username.length < 3) {
+    } else if (provider === 'local' && username.length < 3) {
       errors.username = 'Username must be at least 3 characters';
+    } else if (provider === 'ldap' && new TextEncoder().encode(username).length > 1024) {
+      errors.username = 'Username must be at most 1024 bytes';
     }
 
     if (!password) {
       errors.password = 'Password is required';
-    } else if (password.length < 8) {
+    } else if (provider === 'local' && password.length < 8) {
       errors.password = 'Password must be at least 8 characters';
+    } else if (provider === 'ldap' && new TextEncoder().encode(password).length > 4096) {
+      errors.password = 'Password must be at most 4096 bytes'; // pragma: allowlist secret
     }
 
     validationErrors = errors;
@@ -77,14 +90,17 @@
   async function handleSubmit(event: Event): Promise<void> {
     event.preventDefault();
 
-    if (!validateForm()) {
+    if (isSubmitting || authProviders.isDiscovering ||
+        (provider === 'ldap' ? !authProviders.ldap?.enabled : !authProviders.local) || !validateForm()) {
       return;
     }
 
     isSubmitting = true;
     authManager.clearError();
 
-    const success = await authManager.login({ username, password });
+    const success = provider === 'ldap'
+      ? await authManager.login({ username, password }, 'ldap')
+      : await authManager.login({ username, password });
 
     if (success) {
       showSuccess('Login successful', `Welcome back, ${username}!`);
@@ -93,6 +109,7 @@
       showError('Login failed', authManager.error?.message || 'Invalid credentials');
     }
 
+    password = ''; // pragma: allowlist secret
     isSubmitting = false;
   }
 
@@ -150,8 +167,8 @@
         </div>
 
         <!-- Show SSO button and local form below the error -->
-        {#if entraIdAuth.isEntraIdEnabled}
-          <EntraIdLoginButton providerName={entraIdAuth.entraIdProviderName} />
+        {#if authProviders.entraId?.enabled}
+          <EntraIdLoginButton providerName={authProviders.entraId?.name ?? 'Microsoft Entra ID'} />
           <div class="relative">
             <div class="absolute inset-0 flex items-center">
               <div class="w-full border-t border-gray-300 dark:border-gray-600"></div>
@@ -167,8 +184,8 @@
       <!-- Normal login state: SSO button + local form -->
       <div class="mt-8 space-y-6">
         <!-- Entra ID SSO button (when enabled) -->
-        {#if entraIdAuth.isEntraIdEnabled}
-          <EntraIdLoginButton providerName={entraIdAuth.entraIdProviderName} />
+        {#if authProviders.entraId?.enabled}
+          <EntraIdLoginButton providerName={authProviders.entraId?.name ?? 'Microsoft Entra ID'} />
 
           <!-- Divider -->
           <div class="relative">
@@ -182,7 +199,7 @@
         {/if}
 
         <!-- Provider discovery error warning -->
-        {#if entraIdAuth.providerDiscoveryError}
+        {#if authProviders.error}
           <div class="rounded-md bg-yellow-50 dark:bg-yellow-900/20 p-3">
             <div class="flex">
               <div class="flex-shrink-0">
@@ -192,7 +209,7 @@
               </div>
               <div class="ml-3">
                 <p class="text-sm text-yellow-700 dark:text-yellow-200">
-                  SSO availability could not be determined. You can still sign in with your local credentials.
+                  Authentication provider availability could not be determined. You can still sign in with your local credentials.
                 </p>
               </div>
             </div>
@@ -202,8 +219,19 @@
     {/if}
 
     <!-- Local login form (always shown unless code exchange is in progress) -->
-    {#if !entraIdAuth.isExchangingCode}
+    {#if !entraIdAuth.isExchangingCode && (authProviders.local || authProviders.ldap?.enabled)}
       <form class="mt-8 space-y-6" onsubmit={handleSubmit}>
+        <div>
+          <label for="password-provider" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Sign in using</label>
+          <select id="password-provider" bind:value={provider} onchange={changeProvider} disabled={isSubmitting || authProviders.isDiscovering}
+            class="block w-full rounded-md border border-gray-300 dark:border-gray-600 p-2 bg-white dark:bg-gray-800 text-gray-900 dark:text-white">
+            {#if authProviders.local}<option value="local">Local</option>{/if}
+            {#if authProviders.ldap?.enabled}<option value="ldap">{authProviders.ldap.name}</option>{/if}
+          </select>
+          {#if provider === 'ldap' && authProviders.ldapHelpUrl}
+            <a href={authProviders.ldapHelpUrl} target="_blank" rel="noopener noreferrer" class="text-sm text-primary-600 dark:text-primary-400">Directory sign-in help</a>
+          {/if}
+        </div>
         <div class="rounded-md shadow-sm space-y-4">
           <!-- Username field -->
           <div>
@@ -217,7 +245,7 @@
               autocomplete="username"
               required
               bind:value={username}
-              disabled={isSubmitting}
+              disabled={isSubmitting || authProviders.isDiscovering}
               class="appearance-none relative block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 placeholder-gray-500 dark:placeholder-gray-400 text-gray-900 dark:text-white rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500 focus:z-10 sm:text-sm bg-white dark:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
               placeholder="Enter your username"
             />
@@ -240,7 +268,7 @@
               autocomplete="current-password"
               required
               bind:value={password}
-              disabled={isSubmitting}
+              disabled={isSubmitting || authProviders.isDiscovering}
               class="appearance-none relative block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 placeholder-gray-500 dark:placeholder-gray-400 text-gray-900 dark:text-white rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500 focus:z-10 sm:text-sm bg-white dark:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
               placeholder="Enter your password"
             />
@@ -274,7 +302,7 @@
         <div>
           <button
             type="submit"
-            disabled={isSubmitting}
+            disabled={isSubmitting || authProviders.isDiscovering}
             class="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 disabled:opacity-50 disabled:cursor-not-allowed dark:focus:ring-offset-gray-900"
           >
             {#if isSubmitting}
@@ -289,7 +317,7 @@
         </div>
 
         <!-- Register link (only show if self-registration is allowed) -->
-        {#if !checkingConfig && selfRegistrationAllowed}
+        {#if provider === 'local' && !checkingConfig && selfRegistrationAllowed}
           <div class="text-center">
             <p class="text-sm text-gray-600 dark:text-gray-400">
               Don't have an account?
