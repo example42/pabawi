@@ -41,7 +41,7 @@ describe("Authentication Middleware", () => {
     );
 
     // Create middleware instance
-    middleware = createAuthMiddleware(db, jwtSecret);
+    middleware = createAuthMiddleware(new AuthenticationService(db, jwtSecret));
   });
 
   afterEach(async () => {
@@ -93,7 +93,7 @@ describe("Authentication Middleware", () => {
         lastLoginAt: null
       };
 
-      const token = await authService.generateToken(user);
+      const token = await authService.generateToken(user, { provider: 'local', identityId: null });
 
       const { req, res, next } = createMocks();
       req.headers.authorization = `Bearer ${token}`;
@@ -226,7 +226,7 @@ describe("Authentication Middleware", () => {
         lastLoginAt: null
       };
 
-      const token = await authService.generateToken(user);
+      const token = await authService.generateToken(user, { provider: 'local', identityId: null });
 
       // Revoke the token
       await authService.revokeToken(token);
@@ -263,7 +263,7 @@ describe("Authentication Middleware", () => {
         lastLoginAt: null
       };
 
-      const token = await authService.generateToken(user);
+      const token = await authService.generateToken(user, { provider: 'local', identityId: null });
 
       const { req, res, next } = createMocks();
       req.headers.authorization = `Bearer ${token}`;
@@ -284,7 +284,7 @@ describe("Authentication Middleware", () => {
     it("should return generic error for unexpected errors", async () => {
       // Create middleware with invalid database to trigger error
       const badDb = {} as Database;
-      const badMiddleware = createAuthMiddleware(badDb, jwtSecret);
+      const badMiddleware = createAuthMiddleware(new AuthenticationService(badDb, jwtSecret));
 
       const user = {
         id: "test-user-id",
@@ -300,7 +300,7 @@ describe("Authentication Middleware", () => {
         lastLoginAt: null
       };
 
-      const token = await authService.generateToken(user);
+      const token = await authService.generateToken(user, { provider: 'local', identityId: null });
 
       const { req, res, next } = createMocks();
       req.headers.authorization = `Bearer ${token}`;

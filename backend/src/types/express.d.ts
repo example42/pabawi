@@ -1,4 +1,5 @@
 import type { ExecutionRecord } from "../database/ExecutionRepository";
+import type { AuthenticationContext } from "../services/AuthenticationService";
 
 /**
  * Centralized Express.Request augmentation for Pabawi.
@@ -22,6 +23,7 @@ declare global {
         exp: number;
       };
       mcpAuthMethod?: 'jwt' | 'static';
+      authContext?: AuthenticationContext;
       revalidateAuth?: () => Promise<void>;
       /** Execution snapshot checked by the mutation authorization middleware. */
       authorizedExecution?: ExecutionRecord;

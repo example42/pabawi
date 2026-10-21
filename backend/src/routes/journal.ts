@@ -22,7 +22,7 @@ import type { DatabaseService } from "../database/DatabaseService";
 import { sendValidationError, ERROR_CODES } from "../utils/errorHandling";
 import { createAuthMiddleware } from "../middleware/authMiddleware";
 import { createRbacMiddleware } from "../middleware/rbacMiddleware";
-import { type DIContainer, createDefaultContainer } from "../container/DIContainer";
+import { type DIContainer, createDefaultContainer, resolveAuthenticationService } from "../container/DIContainer";
 
 /**
  * Filter journal entries by date range (post-collection).
@@ -130,9 +130,8 @@ export function createJournalRouter(
 ): Router {
   const router = Router();
   const logger = container.resolve("logger");
-  const configService = container.resolve("config");
   const journalService = new JournalService(databaseService.getAdapter());
-  const authMiddleware = createAuthMiddleware(databaseService.getAdapter(), configService.getJwtSecret());
+  const authMiddleware = createAuthMiddleware(resolveAuthenticationService(databaseService.getAdapter(), container));
   const rbacMiddleware = createRbacMiddleware(databaseService.getAdapter());
   const db = databaseService.getAdapter();
 

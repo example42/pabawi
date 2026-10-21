@@ -5,7 +5,7 @@ import { z } from "zod";
 import { asyncHandler } from "./asyncHandler";
 import { type EntraIdService, EntraIdError, ENTRA_ID_ERROR_CODES } from "../services/EntraIdService";
 import type { DatabaseService } from "../database/DatabaseService";
-import type { DIContainer } from "../container/DIContainer";
+import { type DIContainer, resolveAuthenticationService } from "../container/DIContainer";
 import { createAuthMiddleware } from "../middleware/authMiddleware";
 import { createRbacMiddleware } from "../middleware/rbacMiddleware";
 
@@ -286,7 +286,7 @@ export function createEntraIdAuthRouter(
   );
 
   router.post("/enroll",
-    asyncHandler(createAuthMiddleware(db, container.resolve("config").getJwtSecret())),
+    asyncHandler(createAuthMiddleware(resolveAuthenticationService(db, container))),
     asyncHandler(createRbacMiddleware(db)("rbac", "admin")),
     asyncHandler(createRbacMiddleware(db)("users", "admin")),
     asyncHandler(async (req, res) => {

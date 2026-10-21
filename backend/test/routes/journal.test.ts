@@ -111,7 +111,7 @@ describe("Journal Router", () => {
     }
     await userService.assignRoleToUser(adminUserId, journalRole.id);
 
-    adminToken = await authService.generateToken(adminUser);
+    adminToken = await authService.generateToken(adminUser, { provider: 'local', identityId: null });
 
     // Create regular user without journal permissions
     const regularUser = await userService.createUser({
@@ -123,7 +123,7 @@ describe("Journal Router", () => {
       isAdmin: false,
     });
 
-    regularUserToken = await authService.generateToken(regularUser);
+    regularUserToken = await authService.generateToken(regularUser, { provider: 'local', identityId: null });
 
     // Seed some journal entries for testing
     await journalService.recordEvent({

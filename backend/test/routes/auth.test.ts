@@ -2039,6 +2039,7 @@ describe('Auth Routes - POST /api/auth/refresh', () => {
       const jwt = require('jsonwebtoken');
       const fakeRefreshToken = jwt.sign(
         {
+          authContext: { provider: 'local', identityId: null },
           userId: 'non-existent-user-id',
           username: 'nonexistent',
           type: 'refresh',

@@ -87,7 +87,7 @@ describe('Permissions Router', () => {
     await userService.assignRoleToUser(adminUserId, adminRole.id);
 
     // Generate token for admin user
-    adminToken = await authService.generateToken(adminUser);
+    adminToken = await authService.generateToken(adminUser, { provider: 'local', identityId: null });
 
     // Create regular user without permissions
     const regularUser = await userService.createUser({
@@ -101,7 +101,7 @@ describe('Permissions Router', () => {
     regularUserId = regularUser.id;
 
     // Generate token for regular user
-    regularUserToken = await authService.generateToken(regularUser);
+    regularUserToken = await authService.generateToken(regularUser, { provider: 'local', identityId: null });
   });
 
   afterEach(async () => {

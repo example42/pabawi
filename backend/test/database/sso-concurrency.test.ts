@@ -56,7 +56,7 @@ for (const dialect of ['sqlite', 'postgres'] as const) {
         expect(await permissions.hasPermission(users[0].id, 'executions', 'read')).toBe(true);
         await services[0].syncGroupRoles(identity!.id, undefined);
         expect(await permissions.hasPermission(users[0].id, 'executions', 'read')).toBe(false);
-        const { token, refreshToken } = await services[0].authService.generateTokenPair(users[0]);
+        const { token, refreshToken } = await services[0].authService.generateTokenPair(users[0], { provider: 'entra-id', identityId: identity!.id });
         const binding = 'a'.repeat(64);
         await adapters[0].execute(`INSERT INTO oauth_auth_codes
           (code, access_token, refresh_token, user_id, created_at, expires_at, browser_binding)

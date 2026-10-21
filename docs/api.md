@@ -23,6 +23,14 @@ JWT plus `rbac:admin` and `users:admin`. Refresh tokens work only at the refresh
 exchange. Generic inventory lifecycle requests also accept the scoped machine
 credential described below. `/mcp` has its own [authentication policy](mcp.md).
 
+Access and refresh JWTs carry signed `authContext`: `{ "provider": "local", "identityId": null }`
+or `{ "provider": "entra-id", "identityId": "<federated-identity-id>" }`. The server checks local
+authentication scope or exact identity ownership on issuance, verification and rotation.
+Refresh preserves the authenticating identity even for an account enrolled in multiple providers.
+Migration 032 intentionally invalidates existing account sessions, console credentials and pending
+OAuth state/code exchanges once. Users must sign in again; legacy tokens without context are rejected.
+LDAP discovery, login and token issuance remain unavailable until session enforcement is complete.
+
 The [OpenAPI contract](openapi.yaml) describes the REST subset tracked by
 [contract coverage](api-contract-coverage.md), including intentional omissions.
 

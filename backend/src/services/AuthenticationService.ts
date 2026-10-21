@@ -17,10 +17,32 @@ export interface AuthResult {
   error?: string;
 }
 
+export type AuthenticationContext =
+  | { provider: 'local'; identityId: null }
+  | { provider: 'entra-id'; identityId: string };
+
+export class InvalidAuthenticationContextError extends Error {
+  readonly code = 'INVALID_TOKEN';
+
+  constructor() {
+    super('Invalid token');
+    this.name = 'InvalidAuthenticationContextError';
+  }
+}
+
+function isAuthenticationContext(value: unknown): value is AuthenticationContext {
+  if (typeof value !== 'object' || value === null) return false;
+  const context = value as Record<string, unknown>;
+  if (Object.keys(context).length !== 2) return false;
+  return (context.provider === 'local' && context.identityId === null) ||
+    (context.provider === 'entra-id' && typeof context.identityId === 'string' && context.identityId.length > 0);
+}
+
 /**
  * JWT token payload structure
  */
 export interface TokenPayload {
+  authContext: AuthenticationContext;
   userId: string;
   username: string;
   roles: string[];
@@ -71,6 +93,7 @@ interface User {
  * Refresh token payload structure
  */
 interface RefreshTokenPayload {
+  authContext: AuthenticationContext;
   userId: string;
   username: string;
   type: 'refresh';
@@ -267,7 +290,7 @@ export class AuthenticationService {
             await this.clearFailedLoginAttempts(username);
 
             // Generate tokens
-            const { token, refreshToken } = await this.generateTokenPair(user, sessionVersion);
+            const { token, refreshToken } = await this.generateTokenPair(user, { provider: 'local', identityId: null }, sessionVersion);
 
             // Update last login timestamp
             await this.updateLastLogin(user.id);
@@ -321,10 +344,11 @@ export class AuthenticationService {
           }
         }
 
-  public async generateTokenPair(user: Pick<User, 'id' | 'username'>, expectedVersion?: string): Promise<{ token: string; refreshToken: string }> {
-    const version = expectedVersion ?? await this.getActiveSessionVersion(user.id);
-    const token = await this.generateToken(user, version);
-    const refreshToken = await this.generateRefreshToken(user, version);
+  public async generateTokenPair(user: Pick<User, 'id' | 'username'>, context: AuthenticationContext, expectedVersion?: string): Promise<{ token: string; refreshToken: string }> {
+    const version = await this.assertSessionEligible(user.id, context, expectedVersion);
+    const token = await this.generateToken(user, context, version);
+    const refreshToken = await this.generateRefreshToken(user, context, version);
+    await this.assertSessionEligible(user.id, context, version);
     return { token, refreshToken };
   }
 
@@ -334,13 +358,13 @@ export class AuthenticationService {
    * @param user - User object
    * @returns JWT access token string
    */
-  public async generateToken(user: Pick<User, 'id' | 'username'>, expectedVersion?: string): Promise<string> {
-    const sessionVersion = await this.getActiveSessionVersion(user.id);
-    if (expectedVersion !== undefined && expectedVersion !== sessionVersion) throw new Error('Token has been revoked');
+  public async generateToken(user: Pick<User, 'id' | 'username'>, context: AuthenticationContext, expectedVersion?: string): Promise<string> {
+    const sessionVersion = await this.assertSessionEligible(user.id, context, expectedVersion);
     // Fetch user roles for token
     const roles = await this.getUserRoles(user.id);
 
     const payload: TokenPayload = {
+      authContext: context,
       userId: user.id,
       username: user.username,
       roles: roles,
@@ -364,10 +388,10 @@ export class AuthenticationService {
    * @param user - User object
    * @returns JWT refresh token string
    */
-  public async generateRefreshToken(user: Pick<User, 'id' | 'username'>, expectedVersion?: string): Promise<string> {
-    const sessionVersion = await this.getActiveSessionVersion(user.id);
-    if (expectedVersion !== undefined && expectedVersion !== sessionVersion) throw new Error('Token has been revoked');
+  public async generateRefreshToken(user: Pick<User, 'id' | 'username'>, context: AuthenticationContext, expectedVersion?: string): Promise<string> {
+    const sessionVersion = await this.assertSessionEligible(user.id, context, expectedVersion);
     const payload = {
+      authContext: context,
       userId: user.id,
       username: user.username,
       type: 'refresh',
@@ -403,9 +427,7 @@ export class AuthenticationService {
           !Array.isArray(payload.roles) || !payload.roles.every((role: unknown) => typeof role === 'string')) {
         throw new Error('Invalid token');
       }
-      if (payload.sessionVersion !== await this.getActiveSessionVersion(payload.userId)) {
-        throw new Error('Token has been revoked');
-      }
+      await this.assertSessionEligible(payload.userId, payload.authContext, payload.sessionVersion);
 
       // Check if token is revoked
       const isRevoked = await this.isTokenRevoked(token);
@@ -453,9 +475,7 @@ export class AuthenticationService {
         return { success: false, error: 'Invalid refresh token' };
       }
 
-      if (payload.sessionVersion !== await this.getActiveSessionVersion(payload.userId)) {
-        return { success: false, error: 'Refresh token has been revoked' };
-      }
+      await this.assertSessionEligible(payload.userId, payload.authContext, payload.sessionVersion);
 
       // Reuse detection: a revoked refresh token being presented is treated
       // as compromise — revoke the entire token family for this user.
@@ -480,7 +500,7 @@ export class AuthenticationService {
       // Order matters — revoke first so a concurrent reuse will see the revoked state.
       await this.revokeToken(refreshToken);
 
-      const { token: newAccessToken, refreshToken: newRefreshToken } = await this.generateTokenPair(user, payload.sessionVersion);
+      const { token: newAccessToken, refreshToken: newRefreshToken } = await this.generateTokenPair(user, payload.authContext, payload.sessionVersion);
 
       return {
         success: true,
@@ -493,6 +513,9 @@ export class AuthenticationService {
         return { success: false, error: 'Refresh token expired' };
       } else if (error instanceof jwt.JsonWebTokenError) {
         return { success: false, error: 'Invalid refresh token' };
+      }
+      if (error instanceof Error && error.message === 'Token has been revoked') {
+        return { success: false, error: 'Refresh token has been revoked' };
       }
       return { success: false, error: error instanceof Error && error.message === 'User not found or inactive' ? error.message : 'Token refresh failed' };
     }
@@ -572,17 +595,30 @@ export class AuthenticationService {
     );
   }
 
-  private async getActiveSessionVersion(userId: string): Promise<string> {
-    const user = await this.db.queryOne<{ isActive: number; sessionVersion: string }>(
-      'SELECT is_active AS "isActive", session_version AS "sessionVersion" FROM users WHERE id = ?',
+  /** Common account/provider eligibility boundary for token and transport checks. */
+  public async assertSessionEligible(userId: string, context: AuthenticationContext, expectedVersion?: string): Promise<string> {
+    if (!isAuthenticationContext(context)) throw new InvalidAuthenticationContextError();
+    const user = await this.db.queryOne<{ isActive: number; sessionVersion: string; localAuthEnabled: number }>(
+      'SELECT is_active AS "isActive", session_version AS "sessionVersion", local_auth_enabled AS "localAuthEnabled" FROM users WHERE id = ?',
       [userId],
     );
     if (user?.isActive !== 1) throw new Error('User not found or inactive');
+    if (expectedVersion !== undefined && expectedVersion !== user.sessionVersion) throw new Error('Token has been revoked');
+    if (context.provider === 'local') {
+      if (user.localAuthEnabled !== 1) throw new InvalidAuthenticationContextError();
+    } else {
+      const identity = await this.db.queryOne<{ id: string }>(
+        'SELECT id FROM federated_identities WHERE id = ? AND user_id = ? AND provider = ?',
+        [context.identityId, userId, context.provider],
+      );
+      if (!identity) throw new InvalidAuthenticationContextError();
+    }
     return user.sessionVersion;
   }
 
   private isSessionPayload(payload: string | jwt.JwtPayload): payload is jwt.JwtPayload & (TokenPayload | RefreshTokenPayload) {
     return typeof payload !== 'string' &&
+      isAuthenticationContext(payload.authContext) &&
       typeof payload.userId === 'string' && payload.userId.length > 0 &&
       typeof payload.username === 'string' && payload.username.length > 0 &&
       typeof payload.jti === 'string' && payload.jti.length > 0 &&

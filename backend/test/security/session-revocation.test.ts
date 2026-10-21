@@ -51,14 +51,14 @@ describe('A05: token purpose and durable revocation', () => {
     user = await users.createUser({ username: 'alice', email: 'alice@example.test', password: 'Password123!', firstName: 'Alice', lastName: 'Test' });
     await users.assignRoleToUser(user.id, 'role-viewer-001');
     const admin = await users.createUser({ username: 'admin', email: 'admin@example.test', password: 'Password123!', firstName: 'Admin', lastName: 'Test', isAdmin: true });
-    access = await auth.generateToken(user);
-    refresh = await auth.generateRefreshToken(user);
-    adminAccess = await auth.generateToken(admin);
+    access = await auth.generateToken(user, { provider: 'local', identityId: null });
+    refresh = await auth.generateRefreshToken(user, { provider: 'local', identityId: null });
+    adminAccess = await auth.generateToken(admin, { provider: 'local', identityId: null });
     app = express();
     app.use(express.json());
     app.use('/api/users', createUsersRouter(database));
     app.use('/api/auth', createAuthRouter(database));
-    const authenticate = createAuthMiddleware(db, secret);
+    const authenticate = createAuthMiddleware(new AuthenticationService(db, secret));
     const authorize = createRbacMiddleware(db);
     app.get('/read', authenticate, authorize('executions', 'read'), (_req, res) => { res.json({ ok: true }); });
     app.get('/mcp-auth', createMcpAuthMiddleware(undefined, 'machine', authenticate, db), (_req, res) => { res.json({ ok: true }); });
@@ -91,7 +91,7 @@ describe('A05: token purpose and durable revocation', () => {
       await auth.revokeAllUserTokens(user.id);
       return token;
     });
-    await expect(auth.generateTokenPair(user)).rejects.toThrow('revoked');
+    await expect(auth.generateTokenPair(user, { provider: 'local', identityId: null })).rejects.toThrow('revoked');
   });
 
   it.each([

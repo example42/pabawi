@@ -204,7 +204,7 @@ describe("Feature: console-integration, Property 6: RBAC enforcement for cross-u
     }
     // If neither, user has no console permissions
 
-    const token = await authService.generateToken(user);
+    const token = await authService.generateToken(user, { provider: 'local', identityId: null });
     return { userId: user.id, token };
   }
 

@@ -70,6 +70,7 @@ describe('Token Validity Properties', () => {
           // Create a token with custom expiry
           const now = Math.floor(Date.now() / 1000);
           const payload = {
+            authContext: { provider: 'local', identityId: null },
             userId: user.userId,
             username: user.username,
             roles: user.roles,
@@ -126,6 +127,7 @@ describe('Token Validity Properties', () => {
 
           const now = Math.floor(Date.now() / 1000);
           const payload = {
+            authContext: { provider: 'local', identityId: null },
             userId: user.userId,
             username: user.username,
             roles: user.roles,
@@ -172,6 +174,7 @@ describe('Token Validity Properties', () => {
           // Create a valid token
           const now = Math.floor(Date.now() / 1000);
           const payload = {
+            authContext: { provider: 'local', identityId: null },
             userId: user.userId,
             username: user.username,
             roles: user.roles,
@@ -223,6 +226,7 @@ describe('Token Validity Properties', () => {
           // Create a token that expires in the past
           const now = Math.floor(Date.now() / 1000);
           const payload = {
+            authContext: { provider: 'local', identityId: null },
             userId: user.userId,
             username: user.username,
             roles: user.roles,
@@ -267,6 +271,7 @@ describe('Token Validity Properties', () => {
         async (user) => {
           const now = Math.floor(Date.now() / 1000);
           const payload = {
+            authContext: { provider: 'local', identityId: null },
             userId: user.userId,
             username: user.username,
             roles: user.roles,

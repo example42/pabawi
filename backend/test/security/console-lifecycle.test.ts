@@ -121,7 +121,7 @@ describe('A15: console session lifecycle', () => {
       firstName: 'Console', lastName: 'Owner',
     });
     await grantConsole(owner, 'access');
-    ownerToken = await auth.generateToken(owner);
+    ownerToken = await auth.generateToken(owner, { provider: 'local', identityId: null });
 
     // A local WebSocket server stands in for the provider's upstream.
     upstreamServer = new WebSocketServer({ host: '127.0.0.1', port: 0 });
@@ -401,7 +401,7 @@ describe('A15: console session lifecycle', () => {
         firstName: 'Console', lastName: 'Operator',
       });
       await grantConsole(operator, 'admin');
-      const operatorToken = await auth.generateToken(operator);
+      const operatorToken = await auth.generateToken(operator, { provider: 'local', identityId: null });
 
       const { sessionId, wsToken } = await createSession();
       const { client, peer } = await connect(wsToken);
@@ -571,7 +571,7 @@ describe('A15: console session lifecycle', () => {
         firstName: 'Other', lastName: 'User',
       });
       await grantConsole(other, 'access');
-      otherToken = await auth.generateToken(other);
+      otherToken = await auth.generateToken(other, { provider: 'local', identityId: null });
     });
 
     it('denies another user\'s heartbeat', async () => {

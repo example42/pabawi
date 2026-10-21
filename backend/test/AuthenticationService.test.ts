@@ -174,7 +174,7 @@ describe('AuthenticationService', () => {
     });
 
     it('should generate valid JWT access token', async () => {
-      const token = await authService.generateToken(testUser);
+      const token = await authService.generateToken(testUser, { provider: 'local', identityId: null });
 
       expect(token).toBeDefined();
       expect(typeof token).toBe('string');
@@ -182,7 +182,7 @@ describe('AuthenticationService', () => {
     });
 
     it('should generate valid JWT refresh token', async () => {
-      const refreshToken = await authService.generateRefreshToken(testUser);
+      const refreshToken = await authService.generateRefreshToken(testUser, { provider: 'local', identityId: null });
 
       expect(refreshToken).toBeDefined();
       expect(typeof refreshToken).toBe('string');
@@ -190,7 +190,7 @@ describe('AuthenticationService', () => {
     });
 
     it('should include user information in token payload', async () => {
-      const token = await authService.generateToken(testUser);
+      const token = await authService.generateToken(testUser, { provider: 'local', identityId: null });
       const payload = await authService.verifyToken(token);
 
       expect(payload.userId).toBe(testUser.id);
@@ -200,7 +200,7 @@ describe('AuthenticationService', () => {
     });
 
     it('should include expiration time in token', async () => {
-      const token = await authService.generateToken(testUser);
+      const token = await authService.generateToken(testUser, { provider: 'local', identityId: null });
       const payload = await authService.verifyToken(token);
 
       expect(payload.exp).toBeDefined();
@@ -213,7 +213,7 @@ describe('AuthenticationService', () => {
     });
 
     it('should include token ID (jti) for revocation tracking', async () => {
-      const token = await authService.generateToken(testUser);
+      const token = await authService.generateToken(testUser, { provider: 'local', identityId: null });
       const payload = await authService.verifyToken(token);
 
       expect(payload.jti).toBeDefined();
@@ -237,7 +237,7 @@ describe('AuthenticationService', () => {
       `, [userId, 'testuser', 'test@example.com', passwordHash, 'Test', 'User', 1, 0, now, now]);
 
       testUser = await db.queryOne('SELECT * FROM users WHERE username = ?', ['testuser']);
-      validToken = await authService.generateToken(testUser);
+      validToken = await authService.generateToken(testUser, { provider: 'local', identityId: null });
     });
 
     it('should verify valid token', async () => {
@@ -280,7 +280,7 @@ describe('AuthenticationService', () => {
       `, [userId, 'testuser', 'test@example.com', passwordHash, 'Test', 'User', 1, 0, now, now]);
 
       testUser = await db.queryOne('SELECT * FROM users WHERE username = ?', ['testuser']);
-      refreshToken = await authService.generateRefreshToken(testUser);
+      refreshToken = await authService.generateRefreshToken(testUser, { provider: 'local', identityId: null });
     });
 
     it('should generate new access token from valid refresh token', async () => {
@@ -293,7 +293,7 @@ describe('AuthenticationService', () => {
     });
 
     it('should reject access token used as refresh token', async () => {
-      const accessToken = await authService.generateToken(testUser);
+      const accessToken = await authService.generateToken(testUser, { provider: 'local', identityId: null });
       const result = await authService.refreshToken(accessToken);
 
       expect(result.success).toBe(false);
@@ -332,7 +332,7 @@ describe('AuthenticationService', () => {
       `, [userId, 'testuser', 'test@example.com', passwordHash, 'Test', 'User', 1, 0, now, now]);
 
       testUser = await db.queryOne('SELECT * FROM users WHERE username = ?', ['testuser']);
-      token = await authService.generateToken(testUser);
+      token = await authService.generateToken(testUser, { provider: 'local', identityId: null });
     });
 
     it('should revoke specific token', async () => {
@@ -349,8 +349,8 @@ describe('AuthenticationService', () => {
     });
 
     it('should revoke all user tokens', async () => {
-      const token1 = await authService.generateToken(testUser);
-      const token2 = await authService.generateToken(testUser);
+      const token1 = await authService.generateToken(testUser, { provider: 'local', identityId: null });
+      const token2 = await authService.generateToken(testUser, { provider: 'local', identityId: null });
 
       await authService.revokeAllUserTokens(testUser.id);
 
@@ -390,7 +390,7 @@ describe('AuthenticationService', () => {
     });
 
     it('should include user roles in token payload', async () => {
-      const token = await authService.generateToken(testUser);
+      const token = await authService.generateToken(testUser, { provider: 'local', identityId: null });
       const payload = await authService.verifyToken(token);
 
       expect(payload.roles).toBeDefined();
@@ -426,7 +426,7 @@ describe('AuthenticationService', () => {
         VALUES (?, ?, ?)
       `, [groupId, roleId, now]);
 
-      const token = await authService.generateToken(testUser);
+      const token = await authService.generateToken(testUser, { provider: 'local', identityId: null });
       const payload = await authService.verifyToken(token);
 
       expect(payload.roles).toContain('GroupRole');

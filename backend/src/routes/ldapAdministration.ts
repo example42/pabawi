@@ -4,7 +4,7 @@ import { Router, type Request, type Response, type NextFunction } from 'express'
 import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
 import type { DatabaseService } from '../database/DatabaseService';
-import type { DIContainer } from '../container/DIContainer';
+import { type DIContainer, resolveAuthenticationService } from '../container/DIContainer';
 import type { LdapDirectoryGroup, LdapDirectoryService } from '../services/LdapDirectoryService';
 import { LdapDirectoryError } from '../services/LdapDirectoryService';
 import { LdapAdministrationError, type LdapAuditActor, type LdapMappingService } from '../services/LdapMappingService';
@@ -44,7 +44,7 @@ export function createLdapAdministrationRouter(database: DatabaseService, contai
     return { directory, mappings };
   };
   const guards = [
-    asyncHandler(createAuthMiddleware(db, container.resolve('config').getJwtSecret())),
+    asyncHandler(createAuthMiddleware(resolveAuthenticationService(db, container))),
     asyncHandler(createRbacMiddleware(db)('rbac', 'admin')),
     createRateLimitMiddleware(),
     (_req: Request, res: Response, next: NextFunction): void => {

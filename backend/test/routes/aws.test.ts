@@ -125,7 +125,7 @@ describe("AWS Router", () => {
     }
     await userService.assignRoleToUser(adminUserId, awsRole.id);
 
-    adminToken = await authService.generateToken(adminUser);
+    adminToken = await authService.generateToken(adminUser, { provider: 'local', identityId: null });
 
     // Build app with the mock plugin
     app = express();

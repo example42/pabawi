@@ -1,6 +1,5 @@
 import type { Request, Response, NextFunction } from "express";
-import { AuthenticationService } from "../services/AuthenticationService";
-import type { DatabaseAdapter } from "../database/DatabaseAdapter";
+import type { AuthenticationService } from "../services/AuthenticationService";
 import { ERROR_CODES, sendAuthenticationError, sendDatabaseError, isDatabaseConnectionError } from "../utils/errorHandling";
 
 // Express.Request.user augmentation is defined in src/types/express.d.ts
@@ -13,9 +12,7 @@ import { ERROR_CODES, sendAuthenticationError, sendDatabaseError, isDatabaseConn
  *
  * Requirements: 5.1, 6.6, 16.1, 16.5
  */
-export function createAuthMiddleware(db: DatabaseAdapter, jwtSecret?: string) {
-  const authService = new AuthenticationService(db, jwtSecret);
-
+export function createAuthMiddleware(authService: AuthenticationService) {
   return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       // Extract token from Authorization header
@@ -66,6 +63,7 @@ export function createAuthMiddleware(db: DatabaseAdapter, jwtSecret?: string) {
         iat: payload.iat,
         exp: payload.exp
       };
+      req.authContext = payload.authContext;
 
       req.revalidateAuth = async (): Promise<void> => { await authService.verifyToken(token); };
 

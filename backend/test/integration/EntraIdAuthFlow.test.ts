@@ -154,6 +154,7 @@ describe('Entra ID Auth Flow Integration Tests', () => {
 
     container = new DIContainer();
     container.register('logger', logger);
+    container.register('authentication', authService);
 
     const configService = new ConfigService();
     container.register('config', configService);
@@ -265,7 +266,7 @@ describe('Entra ID Auth Flow Integration Tests', () => {
         await db.execute(`INSERT INTO users (id, username, email, first_name, last_name, is_active, is_admin, created_at, updated_at)
           VALUES (?, ?, ?, '', '', 1, 0, 'now', 'now')`, [id, id, `${id}@example.test`]);
       }
-      const token = await entraIdService.authService.generateToken({ id: 'actor', username: 'actor' });
+      const token = await entraIdService.authService.generateToken({ id: 'actor', username: 'actor' }, { provider: 'local', identityId: null });
       const input = { userId: 'target', subject: 'enrolled-subject' };
       await browser.post('/api/auth/entra-id/enroll').send(input).expect(401);
       await browser.post('/api/auth/entra-id/enroll').set('Authorization', `Bearer ${token}`).send(input).expect(403);
@@ -358,6 +359,15 @@ describe('Entra ID Auth Flow Integration Tests', () => {
       expect(tokenResponse.body).toHaveProperty('user');
       expect(tokenResponse.body.user.username).toBe('testuser');
       expect(tokenResponse.body.user.email).toBe('testuser@example.com');
+      const identity = await databaseService.getAdapter().queryOne<{ id: string }>(
+        'SELECT id FROM federated_identities WHERE user_id = ? AND provider = ?', [tokenResponse.body.user.id, 'entra-id'],
+      );
+      const context = { provider: 'entra-id', identityId: identity!.id };
+      expect(await entraIdService.authService.verifyToken(tokenResponse.body.token)).toMatchObject({ authContext: context });
+      expect(jwt.decode(tokenResponse.body.refreshToken)).toMatchObject({ authContext: context });
+      const refreshed = await browser.post('/api/auth/refresh').send({ refreshToken: tokenResponse.body.refreshToken }).expect(200);
+      expect(await entraIdService.authService.verifyToken(refreshed.body.token)).toMatchObject({ authContext: context });
+      expect(jwt.decode(refreshed.body.refreshToken)).toMatchObject({ authContext: context });
 
       // Step 4: Verify the auth code cannot be reused (single-use)
       const replayResponse = await browser

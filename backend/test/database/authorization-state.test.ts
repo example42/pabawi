@@ -34,8 +34,8 @@ for (const dialect of ['sqlite', 'postgres'] as const) {
         await writer.execute("INSERT INTO user_roles VALUES ('user', 'role-viewer-001', 'now')");
         const permissions = new PermissionService(reader);
         const auth = new AuthenticationService(reader, 'database-session-revocation-test-secret');
-        const token = await auth.generateToken({ id: 'user', username: 'user' });
-        const refresh = await auth.generateRefreshToken({ id: 'user', username: 'user' });
+        const token = await auth.generateToken({ id: 'user', username: 'user' }, { provider: 'local', identityId: null });
+        const refresh = await auth.generateRefreshToken({ id: 'user', username: 'user' }, { provider: 'local', identityId: null });
         expect(await permissions.hasPermission('user', 'executions', 'read')).toBe(true);
         await writer.execute("DELETE FROM user_roles WHERE user_id = 'user'");
         expect(await permissions.hasPermission('user', 'executions', 'read')).toBe(false);
@@ -51,7 +51,7 @@ for (const dialect of ['sqlite', 'postgres'] as const) {
         expect(await permissions.hasPermission('user', 'executions', 'read')).toBe(false);
         await expect(auth.verifyToken(token)).rejects.toThrow('revoked');
         expect((await auth.refreshToken(refresh)).success).toBe(false);
-        const fresh = await auth.generateToken({ id: 'user', username: 'user' });
+        const fresh = await auth.generateToken({ id: 'user', username: 'user' }, { provider: 'local', identityId: null });
         await writer.execute("UPDATE users SET password_hash = 'new-hash' WHERE id = 'user'");
         await expect(auth.verifyToken(fresh)).rejects.toThrow('revoked');
         const transactionPermissions = new PermissionService(writer);
@@ -59,7 +59,7 @@ for (const dialect of ['sqlite', 'postgres'] as const) {
         let rolledBackToken = '';
         await expect(writer.withTransaction(async () => {
           await writer.execute("UPDATE users SET is_admin = 1 WHERE id = 'user'");
-          rolledBackToken = await writerAuth.generateToken({ id: 'user', username: 'user' });
+          rolledBackToken = await writerAuth.generateToken({ id: 'user', username: 'user' }, { provider: 'local', identityId: null });
           expect(await transactionPermissions.hasPermission('user', 'executions', 'read')).toBe(true);
           throw new Error('rollback cached revision');
         })).rejects.toThrow('rollback cached revision');

@@ -66,8 +66,8 @@ describe('A07: deliberate entitlement administration', () => {
     await new GroupService(db).assignRoleToGroup(groupId, 'role-admin-001');
     roleId = (await roles.createRole({ name: 'Custom role', description: '' })).id;
     await users.assignRoleToUser(editor.id, roleId);
-    editorToken = await auth.generateToken(editor);
-    delegateToken = await auth.generateToken(delegate);
+    editorToken = await auth.generateToken(editor, { provider: 'local', identityId: null });
+    delegateToken = await auth.generateToken(delegate, { provider: 'local', identityId: null });
     app = express();
     app.use(express.json());
     app.use('/api/users', createUsersRouter(database));
@@ -100,7 +100,7 @@ describe('A07: deliberate entitlement administration', () => {
     const tables = ['users', 'roles', 'groups', 'permissions', 'user_roles', 'user_groups', 'group_roles', 'role_permissions'];
     const snapshot = () => Promise.all(tables.map(table => database.getAdapter().query(`SELECT * FROM ${table} ORDER BY 1`)));
     const before = await snapshot();
-    for (const token of [undefined, await auth.generateToken(target), editorToken]) {
+    for (const token of [undefined, await auth.generateToken(target, { provider: 'local', identityId: null }), editorToken]) {
       for (const [method, path, body] of mutations()) {
         const call = request(harness.use(app))[method](path).send(body);
         if (token) call.set('Authorization', `Bearer ${token}`);

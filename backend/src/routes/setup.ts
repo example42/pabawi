@@ -3,9 +3,7 @@ import { tokensEqual } from "../utils/tokensEqual";
 import { z } from "zod";
 import { asyncHandler } from "./asyncHandler";
 import { UserService } from "../services/UserService";
-import { AuthenticationService } from "../services/AuthenticationService";
 import { SetupService } from "../services/SetupService";
-import { AuditLoggingService } from "../services/AuditLoggingService";
 import type { DatabaseService } from "../database/DatabaseService";
 import {
   sendValidationError,
@@ -19,7 +17,7 @@ import {
 } from "../utils/errorHandling";
 import { ZodError } from "zod";
 import { createAuthRateLimitMiddleware } from "../middleware/securityMiddleware";
-import { type DIContainer, createDefaultContainer } from "../container/DIContainer";
+import { type DIContainer, createDefaultContainer, resolveAuthenticationService } from "../container/DIContainer";
 
 /**
  * Zod schema for initial setup
@@ -66,9 +64,7 @@ export function createSetupRouter(
   const router = Router();
   const logger = container.resolve("logger");
   const configService = container.resolve("config");
-  const jwtSecret = configService.getJwtSecret();
-  const auditLogger = new AuditLoggingService(databaseService.getAdapter());
-  const authService = new AuthenticationService(databaseService.getAdapter(), jwtSecret, auditLogger);
+  const authService = resolveAuthenticationService(databaseService.getAdapter(), container);
   const userService = new UserService(databaseService.getAdapter(), authService);
   const setupService = new SetupService(databaseService.getAdapter());
 

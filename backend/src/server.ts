@@ -69,10 +69,9 @@ import { LoggerService } from "./services/LoggerService";
 import { LogBufferService } from "./services/LogBufferService";
 import { ExpertModeService } from "./services/ExpertModeService";
 import { PerformanceMonitorService } from "./services/PerformanceMonitorService";
-import { DIContainer } from "./container/DIContainer";
+import { DIContainer, resolveAuthenticationService } from "./container/DIContainer";
 import { PuppetRunHistoryService } from "./services/PuppetRunHistoryService";
 import { JournalService, type LiveSource } from "./services/journal/JournalService";
-import { AuthenticationService } from "./services/AuthenticationService";
 import { UserService } from "./services/UserService";
 import { RoleService } from "./services/RoleService";
 import { PermissionService } from "./services/PermissionService";
@@ -610,6 +609,8 @@ async function startServer(): Promise<Express> {
       });
     }));
 
+    const authService = resolveAuthenticationService(databaseService.getAdapter(), container);
+
     // Setup routes (no authentication required - only accessible when setup is incomplete)
     app.use("/api/setup", createSetupRouter(databaseService, container));
 
@@ -636,11 +637,6 @@ async function startServer(): Promise<Express> {
 
       try {
         const auditLogger = new AuditLoggingService(databaseService.getAdapter());
-        const authService = new AuthenticationService(
-          databaseService.getAdapter(),
-          configService.getJwtSecret(),
-          auditLogger,
-        );
         const userService = new UserService(databaseService.getAdapter(), authService);
         const roleService = new RoleService(databaseService.getAdapter());
 
@@ -691,7 +687,7 @@ async function startServer(): Promise<Express> {
 
     // Create authentication and RBAC middleware instances
     // Wrap async middleware with asyncHandler to satisfy Express's void return expectation
-    const authMiddleware = asyncHandler(createAuthMiddleware(databaseService.getAdapter(), configService.getJwtSecret()));
+    const authMiddleware = asyncHandler(createAuthMiddleware(authService));
     const rawRbacMiddleware = createRbacMiddleware(databaseService.getAdapter());
     const rbacMiddleware = (resource: string, action: string): express.RequestHandler =>
       asyncHandler(rawRbacMiddleware(resource, action));
@@ -706,9 +702,8 @@ async function startServer(): Promise<Express> {
     let inventoryAuthMiddleware = authMiddleware;
     const lifecycleToken = configService.getLifecycleToken();
     if (lifecycleToken) {
-      const lifecycleAuthService = new AuthenticationService(databaseService.getAdapter(), configService.getJwtSecret());
       const { userId: lifecycleUserId } = await provisionLifecycleServiceUser(
-        new UserService(databaseService.getAdapter(), lifecycleAuthService),
+        new UserService(databaseService.getAdapter(), authService),
         new RoleService(databaseService.getAdapter()),
         new PermissionService(databaseService.getAdapter()),
         logger,
@@ -838,7 +833,6 @@ async function startServer(): Promise<Express> {
       });
 
       try {
-        const authService = new AuthenticationService(databaseService.getAdapter(), configService.getJwtSecret());
         const userService = new UserService(databaseService.getAdapter(), authService);
         const roleService = new RoleService(databaseService.getAdapter());
         const permissionService = new PermissionService(databaseService.getAdapter());
