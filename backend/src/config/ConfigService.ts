@@ -1,3 +1,4 @@
+import { parseLdapConfig } from "./ldap";
 import { config as loadDotenv } from "dotenv";
 import {
   AppConfigSchema,
@@ -917,6 +918,7 @@ export class ConfigService {
         mcpEnabled: process.env.MCP_ENABLED === "true",
         mcpAuthToken: process.env.MCP_AUTH_TOKEN ?? undefined,
         entraId: this.parseEntraIdConfig() ?? undefined,
+        ldap: parseLdapConfig(process.env),
         console: this.consoleConfig,
       };
 
@@ -1170,6 +1172,10 @@ export class ConfigService {
       return checkmk as typeof checkmk & { enabled: true };
     }
     return null;
+  }
+
+  public getLdapConfig(): AppConfig["ldap"] | null {
+    return this.config.ldap ?? null;
   }
 
   /**
