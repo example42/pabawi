@@ -5,7 +5,7 @@ import { hasProvisioningPermission, hasPermission } from "./permissions";
 function login(): void {
   authManager.setAuthDataFromSso({
     token: "permission-test-access", refreshToken: "permission-test-refresh",
-    user: { id: "scoped", username: "scoped", email: "scoped@test.local", firstName: "Scoped", lastName: "User", isAdmin: false, isActive: true, createdAt: "", updatedAt: "", lastLoginAt: null },
+    user: { id: "scoped", username: "scoped", email: "scoped@test.local", displayName: null, firstName: "Scoped", lastName: "User", isAdmin: false, isActive: true, createdAt: "", updatedAt: "", lastLoginAt: null },
   });
 }
 

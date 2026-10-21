@@ -36,6 +36,7 @@ describe('AuthManager', () => {
     id: 'user-123',
     username: 'testuser',
     email: 'test@example.com',
+    displayName: null,
     firstName: 'Test',
     lastName: 'User',
     isActive: true,

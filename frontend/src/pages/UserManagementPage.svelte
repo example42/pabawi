@@ -11,7 +11,7 @@
   interface UserDTO {
     id: string;
     username: string;
-    email: string;
+    email: string | null;
     firstName: string;
     lastName: string;
     isActive: boolean;
@@ -52,7 +52,7 @@
       : users.filter(
           (user) =>
             user.username.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            user.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            (user.email ?? '').toLowerCase().includes(searchQuery.toLowerCase()) ||
             user.firstName.toLowerCase().includes(searchQuery.toLowerCase()) ||
             user.lastName.toLowerCase().includes(searchQuery.toLowerCase())
         )
@@ -265,7 +265,7 @@
                     </div>
                   </td>
                   <td class="px-6 py-4 whitespace-nowrap">
-                    <div class="text-sm text-gray-900 dark:text-white">{user.email}</div>
+                    <div class="text-sm text-gray-900 dark:text-white">{user.email ?? 'Not provided'}</div>
                   </td>
                   <td class="px-6 py-4 whitespace-nowrap">
                     <div class="flex items-center gap-2">

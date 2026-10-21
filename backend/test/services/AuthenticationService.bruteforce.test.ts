@@ -3,6 +3,7 @@ import { SQLiteAdapter } from '../../src/database/SQLiteAdapter';
 import type { DatabaseAdapter } from '../../src/database/DatabaseAdapter';
 import { AuthenticationService } from '../../src/services/AuthenticationService';
 import { randomUUID } from 'crypto';
+import { initializeTestSchema } from '../helpers/schema';
 
 describe('AuthenticationService - Brute Force Protection', () => {
   let db: DatabaseAdapter;
@@ -16,117 +17,7 @@ describe('AuthenticationService - Brute Force Protection', () => {
     db = new SQLiteAdapter(':memory:');
     await db.initialize();
 
-    // Initialize schema
-    await runQuery(db, `
-      CREATE TABLE users (
-        id TEXT PRIMARY KEY,
-        username TEXT NOT NULL UNIQUE,
-        email TEXT NOT NULL UNIQUE,
-        password_hash TEXT NOT NULL,
-        session_version TEXT NOT NULL DEFAULT '0',
-        first_name TEXT NOT NULL,
-        last_name TEXT NOT NULL,
-        is_active INTEGER NOT NULL DEFAULT 1,
-        is_admin INTEGER NOT NULL DEFAULT 0,
-        created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL,
-        last_login_at TEXT
-      )
-    `);
-
-    await runQuery(db, `
-      CREATE TABLE roles (
-        id TEXT PRIMARY KEY,
-        name TEXT NOT NULL UNIQUE,
-        description TEXT NOT NULL,
-        is_built_in INTEGER NOT NULL DEFAULT 0,
-        created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL
-      )
-    `);
-
-    await runQuery(db, `
-      CREATE TABLE user_roles (
-        user_id TEXT NOT NULL,
-        role_id TEXT NOT NULL,
-        assigned_at TEXT NOT NULL,
-        PRIMARY KEY (user_id, role_id)
-      )
-    `);
-
-    await runQuery(db, `
-      CREATE TABLE group_roles (
-        group_id TEXT NOT NULL,
-        role_id TEXT NOT NULL,
-        assigned_at TEXT NOT NULL,
-        PRIMARY KEY (group_id, role_id)
-      )
-    `);
-
-    await runQuery(db, `
-      CREATE TABLE user_groups (
-        user_id TEXT NOT NULL,
-        group_id TEXT NOT NULL,
-        assigned_at TEXT NOT NULL,
-        PRIMARY KEY (user_id, group_id)
-      )
-    `);
-
-    await runQuery(db, `
-      CREATE TABLE revoked_tokens (
-        token TEXT PRIMARY KEY,
-        user_id TEXT NOT NULL,
-        revoked_at TEXT NOT NULL,
-        expires_at TEXT NOT NULL
-      )
-    `);
-
-    // Create brute force protection tables
-    await runQuery(db, `
-      CREATE TABLE failed_login_attempts (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        username TEXT NOT NULL,
-        attempted_at TEXT NOT NULL,
-        ip_address TEXT,
-        reason TEXT
-      )
-    `);
-
-    await runQuery(db, `
-      CREATE TABLE account_lockouts (
-        username TEXT PRIMARY KEY,
-        lockout_type TEXT NOT NULL,
-        locked_at TEXT NOT NULL,
-        locked_until TEXT,
-        failed_attempts INTEGER NOT NULL DEFAULT 0,
-        last_attempt_at TEXT
-      )
-    `);
-
-    await runQuery(db, `
-      CREATE TABLE login_attempt_counters (
-        username TEXT PRIMARY KEY,
-        cumulative_failed_attempts INTEGER NOT NULL DEFAULT 0,
-        last_failed_at TEXT
-      )
-    `);
-
-    await runQuery(db, `
-      CREATE TABLE config (
-        key TEXT PRIMARY KEY,
-        value TEXT NOT NULL,
-        updated_at TEXT NOT NULL
-      )
-    `);
-
-    await runQuery(db, `
-      INSERT INTO config (key, value, updated_at) VALUES
-        ('allow_self_registration', 'false', datetime('now')),
-        ('default_new_user_role', 'role-viewer-001', datetime('now'))
-    `);
-
-    // Create test user
-    await db.execute('CREATE VIEW effective_user_roles AS SELECT user_id, role_id FROM user_roles');
+    await initializeTestSchema(db);
 
     authService = new AuthenticationService(db, 'test-secret-key-for-route-tests-32chars');
     const passwordHash = await authService.hashPassword(testPassword);

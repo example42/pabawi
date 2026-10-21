@@ -4848,6 +4848,15 @@ components:
         user:
           type: object
           description: User DTO, excludes password hash
+          properties:
+            email:
+              type: string
+              nullable: true
+              description: Contact email, not an identity key. May be shared by external accounts.
+            displayName:
+              type: string
+              nullable: true
+              description: Directory display name when available, separate from given name and surname.
       required:
       - token
       - refreshToken

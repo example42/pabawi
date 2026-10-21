@@ -30,7 +30,7 @@
   interface UserDetailDTO {
     id: string;
     username: string;
-    email: string;
+    email: string | null;
     firstName: string;
     lastName: string;
     isActive: boolean;
@@ -346,7 +346,7 @@
                   </div>
                   <div>
                     <dt class="text-xs font-medium text-gray-500 dark:text-gray-400">Email</dt>
-                    <dd class="mt-1 text-sm text-gray-900 dark:text-white">{user.email}</dd>
+                    <dd class="mt-1 text-sm text-gray-900 dark:text-white">{user.email ?? 'Not provided'}</dd>
                   </div>
                   <div>
                     <dt class="text-xs font-medium text-gray-500 dark:text-gray-400">First Name</dt>

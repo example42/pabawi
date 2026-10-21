@@ -37,7 +37,8 @@ export interface TokenPayload {
 export interface UserDTO {
   id: string;
   username: string;
-  email: string;
+  email: string | null;
+  displayName: string | null;
   firstName: string;
   lastName: string;
   isActive: boolean;
@@ -53,8 +54,9 @@ export interface UserDTO {
 interface User {
   id: string;
   username: string;
-  email: string;
-  passwordHash: string;
+  email: string | null;
+  displayName: string | null;
+  passwordHash: string | null;
   sessionVersion: string;
   firstName: string;
   lastName: string;
@@ -513,8 +515,8 @@ export class AuthenticationService {
    * @param hash - Bcrypt hash
    * @returns True if password matches hash
    */
-  public async comparePassword(password: string, hash: string): Promise<boolean> {
-    return bcrypt.compare(password, hash);
+  public async comparePassword(password: string, hash: string | null): Promise<boolean> {
+    return hash === null ? false : bcrypt.compare(password, hash);
   }
 
   /**
@@ -524,7 +526,7 @@ export class AuthenticationService {
    * @param hash - Bcrypt hash
    * @returns True if password matches hash
    */
-  public async verifyPassword(password: string, hash: string): Promise<boolean> {
+  public async verifyPassword(password: string, hash: string | null): Promise<boolean> {
     return this.comparePassword(password, hash);
   }
 
@@ -631,6 +633,7 @@ export class AuthenticationService {
     return this.db.queryOne<User>(
       `SELECT id, username, email,
               password_hash AS "passwordHash",
+              display_name AS "displayName",
               session_version AS "sessionVersion",
               first_name    AS "firstName",
               last_name     AS "lastName",
@@ -639,7 +642,7 @@ export class AuthenticationService {
               created_at    AS "createdAt",
               updated_at    AS "updatedAt",
               last_login_at AS "lastLoginAt"
-         FROM users WHERE username = ?`,
+         FROM users WHERE username = ? AND local_auth_enabled = 1`,
       [username]
     );
   }
@@ -651,6 +654,7 @@ export class AuthenticationService {
     return this.db.queryOne<User>(
       `SELECT id, username, email,
               password_hash AS "passwordHash",
+              display_name AS "displayName",
               session_version AS "sessionVersion",
               first_name    AS "firstName",
               last_name     AS "lastName",
@@ -1018,6 +1022,7 @@ export class AuthenticationService {
       id: user.id,
       username: user.username,
       email: user.email,
+      displayName: user.displayName,
       firstName: user.firstName,
       lastName: user.lastName,
       isActive: user.isActive === 1,
