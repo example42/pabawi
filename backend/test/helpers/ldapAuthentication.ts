@@ -17,11 +17,10 @@ export const ldapResult: LdapDirectoryResult = { user: { subject: '00112233-4455
   dn: 'uid=a,dc=example,dc=test', loginName: 'a', displayName: 'Directory A', email: null, firstName: '', lastName: '' },
 groupSubjects: [ldapGroup] };
 
-export async function createLdapTestContext() {
+export async function createLdapTestContext(database = new DatabaseService(':memory:')) {
   vi.stubEnv('JWT_SECRET', 'ldap-http-fixture-signing-secret-key');
   vi.stubEnv('LDAP_ENABLED', 'false');
   vi.stubEnv('ENTRA_ID_ENABLED', 'false');
-  const database = new DatabaseService(':memory:');
   await database.initialize();
   const db = database.getAdapter();
   const container = createDefaultContainer();

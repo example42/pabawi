@@ -83,6 +83,27 @@ for (const dialect of ['sqlite', 'postgres'] as const) {
       }
     });
 
+
+    it('counts local and provider-scoped LDAP failures and applies temporary lockout on both adapters', async () => {
+      const { user } = await fixture();
+      for (let attempt = 0; attempt < 5; attempt++) {
+        expect((await auth.authenticate(user.username, 'incorrect')).success).toBe(false);
+        await auth.recordLdapLoginOutcome('directory', user.username, false);
+      }
+      expect((await auth.authenticate(user.username, password)).error).toMatch(/temporarily locked/i);
+      expect(await auth.isLdapLoginLocked('directory', user.username)).toBe(true);
+      expect(await auth.isLdapLoginLocked('another-directory', user.username)).toBe(false);
+      expect(await auth.isLdapLoginLocked('directory', 'another-user')).toBe(false);
+      const counters = await db.query<{ username: string; cumulative_failed_attempts: number }>(
+        'SELECT username, cumulative_failed_attempts FROM login_attempt_counters');
+      expect(counters).toHaveLength(2);
+      expect(counters.find(row => row.username === user.username)?.cumulative_failed_attempts).toBe(6);
+      expect(counters.find(row => row.username !== user.username)?.cumulative_failed_attempts).toBe(5);
+      await auth.recordLdapLoginOutcome('directory', user.username, true);
+      expect(await auth.isLdapLoginLocked('directory', user.username)).toBe(false);
+      expect((await auth.authenticate(user.username, password)).success).toBe(false);
+    });
+
     it('rejects signed malformed, legacy, mismatched and premature LDAP context for access and refresh', async () => {
       const { user, context } = await fixture();
       const pair = await auth.generateTokenPair(user, context);

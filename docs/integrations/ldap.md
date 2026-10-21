@@ -7,8 +7,8 @@ A rejected LDAP attempt stays on LDAP and never tries another provider.
 
 Real OpenLDAP fixtures cover LDAPS and StartTLS. AD policy and GUID handling have
 service-level coverage, but real AD interoperability remains unverified. The AD example
-is not support certification. Release review must also resolve the recorded maintenance
-concern for the decommissioned DN-parser dependency.
+is not support certification. DN parsing is project-owned, with bounded syntax and scope
+regressions described below. The decommissioned parser dependency has been removed.
 
 ## Configuration
 
@@ -97,6 +97,14 @@ Failover retries known transient connection-establishment failures within one de
 Certificate failures and rejected lookup credentials stop the transaction. A rejected
 user bind never replays the password to another endpoint. Referrals, aliases and partial
 searches cannot establish authorization.
+
+
+DNs use a bounded project-owned RFC 4514 parser. Attribute descriptors compare without case;
+values remain exact for client-side scope/locator checks. Use the directory's rendered value
+casing for configured bases. Multi-valued RDN order and equivalent escaped UTF-8 octets are
+handled structurally. BER hex values remain opaque; only complete definite-length values with
+single-octet tags are accepted. Unknown schema matching rules, OID aliases and value case folding
+are never guessed. Unsupported or malformed encodings fail closed.
 
 Direct membership is the default. OpenLDAP supports DN-valued
 `groupOfUniqueNames/uniqueMember` and `groupOfNames/member`. Override both
@@ -210,3 +218,69 @@ do not establish provider interoperability.
 The [OpenLDAP fixture](../../backend/test/fixtures/ldap/README.md) documents live directory
 checks. The [implementation plan](../internal/plans/ldap-authentication.md) tracks full
 acceptance and release blockers.
+
+### Staged upgrade procedure
+
+The current acceptance evidence covers disposable SQLite/PostgreSQL upgrades, live OpenLDAP in both
+TLS modes, and local browser/transport fixtures. The [release acceptance report](../internal/plans/ldap-acceptance.md)
+lists the remaining real AD gates. Complete those gates before releasing LDAP support.
+
+1. Verify an emergency local administrator and record the current artifact/configuration versions.
+   Take a consistent database backup and retain the matching configuration through the existing secret
+   boundary. With SQLite, include committed WAL contents using a database-aware backup or stop all
+   writers before copying. Rehearse restoration into a separate staging database.
+2. Stop every old backend worker before starting the candidate. Database migrations run automatically
+   during `DatabaseService.initialize()`, before LDAP authentication routes are mounted. Start one
+   candidate worker against the staging database and check migration success through 034. Never mix old
+   and new schema consumers or edit recorded migration checksums.
+3. Confirm preserved local/Entra users, explicit enrollments, manual roles and external grant sources.
+   Confirm pre-upgrade access and refresh tokens require reauthentication, then verify new local login.
+   A failed migration must keep the candidate out of service; restore the backup and matching old
+   artifact together if abandoning the upgrade.
+4. Supply the directory configuration and public CA bundle, retaining its stable directory ID.
+   Start candidate workers with identical configuration. Restricted diagnostics must prove lookup,
+   identity, policy and selected membership visibility. A passing diagnostic does not prove a user bind.
+5. Perform a synthetic password login with no role and verify 403 without tokens. Grant a manual or
+   mapped role, log in again, refresh, and exercise each deployed transport. Observe mapping withdrawal,
+   positive policy denial and terminal rejection of old sessions after recovery. Test connection
+   failover only between equivalent configured endpoints.
+6. In the isolated staging directory, interrupt availability through the original freshness deadline.
+   Check temporary 503/429 behavior, unchanged freshness, local emergency access and recovery of
+   otherwise valid sessions. Keep real infrastructure operations out of this rehearsal.
+7. After the remaining release gates pass, follow the normal deployment change process with the
+   retained backup and rollback pair. Keep configuration changes coordinated across workers and
+   repeat local/directory login and restricted diagnostics after restart.
+
+The automated fixture covers account/mapping/policy transitions, actual LDAP transport outages,
+and populated backup/restore/re-upgrade on both adapters in this procedure. Environment-specific backup restoration and actual deployment still require a staging
+rehearsal; no production rollout is implied by passing the fixture.
+
+### Rehearsed database backup and restore
+
+The local recovery suite now exercises populated migration-030 databases through migration 034,
+restarts the candidate without repeated invalidation, rolls back a failed candidate migration,
+restores the original backup and repeats the upgrade on both adapters. It checks local login,
+Entra-bound token issuance/rotation, roles, explicit enrollments, group membership and audit links.
+This is a local rehearsal; validate storage, secrets and service management in your deployment environment.
+
+For SQLite, the rehearsal keeps committed changes in a nonempty WAL and uses a consistent live backup:
+
+~~~sql
+VACUUM INTO '/secure-backups/pabawi-before-ldap.db';
+~~~
+
+Run this against the source database with an unused backup filename. A completed backup includes
+committed WAL contents. Do not copy only the main file while writers are active. Retain the backup
+unchanged and restore a copy to a separate database path before testing startup.
+
+For PostgreSQL, use matching-version tools and restore into a newly created empty database:
+
+~~~bash
+pg_dump --format=custom --no-owner --file=pabawi-before-ldap.dump "$DATABASE_URL"
+pg_restore --exit-on-error --single-transaction --no-owner --dbname="$RESTORE_DATABASE_URL" pabawi-before-ldap.dump
+~~~
+
+The automated rehearsal runs those tools inside its isolated PostgreSQL container. Rollback restores
+the matching database/configuration/artifact set; it does not run down migrations or edit checksums.
+See the [fixture runner](../../backend/test/fixtures/ldap/README.md#reproducible-acceptance-runner)
+for the observed local procedure and retained evidence.

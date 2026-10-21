@@ -2,7 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import request from 'supertest';
 import { once } from 'node:events';
 import { WebSocket, WebSocketServer } from 'ws';
-import { createLdapTestContext, deferred, ldapPassword, ldapResult } from '../helpers/ldapAuthentication';
+import { deferred, ldapResult } from '../helpers/ldapAuthentication';
+import { createLdapTransportContext, liveDirectoryReady } from '../helpers/ldapTransport';
 import { createHttpHarness, type HttpHarness } from '../helpers/httpHarness';
 import { LdapDirectoryError } from '../../src/services/LdapDirectoryService';
 import type { LdapDirectoryResult } from '../../src/services/LdapDirectoryService';
@@ -28,27 +29,30 @@ const initialize = { jsonrpc: '2.0', id: 1, method: 'initialize', params: {
   protocolVersion: '2025-03-26', capabilities: {}, clientInfo: { name: 'ldap-test', version: '1' },
 } };
 
-describe('LDAP protected delivery across transports', () => {
-  let ctx: Awaited<ReturnType<typeof createLdapTestContext>>;
+for (const [mode, dialect] of [['synthetic', 'sqlite'], ['ldaps', 'sqlite'], ['starttls', 'sqlite'], ['ldaps', 'postgres'], ['starttls', 'postgres']] as const) {
+describe.skipIf((mode !== 'synthetic' && !liveDirectoryReady) || (dialect === 'postgres' && !process.env.TEST_DATABASE_URL))('LDAP protected delivery across transports: ' + dialect + '/' + mode, () => {
+  let ctx: Awaited<ReturnType<typeof createLdapTransportContext>>;
   let harness: HttpHarness;
   let pair: { token: string; refreshToken: string; user: { id: string } };
   let cleanup: (() => void | Promise<void>)[];
 
   beforeEach(async () => {
-    ctx = await createLdapTestContext();
+    ctx = await createLdapTransportContext(mode, dialect);
     harness = await createHttpHarness();
     harness.use(ctx.app);
     // Administrative authority still requires an explicit LDAP/manual role.
-    const proof = await ctx.ldap.authenticate('a', ldapPassword);
+    const proof = await ctx.ldap.authenticate(ctx.loginName, ctx.loginPassword);
     await ctx.users.updateUser(proof.user.id, { isAdmin: true });
-    pair = (await request(harness.use(ctx.app)).post('/api/auth/ldap/login').send({ username: 'a', password: ldapPassword }).expect(200)).body;
+    pair = (await request(harness.use(ctx.app)).post('/api/auth/ldap/login').send({ username: ctx.loginName, password: ctx.loginPassword }).expect(200)).body;
     cleanup = [];
   });
   afterEach(async () => {
     vi.useRealTimers();
     for (const close of cleanup.reverse()) await close();
     await harness.close();
+    await ctx.live?.close();
     await ctx.database.close();
+    await ctx.releaseDatabase();
     vi.restoreAllMocks();
     vi.unstubAllEnvs();
   });
@@ -67,6 +71,25 @@ describe('LDAP protected delivery across transports', () => {
     } };
   }
 
+  it('REST and refresh fail without extending freshness during an outage, retain retryable credentials and recover independently of local login', async () => {
+    const before = await ctx.db.queryOne('SELECT * FROM ldap_validation_state');
+    if (ctx.live) ctx.live.outage(true);
+    else ctx.directory.revalidate.mockRejectedValue(new LdapDirectoryError('UNAVAILABLE'));
+    const server = harness.use(ctx.app);
+    await request(server).post('/api/auth/refresh').send({ refreshToken: pair.refreshToken }).expect(503);
+    expect(await ctx.db.queryOne('SELECT * FROM ldap_validation_state')).toEqual(before);
+    await request(server).get('/protected').set('Authorization', 'Bearer ' + pair.token).expect(200);
+    await expire();
+    const expired = await ctx.db.queryOne('SELECT * FROM ldap_validation_state');
+    await request(server).get('/protected').set('Authorization', 'Bearer ' + pair.token).expect(503);
+    expect(await ctx.db.queryOne('SELECT * FROM ldap_validation_state')).toEqual(expired);
+    await request(server).post('/api/auth/login').send({ username: 'administrator', password: 'LocalTest123!' }).expect(200); // pragma: allowlist secret
+    if (ctx.live) ctx.live.outage(false);
+    else ctx.directory.revalidate.mockResolvedValue(ldapResult);
+    await request(server).get('/protected').set('Authorization', 'Bearer ' + pair.token).expect(200);
+    await request(server).post('/api/auth/refresh').send({ refreshToken: pair.refreshToken }).expect(200);
+  });
+
   it('execution SSE stops output while revalidation is pending and closes without protected delivery on failure', async () => {
     const streaming = new StreamingExecutionManager();
     cleanup.push(() => { streaming.cleanup(); });
@@ -74,11 +97,13 @@ describe('LDAP protected delivery across transports', () => {
     const stream = await openEvents('/events');
     await stream.read();
     const pending = deferred<LdapDirectoryResult>();
-    ctx.directory.revalidate.mockReturnValueOnce(pending.promise);
+    if (ctx.live) ctx.live.pause();
+    else ctx.directory.revalidate.mockReturnValueOnce(pending.promise);
     await expire();
     streaming.emit('execution', { type: 'stdout', data: 'protected-output' });
     await vi.waitFor(() => expect(ctx.directory.revalidate).toHaveBeenCalledOnce());
-    pending.reject(new LdapDirectoryError('UNAVAILABLE'));
+    if (ctx.live) ctx.live.outage(true);
+    else pending.reject(new LdapDirectoryError('UNAVAILABLE'));
     expect(await stream.read()).toBeNull();
   });
 
@@ -90,7 +115,8 @@ describe('LDAP protected delivery across transports', () => {
     const stream = await openEvents('/idle');
     await stream.read();
     await expire();
-    ctx.directory.revalidate.mockRejectedValueOnce(new LdapDirectoryError('INELIGIBLE'));
+    if (ctx.live) await ctx.live.setEligible(false);
+    else ctx.directory.revalidate.mockRejectedValueOnce(new LdapDirectoryError('INELIGIBLE'));
     await vi.advanceTimersByTimeAsync(1000);
     expect(await stream.read()).toBeNull();
     await expect(ctx.auth.verifyToken(pair.token)).rejects.toThrow();
@@ -104,7 +130,8 @@ describe('LDAP protected delivery across transports', () => {
     const stream = await openEvents(path + '?source=system');
     expect(await stream.read()).toContain('event: init');
     await expire();
-    ctx.directory.revalidate.mockRejectedValueOnce(new LdapDirectoryError('UNAVAILABLE'));
+    if (ctx.live) ctx.live.outage(true);
+    else ctx.directory.revalidate.mockRejectedValueOnce(new LdapDirectoryError('UNAVAILABLE'));
     pending.resolve([{ summary: 'protected-journal-data' } as JournalEntry]);
     expect(await stream.read()).toBeNull();
   });
@@ -126,7 +153,8 @@ describe('LDAP protected delivery across transports', () => {
       .set('mcp-session-id', session).send({ jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'inventory_list', arguments: {} } }).then(response => response);
     await vi.waitFor(() => expect(query).toHaveBeenCalledOnce());
     await expire();
-    ctx.directory.revalidate.mockRejectedValue(new LdapDirectoryError('UNAVAILABLE'));
+    if (ctx.live) ctx.live.outage(true);
+    else ctx.directory.revalidate.mockRejectedValue(new LdapDirectoryError('UNAVAILABLE'));
     pending.resolve({ nodes: [{ id: 'protected-node', name: 'protected-node', source: 'ssh' }], groups: [], sources: {} } as Awaited<ReturnType<IntegrationManager['getAggregatedInventory']>>);
     const response = await output;
     expect(response.text).not.toContain('protected-node');
@@ -164,14 +192,16 @@ describe('LDAP protected delivery across transports', () => {
     const sent = vi.fn(); const received = vi.fn();
     peer.on('message', received); ws.on('message', sent);
     await expire();
-    ctx.directory.revalidate.mockRejectedValue(new LdapDirectoryError('UNAVAILABLE'));
+    if (ctx.live) ctx.live.outage(true);
+    else ctx.directory.revalidate.mockRejectedValue(new LdapDirectoryError('UNAVAILABLE'));
     const closed = once(ws, 'close');
     peer.send('protected-upstream'); ws.send('protected-client');
     await closed;
     expect(sent).not.toHaveBeenCalled();
     expect(received).not.toHaveBeenCalled();
     // A transient failure closes this relay but does not rotate account tokens.
-    ctx.directory.revalidate.mockResolvedValue(ldapResult);
+    if (ctx.live) ctx.live.outage(false);
+    else ctx.directory.revalidate.mockResolvedValue(ldapResult);
     await expect(ctx.auth.verifyToken(pair.token)).resolves.toMatchObject({ authContext: { provider: 'ldap' } });
 
     const second = await request(harness.use(ctx.app)).post('/api/console/sessions').set('Authorization', `Bearer ${pair.token}`)
@@ -184,7 +214,8 @@ describe('LDAP protected delivery across transports', () => {
     await new Promise(resolve => setTimeout(resolve, 30));
     const idleClosed = once(idle, 'close');
     await expire();
-    ctx.directory.revalidate.mockRejectedValue(new LdapDirectoryError('INELIGIBLE'));
+    if (ctx.live) await ctx.live.setEligible(false);
+    else ctx.directory.revalidate.mockRejectedValue(new LdapDirectoryError('INELIGIBLE'));
     await idleClosed;
     await expect(ctx.auth.verifyToken(pair.token)).rejects.toThrow();
   });
@@ -197,9 +228,12 @@ describe('LDAP protected delivery across transports', () => {
     const reservation = await manager.reserveSession({ userId: pair.user.id, nodeId: 'node', provider: 'proxmox', transport: 'websocket-vnc',
       authContext: payload.authContext, sessionVersion: payload.sessionVersion });
     await expire();
-    ctx.directory.revalidate.mockRejectedValueOnce(new LdapDirectoryError('INELIGIBLE'));
+    if (ctx.live) await ctx.live.setEligible(false);
+    else ctx.directory.revalidate.mockRejectedValueOnce(new LdapDirectoryError('INELIGIBLE'));
     await expect(manager.claimTokenForUpgrade(reservation.token)).rejects.toMatchObject({ code: 'DENIED' });
     expect(await manager.claimTokenForUpgrade(reservation.token)).toBeNull();
     expect(await ctx.db.queryOne('SELECT token_consumed FROM console_sessions')).toEqual({ token_consumed: 1 });
   });
 });
+
+}

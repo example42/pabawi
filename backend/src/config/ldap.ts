@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { isIP } from 'node:net';
 import { X509Certificate } from 'node:crypto';
-import { DN } from '@ldapjs/dn';
+import { parseLdapDn } from './ldapDn';
 import { parseLdapFilter } from './ldapFilter';
 import { z } from 'zod';
 
@@ -11,7 +11,7 @@ const hostname = z.string().max(253).refine(value =>
   value.split('.').every(label => /^[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?$/.test(label)),
 'Must be an FQDN without protocol, credentials or path');
 const dn = z.string().max(8192).refine(value => {
-  try { return !DN.fromString(value).isEmpty(); } catch { return false; }
+  try { return parseLdapDn(value).length > 0; } catch { return false; }
 }, 'Must be a nonempty LDAP DN');
 const relativeDn = z.union([z.literal(''), dn]);
 const filter = z.string().max(8192).refine(value => {

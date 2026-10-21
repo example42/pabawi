@@ -900,7 +900,7 @@ export class AuthenticationService {
           `INSERT INTO login_attempt_counters (username, cumulative_failed_attempts, last_failed_at)
            VALUES (?, 1, ?)
            ON CONFLICT(username) DO UPDATE SET
-             cumulative_failed_attempts = cumulative_failed_attempts + 1,
+             cumulative_failed_attempts = login_attempt_counters.cumulative_failed_attempts + 1,
              last_failed_at = excluded.last_failed_at`,
           [username, timestamp]
         );
