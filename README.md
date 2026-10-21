@@ -103,6 +103,7 @@ Full reference: [Configuration Guide](docs/configuration.md). Architecture and c
 ## The usuals
 
 - **Documentation:** [User Guide](docs/user-guide.md) · [Architecture](docs/architecture.md) · [API Reference](docs/api.md) · [Permissions & RBAC](docs/permissions-rbac.md) · [MCP Server](docs/mcp.md)
+- **Locked out?** Reset a local password from the shell: `npm run reset-password --workspace=backend -- --username admin` ([details](docs/troubleshooting.md#reset-a-local-users-password-account-recovery))
 - **Troubleshooting:** [Troubleshooting Guide](docs/troubleshooting.md) — for help beyond that, enable expert mode for diagnostics and [open a GitHub issue](https://github.com/example42/pabawi/issues) with version info, sanitized config, and reproduction steps
 - **Development & contributing:** [Development Guide](docs/development.md)
 - **Version history:** [CHANGELOG](CHANGELOG.md)

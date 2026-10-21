@@ -245,6 +245,28 @@ color: false
 | "JWT malformed" | Token expired or tampered. Log out and log in again |
 | No login prompt | Check whether a valid session is already stored. REST authentication is mandatory; test an API call without Authorization to verify rejection. |
 
+### Reset a local user's password (account recovery)
+
+Run on the host that owns the database, with the same environment as the server (`backend/.env`, `JWT_SECRET`, `DATABASE_PATH` or `DATABASE_URL`):
+
+```bash
+# from a source checkout
+npm run reset-password --workspace=backend -- --username admin
+
+# built install or Docker image
+node dist/cli/reset-password.js --username admin
+docker exec -it pabawi node dist/cli/reset-password.js --username admin
+```
+
+| Flag | Effect |
+|---|---|
+| `--username <name>` | Account to reset (default `admin`) |
+| `--generate` | Generate a random password and print it once |
+| `--password-stdin` | Read the password from stdin instead of the hidden prompt |
+| `--activate` | Also reactivate a disabled account (off by default) |
+
+The password is never accepted as an argument. The command applies the normal password policy, clears lockouts and failed-login counters, revokes every issued token and refresh token for the account, and writes a `cli_password_reset` audit entry (no password included). Access to the shell and database is the trust boundary.
+
 ---
 
 ## FAQ
