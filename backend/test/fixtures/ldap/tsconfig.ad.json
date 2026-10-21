@@ -1,0 +1,6 @@
+{
+  "extends": "../../../tsconfig.json",
+  "compilerOptions": { "noEmit": true, "rootDir": "../../.." },
+  "include": ["ad-lab.ts", "../../../src/types/node-tls.d.ts"],
+  "exclude": []
+}
