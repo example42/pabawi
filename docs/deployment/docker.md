@@ -56,6 +56,25 @@ docker buildx build --platform linux/amd64,linux/arm64 --target core -t pabawi:c
 docker buildx build --platform linux/amd64,linux/arm64 --target batteries -t pabawi:batteries .
 ```
 
+## Publishing Releases
+
+The tag-triggered workflow publishes both profiles to GHCR and Docker Hub.
+It authenticates to both registries before building, then requires smoke tests
+and the vulnerability scan to pass before pushing any image.
+
+Configure these repository secrets under **Settings > Secrets and variables >
+Actions**:
+
+- `DOCKERHUB_USERNAME`: the Docker ID that owns the token and has write access
+  to `example42/pabawi`.
+- `DOCKERHUB_TOKEN`: a valid Docker Hub personal access token with Read & Write
+  permission, created by that same Docker ID.
+
+GHCR uses the workflow's automatic `GITHUB_TOKEN`. A Docker Hub error saying
+`unauthorized: incorrect username or password` requires correcting the Docker
+Hub secrets. Rebuilding the image does not repair registry authentication.
+See [Docker Hub access tokens](https://docs.docker.com/security/access-tokens/).
+
 ## Volume Mounts
 
 All paths in `.env` must be **container paths** (under `/opt/pabawi/`), not host paths.
