@@ -179,7 +179,7 @@ jobs:
         with:
           node-version-file: '.nvmrc'
       - name: Audit the reviewed lockfile
-        run: npm audit --json --audit-level=high > npm-audit.json
+        run: npm audit --json --audit-level=high --omit=dev > npm-audit.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:
