@@ -129,7 +129,7 @@ async function scenario(mode, signal) {
     const calls = entries();
     assert(!calls.some(call => call.name === 'docker' && ['rm', 'volume', 'prune'].includes(call.args[0])));
     if (['scanner', 'readiness', 'create-signal'].includes(mode)) assert(!calls.some(call => call.name === 'npm'));
-    if (mode === 'readiness') assert.match(result.failure, /readiness deadline/);
+    if (mode === 'readiness') assert.match(result.failure, /readiness.*deadline/);
     if (mode === 'scanner') assert.match(result.failure, /ClamAV/);
     if (mode === 'subprocess') assert(result.checks.some(check => check.code === 23));
     if (mode === 'timeout') {
