@@ -98,3 +98,18 @@ test("the batteries smoke profile requires every bundled command", () => {
     assert.match(batteriesProfile, new RegExp(`\\b${command}\\b`));
   }
 });
+
+test("release CI authenticates to both registries before building", () => {
+  const buildJob = publishWorkflow.slice(
+    publishWorkflow.indexOf("  build-and-publish:"),
+    publishWorkflow.indexOf("  publish-manifest:"),
+  );
+  const build = buildJob.indexOf("      - name: Build release candidate locally");
+  const logins = [...buildJob.matchAll(/uses: docker\/login-action@v3/g)];
+
+  assert.ok(build >= 0, "missing candidate build");
+  assert.equal(logins.length, 2, "both registry logins are required");
+  for (const login of logins) {
+    assert.ok(login.index < build, "registry authentication must precede the build");
+  }
+});
