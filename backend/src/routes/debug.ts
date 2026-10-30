@@ -25,11 +25,13 @@ const FrontendLogEntrySchema = z.object({
   stackTrace: z.string().max(10000).optional(),
 });
 
+const MAX_FRONTEND_LOG_BATCH = 100;
+
 /**
  * Zod schema for frontend log batch validation
  */
 const FrontendLogBatchSchema = z.object({
-  logs: z.array(FrontendLogEntrySchema).max(100, "Too many log entries in batch (max 100)"),
+  logs: z.array(FrontendLogEntrySchema).max(MAX_FRONTEND_LOG_BATCH, `Too many log entries in batch (max ${String(MAX_FRONTEND_LOG_BATCH)})`),
   browserInfo: z.object({
     userAgent: z.string().max(500),
     language: z.string().max(50),
@@ -141,6 +143,28 @@ export function createDebugRouter(container: DIContainer): Router {
         component: 'DebugRouter',
         operation: 'receiveFrontendLogs',
       });
+
+      // The zod v3 array parser collects an issue for every invalid element even
+      // after .max() has failed, so reject oversized batches before parsing.
+      const rawLogs = (req.body as { logs?: unknown } | undefined)?.logs;
+      if (Array.isArray(rawLogs) && rawLogs.length > MAX_FRONTEND_LOG_BATCH) {
+        logger.warn('Frontend log batch too large', {
+          component: 'DebugRouter',
+          operation: 'receiveFrontendLogs',
+          metadata: { entries: rawLogs.length },
+        });
+        res.status(400).json({
+          error: {
+            code: 'INVALID_LOG_BATCH',
+            message: 'Invalid log batch format',
+            details: [{
+              path: 'logs',
+              message: `Too many log entries in batch (max ${String(MAX_FRONTEND_LOG_BATCH)})`,
+            }],
+          },
+        });
+        return;
+      }
 
       // Validate request body with Zod schema
       const parseResult = FrontendLogBatchSchema.safeParse(req.body);

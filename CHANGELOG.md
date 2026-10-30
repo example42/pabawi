@@ -9,8 +9,12 @@
 - `@azure/msal-node` is pinned to 7.1.1 through an npm override to clear
   GHSA-xcx6-jx8p-x3h5 (fixed in 7.1.0), which `@azure/identity` 4.14.0 does not
   yet allow through its own `^6.0.0` range.
-- `zod` moves to 4.6.7 to clear GHSA-mrhx-c7xc-m3w5. Backend schemas import
-  `zod/v3`, so validation behaviour is unchanged.
+- `zod` moves to 4.6.7, which patches GHSA-mrhx-c7xc-m3w5 in the v4 parser.
+  Backend schemas import `zod/v3` so request validation behaves as before;
+  the v3 parser still collects an issue per invalid array element, so request
+  size stays bounded by the 100 kb JSON body limit and the admin-only gate on
+  the routes that accept arrays. Migrating schemas to the v4 parser is tracked
+  for a later release.
 - `npm audit --omit=dev` reports no vulnerabilities.
 
 ### Fixed
