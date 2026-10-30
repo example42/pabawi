@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import * as fc from 'fast-check';
-import { ZodError } from 'zod';
+import { ZodError } from "zod/v3";
 import { AppConfigSchema } from '../../../src/config/schema';
 
 /**

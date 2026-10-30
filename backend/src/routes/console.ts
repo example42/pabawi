@@ -1,5 +1,5 @@
 import { Router, type Request, type Response } from "express";
-import { z } from "zod";
+import { z } from "zod/v3";
 
 import type { DatabaseAdapter } from "../database/DatabaseAdapter";
 import type { IntegrationManager } from "../integrations/IntegrationManager";

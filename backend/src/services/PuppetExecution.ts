@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { z } from "zod/v3";
 import { PuppetEnvironmentSchema, PuppetTagSchema } from "../validation/commonSchemas";
 import type { JournalService } from "./journal/JournalService";
 import type { CreateJournalEntry } from "./journal/types";

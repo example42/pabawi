@@ -1,6 +1,6 @@
 import { PermissionService } from "../services/PermissionService";
 import { Router, type Request, type Response } from "express";
-import { z } from "zod";
+import { z } from "zod/v3";
 import { asyncHandler } from "./asyncHandler";
 import { FederatedAccountError, UserService } from "../services/UserService";
 import { SetupService } from "../services/SetupService";
@@ -16,7 +16,7 @@ import {
   isDuplicateError,
   extractDuplicateField
 } from "../utils/errorHandling";
-import { ZodError } from "zod";
+import { ZodError } from "zod/v3";
 import { createAuthMiddleware } from "../middleware/authMiddleware";
 import { type DIContainer, createDefaultContainer, resolveAuthenticationService } from "../container/DIContainer";
 import type { EntraIdService } from "../services/EntraIdService";

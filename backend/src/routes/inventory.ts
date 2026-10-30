@@ -1,5 +1,5 @@
 import { Router, type Request, type Response, type RequestHandler } from "express";
-import { z } from "zod";
+import { z } from "zod/v3";
 import type { BoltService } from "../integrations/bolt/BoltService";
 import {
   BoltInventoryNotFoundError,

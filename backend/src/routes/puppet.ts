@@ -1,7 +1,7 @@
 import { PuppetRunBodySchema, type PuppetRunBody } from "../services/PuppetExecution";
 import type { PermissionMiddlewareFactory } from "../middleware/routeAuthorization";
 import { Router, type Request, type Response, type RequestHandler } from "express";
-import { z } from "zod";
+import { z } from "zod/v3";
 import type { ExecutionTool } from "../database/ExecutionRepository";
 import { type ExecutionService, ExecutionLifecycleError, type ExecutionSubmission } from "../services/ExecutionService";
 import { ExecutionQueueFullError } from "../services/ExecutionQueue";

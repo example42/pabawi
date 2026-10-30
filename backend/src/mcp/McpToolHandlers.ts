@@ -13,7 +13,7 @@ import { redactText } from '../shared/diagnosticRedaction';
  * Requirements: 11–18, 19.1–19.4, 14.1–14.6
  */
 
-import { z } from 'zod';
+import { z } from "zod/v3";
 import type { McpDependencies, McpServerInstance } from './McpServer';
 import { TOOL_PERMISSIONS } from './McpServer';
 import {

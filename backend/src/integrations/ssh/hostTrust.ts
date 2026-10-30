@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
-import { z } from 'zod';
+import { z } from "zod/v3";
 
 const fingerprintMap = z.record(z.array(z.string().regex(/^SHA256:[A-Za-z0-9+/]{43}$/)).min(1));
 

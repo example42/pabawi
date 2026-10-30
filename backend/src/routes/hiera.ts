@@ -7,7 +7,7 @@
  */
 
 import { Router, type Request, type Response } from "express";
-import { z } from "zod";
+import { z } from "zod/v3";
 import type { IntegrationManager } from "../integrations/IntegrationManager";
 import type { HieraPlugin } from "../integrations/hiera/HieraPlugin";
 import {

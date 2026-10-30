@@ -7,7 +7,7 @@ import type { PermissionMiddlewareFactory } from "../middleware/routeAuthorizati
  */
 
 import { Router, type Request, type Response } from "express";
-import { z } from "zod";
+import { z } from "zod/v3";
 import { asyncHandler } from "./asyncHandler";
 import type { PuppetRunHistoryService } from "../services/PuppetRunHistoryService";
 import { NodeIdParamSchema } from "../validation/commonSchemas";

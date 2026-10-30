@@ -1,5 +1,5 @@
 import { Router, type Request, type Response } from "express";
-import { z } from "zod";
+import { z } from "zod/v3";
 import { type ExecutionService, ExecutionLifecycleError } from "../services/ExecutionService";
 import { ExecutionQueueFullError } from "../services/ExecutionQueue";
 import type { BoltCommandWhitelistService } from "../validation/CommandWhitelistService";

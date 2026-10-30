@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { z } from "zod/v3";
 
 /**
  * Regex for valid hostnames, IPs, and Bolt target URIs.

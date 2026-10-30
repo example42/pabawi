@@ -1,6 +1,6 @@
 {
   "name": "pabawi",
-  "version": "1.6.0",
+  "version": "1.6.1",
   "description": "Pabawi - Web interface for Bolt automation tool",
   "private": true,
   "workspaces": [
@@ -44,7 +44,8 @@
   "overrides": {
     "tar": "7.5.22",
     "brace-expansion": "1.1.18",
-    "smol-toml": "1.8.0"
+    "smol-toml": "1.8.0",
+    "@azure/msal-node": "7.1.1"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",

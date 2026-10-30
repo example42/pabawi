@@ -12,7 +12,7 @@ import { describe, it, expect, vi, beforeEach, afterEach, beforeAll, afterAll } 
 import express, { type Express } from "express";
 import request from "supertest";
 import { createHttpHarness, type HttpHarness } from "../helpers/httpHarness";
-import { z } from "zod";
+import { z } from "zod/v3";
 import { AppConfigSchema, type WhitelistConfig } from "../../src/config/schema";
 import { BoltCommandWhitelistService } from "../../src/validation/CommandWhitelistService";
 import {

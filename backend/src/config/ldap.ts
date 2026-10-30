@@ -3,7 +3,7 @@ import { isIP } from 'node:net';
 import { X509Certificate } from 'node:crypto';
 import { parseLdapDn } from './ldapDn';
 import { parseLdapFilter } from './ldapFilter';
-import { z } from 'zod';
+import { z } from "zod/v3";
 
 const attribute = z.string().regex(/^(?:[a-zA-Z][a-zA-Z0-9-]*|[0-9]+(?:\.[0-9]+)+)$/);
 const hostname = z.string().max(253).refine(value =>

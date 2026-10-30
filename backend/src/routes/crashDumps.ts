@@ -9,7 +9,7 @@ import { readDiagnosticFile, retainedDiagnosticFiles } from "../utils/diagnostic
 import { Router, type Request, type Response } from "express";
 import fs from "node:fs";
 import path from "node:path";
-import { z } from "zod";
+import { z } from "zod/v3";
 import { asyncHandler } from "./asyncHandler";
 import type { DIContainer } from "../container/DIContainer";
 

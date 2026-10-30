@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
 import { Router, type Request, type Response } from "express";
-import { z } from "zod";
+import { z } from "zod/v3";
 import { asyncHandler } from "./asyncHandler";
 import { type EntraIdService, EntraIdError, ENTRA_ID_ERROR_CODES } from "../services/EntraIdService";
 import type { DatabaseService } from "../database/DatabaseService";

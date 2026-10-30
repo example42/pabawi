@@ -1,5 +1,34 @@
 # Changelog
 
+## [1.6.1] - 2026-10-29
+
+### Security
+
+- Dependency refresh in the reviewed lockfile (`@azure/identity` 4.14.0,
+  `body-parser` 2.4.0 and 1.20.9, `fast-uri`, `iconv-lite` and others).
+- `@azure/msal-node` is pinned to 7.1.1 through an npm override to clear
+  GHSA-xcx6-jx8p-x3h5 (fixed in 7.1.0), which `@azure/identity` 4.14.0 does not
+  yet allow through its own `^6.0.0` range.
+- `zod` moves to 4.6.7 to clear GHSA-mrhx-c7xc-m3w5. Backend schemas import
+  `zod/v3`, so validation behaviour is unchanged.
+- `npm audit --omit=dev` reports no vulnerabilities.
+
+### Fixed
+
+- Version metadata is consistent across the packages, lockfile, OpenAPI
+  document, Helm chart, image labels, health endpoint and UI header.
+
+### Release process
+
+- Release images are tagged only `<version>`, `latest`, `batteries-<version>`
+  and `batteries`. The major, minor and commit-SHA tag families are no longer
+  published; `latest` and `batteries` move only on stable releases. Pin to
+  `<version>` for reproducible deployments.
+- CI and the release workflow install the tagged tree from a `git archive`
+  export with an empty npm cache (`npm ci --ignore-scripts`). Image publishing
+  waits for this check, so a lockfile that does not install cleanly from the
+  source archive blocks the release.
+
 ## [1.6.0] - 2026-10-22
 
 ### Added

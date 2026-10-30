@@ -1,5 +1,5 @@
 import { type Request, type Response } from "express";
-import { z } from "zod";
+import { z } from "zod/v3";
 import type { ExpertModeService } from "../../services/ExpertModeService";
 import type { LoggerService } from "../../services/LoggerService";
 import type { DIContainer } from "../../container/DIContainer";

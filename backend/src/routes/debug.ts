@@ -7,7 +7,7 @@ import { redactDiagnostics } from '../shared/diagnosticRedaction';
  */
 
 import { Router, type Request, type Response } from 'express';
-import { z } from 'zod';
+import { z } from "zod/v3";
 import { asyncHandler } from './asyncHandler';
 import type { DIContainer } from '../container/DIContainer';
 

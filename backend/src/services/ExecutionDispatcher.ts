@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { z } from "zod/v3";
 import type { ExecutionRecord } from "../database/ExecutionRepository";
 import type { IntegrationManager } from "../integrations/IntegrationManager";
 import type { BoltService } from "../integrations/bolt/BoltService";
