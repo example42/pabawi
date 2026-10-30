@@ -14,7 +14,7 @@
  */
 
 import { Router, type Request, type Response } from "express";
-import { z } from "zod";
+import { z } from "zod/v3";
 import type { IntegrationManager } from "../../integrations/IntegrationManager";
 import type { CheckmkPlugin } from "../../integrations/checkmk/CheckmkPlugin";
 import type { DatabaseService } from "../../database/DatabaseService";

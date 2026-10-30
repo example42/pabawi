@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
 import { AuditLoggingService } from "../services/AuditLoggingService";
 import { Router, type Request, type Response } from "express";
-import { z } from "zod";
+import { z } from "zod/v3";
 import { asyncHandler } from "./asyncHandler";
 import { GroupService } from "../services/GroupService";
 import { PermissionService } from "../services/PermissionService";
 import type { DatabaseService } from "../database/DatabaseService";
 import { sendValidationError, ERROR_CODES } from "../utils/errorHandling";
-import { ZodError } from "zod";
+import { ZodError } from "zod/v3";
 import { createAuthMiddleware } from "../middleware/authMiddleware";
 import { createRbacMiddleware } from "../middleware/rbacMiddleware";
 import { type DIContainer, createDefaultContainer, resolveAuthenticationService } from "../container/DIContainer";

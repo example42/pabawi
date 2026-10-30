@@ -15,7 +15,24 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  verify-source-install:
+    # The tagged tree must install cleanly from an empty cache before any image
+    # is published, so the source archive is as buildable as the images.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+      - name: Install from an exported tree with a cold cache
+        run: |
+          export_dir="$(mktemp -d)"
+          git archive HEAD | tar -x -C "$export_dir"
+          cd "$export_dir"
+          npm_config_cache="$(mktemp -d)" npm ci --ignore-scripts --no-audit --no-fund
+
   build-and-publish:
+    needs: verify-source-install
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -121,11 +138,11 @@ jobs:
         run: |
           version="${GITHUB_REF_NAME#v}"
           for image in "${REGISTRY}/${IMAGE_NAME}" "${DOCKERHUB_IMAGE}"; do
-            core_tags=(--tag "$image:$version" --tag "$image:sha-${GITHUB_SHA:0:7}")
-            batteries_tags=(--tag "$image:batteries-$version" --tag "$image:batteries-sha-${GITHUB_SHA:0:7}")
+            core_tags=(--tag "$image:$version")
+            batteries_tags=(--tag "$image:batteries-$version")
             if [[ "$version" != *-* ]]; then
-              core_tags+=(--tag "$image:${version%.*}" --tag "$image:${version%%.*}" --tag "$image:latest")
-              batteries_tags+=(--tag "$image:batteries-${version%.*}" --tag "$image:batteries-${version%%.*}" --tag "$image:batteries")
+              core_tags+=(--tag "$image:latest")
+              batteries_tags+=(--tag "$image:batteries")
             fi
             docker buildx imagetools create "${core_tags[@]}" \
               "$image:${GITHUB_REF_NAME}-amd64" "$image:${GITHUB_REF_NAME}-arm64"

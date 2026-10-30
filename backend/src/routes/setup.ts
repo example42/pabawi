@@ -1,6 +1,6 @@
 import { Router, type Request, type Response } from "express";
 import { tokensEqual } from "../utils/tokensEqual";
-import { z } from "zod";
+import { z } from "zod/v3";
 import { asyncHandler } from "./asyncHandler";
 import { UserService } from "../services/UserService";
 import { SetupService } from "../services/SetupService";
@@ -15,7 +15,7 @@ import {
   isDuplicateError,
   extractDuplicateField
 } from "../utils/errorHandling";
-import { ZodError } from "zod";
+import { ZodError } from "zod/v3";
 import { createAuthRateLimitMiddleware } from "../middleware/securityMiddleware";
 import { type DIContainer, createDefaultContainer, resolveAuthenticationService } from "../container/DIContainer";
 

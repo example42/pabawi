@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { z } from "zod/v3";
 
 /**
  * Journal Service Types and Zod Schemas

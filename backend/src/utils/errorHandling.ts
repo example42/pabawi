@@ -6,7 +6,7 @@
  */
 
 import type { Response } from "express";
-import { ZodError } from "zod";
+import { ZodError } from "zod/v3";
 import { LoggerService } from "../services/LoggerService";
 
 /**

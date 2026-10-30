@@ -1,6 +1,6 @@
 import type { PermissionMiddlewareFactory } from "../middleware/routeAuthorization";
 import { Router, type Request, type Response } from "express";
-import { z } from "zod";
+import { z } from "zod/v3";
 import type { IntegrationManager } from "../integrations/IntegrationManager";
 import { type ExecutionService, ExecutionLifecycleError } from "../services/ExecutionService";
 import { ExecutionQueueFullError } from "../services/ExecutionQueue";

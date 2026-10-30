@@ -1,6 +1,6 @@
 import { Router, type Request, type RequestHandler, type Response } from "express";
-import { z } from "zod";
-import { ZodError } from "zod";
+import { z } from "zod/v3";
+import { ZodError } from "zod/v3";
 import { asyncHandler } from "../asyncHandler";
 import type { AWSPlugin } from "../../integrations/aws/AWSPlugin";
 import type { IntegrationManager } from "../../integrations/IntegrationManager";

@@ -8,7 +8,7 @@ import {
   type EntraIdConfig,
   type WhitelistConfig,
 } from "./schema";
-import { z } from "zod";
+import { z } from "zod/v3";
 import { parseJson } from "../utils/json";
 import { LoggerService } from "../services/LoggerService";
 

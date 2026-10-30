@@ -63,6 +63,12 @@ test("release CI builds and publishes both profiles", () => {
   assert.match(publishWorkflow, /trivy-batteries-ignore\.yaml/);
 });
 
+test("release publishes only version, latest, batteries and batteries-version tags", () => {
+  assert.doesNotMatch(publishWorkflow, /sha-\$\{GITHUB_SHA/);
+  assert.doesNotMatch(publishWorkflow, /\$\{version%\.\*\}|\$\{version%%\.\*\}/);
+  assert.equal((publishWorkflow.match(/--tag "/g) ?? []).length, 4);
+});
+
 test("the batteries vulnerability exception is narrow and expiring", () => {
   assert.match(scanScript, /--ignorefile/);
   assert.match(batteriesIgnore, /id: CVE-2026-85396/);

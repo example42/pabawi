@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { randomBytes } from 'node:crypto';
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import rateLimit from 'express-rate-limit';
-import { z } from 'zod';
+import { z } from "zod/v3";
 import type { DatabaseService } from '../database/DatabaseService';
 import { type DIContainer, resolveAuthenticationService } from '../container/DIContainer';
 import type { LdapDirectoryGroup, LdapDirectoryService } from '../services/LdapDirectoryService';

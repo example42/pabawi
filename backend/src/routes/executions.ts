@@ -1,7 +1,7 @@
 import { type ExecutionService, ExecutionLifecycleError } from "../services/ExecutionService";
 import { ExecutionDispatchError } from "../services/ExecutionDispatcher";
 import { Router, type Request, type Response, type RequestHandler } from "express";
-import { z } from "zod";
+import { z } from "zod/v3";
 import type {
   ExecutionRepository,
   ExecutionType,

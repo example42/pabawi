@@ -1,6 +1,6 @@
 {
   "name": "backend",
-  "version": "1.6.0",
+  "version": "1.6.1",
   "description": "Backend API server for Pabawi",
   "main": "dist/server.js",
   "scripts": {
@@ -34,7 +34,7 @@
     "ssh2": "^1.17.0",
     "ws": "^8.21.0",
     "yaml": "^2.8.2",
-    "zod": "^3.23.8"
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@types/bcrypt": "^5.0.2",

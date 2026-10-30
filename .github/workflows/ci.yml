@@ -60,6 +60,22 @@ jobs:
       - name: Build frontend
         run: npm run build:frontend
 
+  clean-install:
+    # What a user gets from the source archive: only tracked files, an empty npm
+    # cache, no prior node_modules. Fails on lockfile drift or integrity errors.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+      - name: Install from an exported tree with a cold cache
+        run: |
+          export_dir="$(mktemp -d)"
+          git archive HEAD | tar -x -C "$export_dir"
+          cd "$export_dir"
+          npm_config_cache="$(mktemp -d)" npm ci --ignore-scripts --no-audit --no-fund
+
   postgres-suite:
     # The migration, transaction and upgrade tests that only run when a real
     # PostgreSQL server is reachable. Without this job they are skipped

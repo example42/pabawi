@@ -1,5 +1,5 @@
 import { Router, type Request, type Response, type NextFunction } from "express";
-import { z } from "zod";
+import { z } from "zod/v3";
 import crypto from "crypto";
 import type { StreamingExecutionManager } from "../services/StreamingExecutionManager";
 import { isTerminalExecutionStatus, type ExecutionRepository } from "../database/ExecutionRepository";

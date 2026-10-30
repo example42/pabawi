@@ -15,7 +15,7 @@ import type { HieraPlugin } from '../integrations/hiera/HieraPlugin';
 import type { PuppetDBService } from '../integrations/puppetdb/PuppetDBService';
 import type { PuppetRunHistoryService } from '../services/PuppetRunHistoryService';
 import type { LoggerService } from '../services/LoggerService';
-import type { ZodTypeAny } from 'zod';
+import type { ZodTypeAny } from "zod/v3";
 import { registerAllTools } from './McpToolHandlers';
 
 // MCP SDK uses package.json "exports" which requires moduleResolution >= node16.

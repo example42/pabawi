@@ -1,6 +1,6 @@
 import { LdapConfigSchema } from "./ldap";
 export { LdapConfigSchema, type LdapConfig } from "./ldap";
-import { z } from "zod";
+import { z } from "zod/v3";
 
 /**
  * Command whitelist configuration schema
