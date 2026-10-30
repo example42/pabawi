@@ -60,10 +60,11 @@ RUN apt-get update && \
     concurrent-ruby:1.3.8 \
     faraday:2.14.3 \
     jwt:2.10.3 \
+    net-ssh:7.3.8 \
     resolv:0.7.2 \
     && /opt/puppetlabs/puppet/bin/gem install --no-document resolv:0.7.2 \
     && /opt/puppetlabs/bolt/bin/gem uninstall --force --ignore-dependencies \
-    concurrent-ruby:1.3.6 faraday:2.14.2 jwt:2.10.2 \
+    concurrent-ruby:1.3.6 faraday:2.14.2 jwt:2.10.2 net-ssh:7.3.2 \
     && rm -rf /opt/puppetlabs/bolt/lib/ruby/gems/3.2.0/specifications/default/resolv-0.2.3.gemspec \
     /opt/puppetlabs/bolt/lib/ruby/gems/3.2.0/gems/resolv-0.2.3 \
     /opt/puppetlabs/puppet/lib/ruby/gems/3.2.0/specifications/default/resolv-0.2.3.gemspec \
