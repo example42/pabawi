@@ -62,12 +62,15 @@ RUN apt-get update && \
     jwt:2.10.3 \
     net-ssh:7.3.8 \
     resolv:0.7.2 \
-    && /opt/puppetlabs/puppet/bin/gem install --no-document resolv:0.7.2 \
+    && /opt/puppetlabs/puppet/bin/gem install --no-document net-ssh:7.3.8 resolv:0.7.2 \
     && /opt/puppetlabs/bolt/bin/gem uninstall --force --ignore-dependencies \
     concurrent-ruby:1.3.6 faraday:2.14.2 jwt:2.10.2 \
     && /opt/puppetlabs/bolt/bin/gem uninstall --force --ignore-dependencies --all \
     net-ssh --version '< 7.3.8' \
+    && /opt/puppetlabs/puppet/bin/gem uninstall --force --ignore-dependencies --all \
+    net-ssh --version '< 7.3.8' \
     && /opt/puppetlabs/bolt/bin/gem list -e net-ssh | grep -qx 'net-ssh (7.3.8)' \
+    && /opt/puppetlabs/puppet/bin/gem list -e net-ssh | grep -qx 'net-ssh (7.3.8)' \
     && rm -rf /opt/puppetlabs/bolt/lib/ruby/gems/3.2.0/specifications/default/resolv-0.2.3.gemspec \
     /opt/puppetlabs/bolt/lib/ruby/gems/3.2.0/gems/resolv-0.2.3 \
     /opt/puppetlabs/puppet/lib/ruby/gems/3.2.0/specifications/default/resolv-0.2.3.gemspec \
