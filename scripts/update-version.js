@@ -201,6 +201,67 @@ function updateDockerfiles(newVersion) {
   return allSuccess;
 }
 
+function updatePackageLock(newVersion) {
+  const filePath = 'package-lock.json';
+
+  try {
+    if (!fs.existsSync(filePath)) {
+      log(`✗ File not found: ${filePath}`, 'red');
+      return false;
+    }
+
+    log(`Updating ${filePath}`, 'yellow');
+
+    // Only the project's own entries: dependency resolution stays untouched.
+    const lock = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+    lock.version = newVersion;
+    for (const key of ['', 'backend', 'frontend']) {
+      if (!lock.packages?.[key]) {
+        log(`✗ Missing packages["${key}"] in ${filePath}`, 'red');
+        return false;
+      }
+      lock.packages[key].version = newVersion;
+    }
+
+    fs.writeFileSync(filePath, JSON.stringify(lock, null, 2) + '\n');
+    log(`✓ Updated ${filePath}`, 'green');
+    return true;
+  } catch (error) {
+    log(`✗ Error updating ${filePath}: ${error.message}`, 'red');
+    return false;
+  }
+}
+
+function updateOpenApi(newVersion) {
+  const filePath = 'docs/openapi.yaml';
+
+  try {
+    if (!fs.existsSync(filePath)) {
+      log(`✗ File not found: ${filePath}`, 'red');
+      return false;
+    }
+
+    log(`Updating ${filePath}`, 'yellow');
+
+    let content = fs.readFileSync(filePath, 'utf8');
+
+    // info.version is the only two-space-indented version key in the document.
+    const re = /^ {2}version:\s*\S+$/m;
+    if (!re.test(content)) {
+      log(`✗ Could not find info.version in ${filePath}`, 'red');
+      return false;
+    }
+    content = content.replace(re, `  version: ${newVersion}`);
+
+    fs.writeFileSync(filePath, content);
+    log(`✓ Updated ${filePath}`, 'green');
+    return true;
+  } catch (error) {
+    log(`✗ Error updating ${filePath}: ${error.message}`, 'red');
+    return false;
+  }
+}
+
 function showGitStatus() {
   try {
     const status = execSync('git status --short', { encoding: 'utf8' });
@@ -249,6 +310,16 @@ function main() {
     if (!updatePackageJson(file, newVersion)) {
       allSuccess = false;
     }
+  }
+
+  // Update package-lock.json project entries
+  if (!updatePackageLock(newVersion)) {
+    allSuccess = false;
+  }
+
+  // Update OpenAPI info.version
+  if (!updateOpenApi(newVersion)) {
+    allSuccess = false;
   }
 
   // Update README.md
