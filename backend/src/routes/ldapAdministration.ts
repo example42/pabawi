@@ -14,7 +14,8 @@ import { createRateLimitMiddleware } from '../middleware/securityMiddleware';
 import { asyncHandler } from './asyncHandler';
 
 const text = z.string().min(1).max(1024).refine(value => Buffer.byteLength(value) <= 1024);
-const subject = z.string().uuid();
+// Shape only: the directory owns subject syntax, which depends on LDAP_IDENTITY_MODE.
+const subject = text;
 const searchSchema = z.object({ query: text, cursor: z.string().regex(/^[a-f0-9]{64}$/).optional() }).strict();
 const createSchema = z.object({ groupSubject: subject, roleId: z.string().min(1).max(128) }).strict();
 const updateSchema = z.object({ roleId: z.string().min(1).max(128).optional(), enabled: z.boolean().optional() })
@@ -61,6 +62,13 @@ export function createLdapAdministrationRouter(database: DatabaseService, contai
     standardHeaders: true, legacyHeaders: false,
     message: { error: { code: 'RATE_LIMITED', message: 'LDAP diagnostic limit reached' } },
   });
+  const groupSubject = (value: string): string => {
+    try { return services().directory.groupSubject(value); }
+    catch (error) {
+      if (!(error instanceof LdapDirectoryError)) throw error;
+      throw new z.ZodError([{ code: z.ZodIssueCode.custom, path: ['groupSubject'], message: 'Invalid LDAP group subject' }]);
+    }
+  };
   interface Page { groups: LdapDirectoryGroup[]; offset: number; query: string; actorId: string; expires: number }
   const pages = new Map<string, Page>();
   const pageSize = 50;
@@ -98,7 +106,7 @@ export function createLdapAdministrationRouter(database: DatabaseService, contai
 
   router.post('/mappings', ...guards, asyncHandler(async (req, res): Promise<void> => {
     const input = createSchema.parse(req.body);
-    const mapping = await services().mappings.create(input.groupSubject, input.roleId, actor(req));
+    const mapping = await services().mappings.create(groupSubject(input.groupSubject), input.roleId, actor(req));
     res.status(201).json(mapping);
   }));
 
@@ -113,10 +121,11 @@ export function createLdapAdministrationRouter(database: DatabaseService, contai
   }));
 
   router.post('/test', ...guards, diagnosticsLimit, asyncHandler(async (req, res): Promise<void> => {
-    const input = diagnosticSchema.parse(req.body);
+    const parsed = diagnosticSchema.parse(req.body);
+    const input = { ...parsed, groupSubjects: parsed.groupSubjects?.map(groupSubject) };
     const mappings = await services().mappings.list();
     const mapped = new Set(mappings.filter(mapping => mapping.enabled).map(mapping => mapping.groupSubject));
-    if (input.groupSubjects?.some(value => !mapped.has(value.toLowerCase()))) {
+    if (input.groupSubjects?.some(value => !mapped.has(value))) {
       res.status(400).json({ error: { code: 'INVALID_GROUP_SELECTION', message: 'Select enabled mapped groups' } });
       return;
     }

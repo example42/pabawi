@@ -92,3 +92,14 @@ export function ldapDnWithinScope(dn: string, base: string): boolean {
   return entry.length > 0 && scope.length > 0 && entry.length >= scope.length &&
     JSON.stringify(entry.slice(entry.length - scope.length)) === JSON.stringify(scope);
 }
+
+/** Deterministic RFC 4514 rendering of the parsed form, so equal DNs yield one stored subject. */
+export function canonicalLdapDn(input: string): string {
+  const escape = (value: string): string =>
+    value.replace(/[\\"+,;<>=\0]|^[ #]| $/g, character => character === '\0' ? '\\00' : '\\' + character);
+  return parseLdapDn(input).map(rdn => rdn.map(assertion => {
+    const [name, encoded] = JSON.parse(assertion) as [string, string];
+    const [kind, value] = JSON.parse(encoded) as ['text' | 'ber', string];
+    return name + '=' + (kind === 'ber' ? '#' + value : escape(value));
+  }).join('+')).join(',');
+}

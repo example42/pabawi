@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Entry } from 'ldapts';
-import { BerWriter, InappropriateMatchingError, InvalidCredentialsError, SizeLimitExceededError } from 'ldapts';
+import { BerWriter, InappropriateMatchingError, InvalidCredentialsError, NoSuchObjectError, SizeLimitExceededError } from 'ldapts';
 import { parseLdapConfig } from '../../../src/config/ldap';
 import { LdapDirectoryService } from '../../../src/services/LdapDirectoryService';
 import { LoggerService } from '../../../src/services/LoggerService';
@@ -328,5 +328,52 @@ describe('read-only LDAP directory transactions', () => {
     release(f.lookup);
     await Promise.resolve();
     expect(f.lookup.close).toHaveBeenCalled();
+  });
+});
+
+describe('attribute-mode LDAP identities', () => {
+  const attributeConfig = { ...config, identityMode: 'attribute' as const, userIdAttr: 'uid', groupIdAttr: 'dn' };
+  const groupSubject = 'cn=operators,ou=groups,dc=example,dc=test';
+
+  it('uses stable non-UUID user values and canonical group DNs as subjects', async () => {
+    const f = fixture([[user], [user], [{ ...group, dn: 'CN=operators,OU=groups,DC=example,DC=test' }]]);
+    const service = new LdapDirectoryService(attributeConfig, f.logger, f.connect);
+    expect(await service.authenticate('alice', fixturePassword, [groupSubject])).toMatchObject({
+      user: { subject: 'alice', dn: user.dn }, groupSubjects: [groupSubject],
+    });
+    const calls = vi.mocked(f.lookup.search).mock.calls;
+    expect(String(calls[1][1].filter)).toContain('(uid=alice)');
+    expect(calls.every(call => !call[1].attributes?.some(name => name.toLowerCase() === 'dn'))).toBe(true);
+  });
+
+  it('resolves dn subjects by base-scope reads confined to the configured base', async () => {
+    const f = fixture([[group]]);
+    const service = new LdapDirectoryService(attributeConfig, f.logger, f.connect);
+    expect(service.groupSubject('CN=operators,OU=groups,DC=example,DC=test')).toBe(groupSubject);
+    expect(await service.resolveGroup(groupSubject)).toMatchObject({ subject: groupSubject, dn: group.dn });
+    expect(vi.mocked(f.lookup.search).mock.calls[0]).toMatchObject([groupSubject, { scope: 'base' }]);
+    await expect(service.resolveGroup('cn=operators,dc=elsewhere,dc=test')).rejects.toMatchObject({ code: 'INVALID_IDENTITY' });
+    expect(() => service.groupSubject('not a dn')).toThrow('INVALID_IDENTITY');
+  });
+
+  it('requests no attributes, not all of them, when the only identity attribute is dn', async () => {
+    const f = fixture([[user], [user]]);
+    const service = new LdapDirectoryService({ ...attributeConfig, userIdAttr: 'dn' }, f.logger, f.connect);
+    const result = await service.diagnose({ username: 'alice' });
+    expect(result.stages.at(-1)).toMatchObject({ stage: 'eligibility', status: 'passed' });
+    const calls = vi.mocked(f.lookup.search).mock.calls;
+    expect(calls[0][1].attributes).toEqual(['1.1']);
+    expect(calls[1]).toMatchObject([user.dn, { scope: 'base' }]);
+  });
+
+  it('treats a vanished dn identity as absent rather than unavailable', async () => {
+    const f = fixture([new NoSuchObjectError('gone')]);
+    const service = new LdapDirectoryService(attributeConfig, f.logger, f.connect);
+    await expect(service.resolveGroup(groupSubject)).rejects.toMatchObject({ code: 'INVALID_IDENTITY' });
+  });
+
+  it('keeps UUID mode strict for non-UUID values', async () => {
+    const f = fixture([[{ ...user, entryUUID: 'alice' }]]);
+    await expect(f.service.authenticate('alice', fixturePassword)).rejects.toMatchObject({ code: 'INVALID_IDENTITY' });
   });
 });

@@ -1,12 +1,33 @@
+import { canonicalLdapDn } from '../../config/ldapDn';
 import { LdapDirectoryError } from './LdapDirectoryError';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export type LdapIdentityMode = 'uuid' | 'attribute';
+
+export function isDnAttribute(attribute: string): boolean {
+  return attribute.toLowerCase() === 'dn';
+}
 
 export function canonicalUuid(value: string): string {
   if (!uuid.test(value) || value === '00000000-0000-0000-0000-000000000000') {
     throw new LdapDirectoryError('INVALID_IDENTITY');
   }
   return value.toLowerCase();
+}
+
+/**
+ * Attribute mode keeps the directory value verbatim: the matching rule belongs to the directory,
+ * so case folding here could make an exact-match attribute unsearchable.
+ */
+export function canonicalSubject(mode: LdapIdentityMode, attribute: string, value: string): string {
+  if (mode === 'uuid') return canonicalUuid(value);
+  if (isDnAttribute(attribute)) {
+    try { return canonicalLdapDn(value); }
+    catch { throw new LdapDirectoryError('INVALID_IDENTITY'); }
+  }
+  if (!value.trim() || Buffer.byteLength(value) > 1024) throw new LdapDirectoryError('INVALID_IDENTITY');
+  return value;
 }
 
 export function guidToSubject(value: Buffer): string {

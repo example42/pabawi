@@ -58,7 +58,7 @@ for (const dialect of ['sqlite', 'postgres'] as const) {
       identityId = (await db.queryOne<{ id: string }>("SELECT id FROM federated_identities WHERE user_id = ?", [userId]))!.id;
       await db.execute(`INSERT INTO users (id, username, email, first_name, last_name, created_at, updated_at)
         VALUES ('administrator', 'administrator', 'admin@example.test', '', '', 'now', 'now')`);
-      resolveGroup = vi.fn().mockImplementation(async (subject: string) => ({ ...group, subject }));
+      resolveGroup = vi.fn().mockImplementation(async (subject: string) => ({ ...group, subject: subject.toLowerCase() }));
       mappings = new LdapMappingService(db, 'directory', { resolveGroup });
       other = new LdapMappingService(reader, 'directory', { resolveGroup });
     });
@@ -109,8 +109,9 @@ for (const dialect of ['sqlite', 'postgres'] as const) {
     });
 
     it('persists authoritative immutable identity, source, role and atomic audit without granting access', async () => {
+      // The directory owns subject syntax; the stored subject is the one it resolved.
       const mapping = await mappings.create(groupSubject.toUpperCase(), viewer, actor);
-      expect(resolveGroup).toHaveBeenCalledWith(groupSubject);
+      expect(resolveGroup).toHaveBeenCalledWith(groupSubject.toUpperCase());
       expect(mapping).toMatchObject({ source: 'ldap', directoryId: 'directory', groupSubject,
         groupDn: group.dn, groupName: group.name, roleId: viewer, roleName: 'Viewer', enabled: true });
       expect(await other.list()).toEqual([mapping]);

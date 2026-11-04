@@ -57,6 +57,16 @@ describe('LDAP configuration', () => {
     expect(() => parseLdapConfig({ ...enabled, [name]: value })).toThrow();
   });
 
+  it('keeps UUID identities by default and allows attribute identities only outside AD', () => {
+    expect(parseLdapConfig(enabled)?.identityMode).toBe('uuid');
+    expect(parseLdapConfig({ ...enabled, LDAP_IDENTITY_MODE: 'attribute', LDAP_USER_ID_ATTR: 'uid', LDAP_GROUP_ID_ATTR: 'dn' }))
+      .toMatchObject({ identityMode: 'attribute', userIdAttr: 'uid', groupIdAttr: 'dn' });
+    expect(() => parseLdapConfig({ ...enabled, LDAP_GROUP_ID_ATTR: 'dn' })).toThrow('LDAP_IDENTITY_MODE=attribute');
+    expect(() => parseLdapConfig({ ...enabled, LDAP_IDENTITY_MODE: 'uuid-v5' })).toThrow();
+    expect(() => parseLdapConfig({ ...enabled, LDAP_DIRECTORY_TYPE: 'ad', LDAP_USER_ELIGIBILITY_FILTER: '',
+      LDAP_IDENTITY_MODE: 'attribute' })).toThrow('objectGUID');
+  });
+
   it('requires consistent explicit anonymous configuration', () => {
     expect(parseLdapConfig({ ...enabled, LDAP_LOOKUP_USER: undefined, LDAP_LOOKUP_PASSWORD: undefined,
       LDAP_ANONYMOUS_LOOKUP: 'true' })).toMatchObject({ anonymousLookup: true, lookupUser: '', lookupPassword: '' });
