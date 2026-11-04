@@ -23,7 +23,7 @@ export function canonicalUuid(value: string): string {
 export function canonicalSubject(mode: LdapIdentityMode, attribute: string, value: string): string {
   if (mode === 'uuid') return canonicalUuid(value);
   if (isDnAttribute(attribute)) {
-    try { return canonicalLdapDn(value); }
+    try { value = canonicalLdapDn(value); }
     catch { throw new LdapDirectoryError('INVALID_IDENTITY'); }
   }
   if (!value.trim() || Buffer.byteLength(value) > 1024) throw new LdapDirectoryError('INVALID_IDENTITY');

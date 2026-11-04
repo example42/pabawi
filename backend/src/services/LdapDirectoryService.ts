@@ -400,7 +400,15 @@ export class LdapDirectoryService {
       }
       if (!c.searchNestedGroups) break;
     }
-    const result = visited.filter(group => mapped.has(group.subject)).map(group => group.subject);
+    const matched = visited.filter(group => mapped.has(group.subject));
+    if (c.identityMode === 'attribute' && !isDnAttribute(c.groupIdAttr)) {
+      // Attribute values need not be unique: a second group sharing a mapped value must not inherit its roles.
+      for (const group of matched) {
+        const owner = await this.resolveGroupInTransaction(tx, this.groupLocator(group.subject));
+        if (!ldapDnEquals(owner.dn, group.dn)) throw new LdapDirectoryError('IDENTITY_CHANGED');
+      }
+    }
+    const result = matched.map(group => group.subject);
     if (c.directoryType === 'ad' && c.searchNestedGroups && !c.disableMatchingRuleInChain) {
       // Bounded traversal proves scope and completeness first. The AD rule is only a checked optimization.
       try {
