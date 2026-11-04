@@ -23,9 +23,6 @@ BACKEND_PKG="$(pwd)/backend/package.json"
 DOCKERFILE="$(pwd)/Dockerfile"
 
 ROOT_VER="$(extract_version "$ROOT_PKG")"
-FRONTEND_VER="$(extract_version "$FRONTEND_PKG")"
-BACKEND_VER="$(extract_version "$BACKEND_PKG")"
-DOCKER_VER="$(grep -i 'org.opencontainers.image.version' "$DOCKERFILE" | sed -E 's/.*\"([^"]+)\".*/\1/')"
 
 # Ensure we have a version to work with
 if [[ -z "$ROOT_VER" ]]; then
@@ -33,18 +30,30 @@ if [[ -z "$ROOT_VER" ]]; then
   exit 1
 fi
 
-# Verify all versions match
+# Every reference scripts/update-version.js writes must match the root version.
 mismatch=0
-if [[ "$ROOT_VER" != "$FRONTEND_VER" ]]; then
-  echo "Version mismatch: root ($ROOT_VER) vs frontend ($FRONTEND_VER)"
-  mismatch=1
-fi
-if [[ "$ROOT_VER" != "$BACKEND_VER" ]]; then
-  echo "Version mismatch: root ($ROOT_VER) vs backend ($BACKEND_VER)"
-  mismatch=1
-fi
-if [[ "$ROOT_VER" != "$DOCKER_VER" ]]; then
-  echo "Version mismatch: root ($ROOT_VER) vs Dockerfile ($DOCKER_VER)"
+check() {
+  local label="$1" value="$2"
+  if [[ "$value" != "$ROOT_VER" ]]; then
+    echo "Version mismatch: root ($ROOT_VER) vs $label (${value:-missing})"
+    mismatch=1
+  fi
+}
+
+check frontend "$(extract_version "$FRONTEND_PKG")"
+check backend "$(extract_version "$BACKEND_PKG")"
+for key in version 'packages[""].version' packages.backend.version packages.frontend.version; do
+  check "package-lock.json $key" "$(jq -r ".$key // empty" package-lock.json 2>/dev/null)"
+done
+for dockerfile in "$DOCKERFILE" Dockerfile.alpine Dockerfile.ubuntu; do
+  check "$(basename "$dockerfile")" "$(grep -i 'org.opencontainers.image.version' "$dockerfile" | sed -E 's/.*"([^"]+)".*/\1/')"
+done
+check "Chart.yaml appVersion" "$(sed -nE 's/^appVersion:[[:space:]]*"([^"]*)".*/\1/p' charts/pabawi/Chart.yaml)"
+check "openapi.yaml info.version" "$(sed -nE 's/^  version:[[:space:]]*([^[:space:]]+).*/\1/p' docs/openapi.yaml)"
+check "server.ts /api/health" "$(grep -A1 'message: "Backend API is running"' backend/src/server.ts | sed -nE 's/.*version:[[:space:]]*"([^"]+)".*/\1/p')"
+check "Navigation.svelte header" "$(sed -nE 's/.*>v([0-9]+\.[0-9]+\.[0-9]+[^<]*)<.*/\1/p' frontend/src/components/Navigation.svelte | head -1)"
+if ! grep -qF "## [$ROOT_VER]" CHANGELOG.md; then
+  echo "Missing CHANGELOG.md section: ## [$ROOT_VER]"
   mismatch=1
 fi
 
