@@ -220,7 +220,10 @@ ldapsearch -H ldaps://ldap.example.com -D '<lookup DN>' -W -b '<user DN>' -s bas
 `LDAP_IDENTITY_MODE=attribute` stores the configured value verbatim, for example
 `LDAP_USER_ID_ATTR=uid` and `LDAP_GROUP_ID_ATTR=dn`. A `dn` subject is stored in
 canonical RFC 4514 form and resolved with a base-scope read that must stay inside the
-user or group base. This mode trades immutability for compatibility: a recreated
+user or group base. Subjects are limited to 1024 UTF-8 bytes after canonicalization.
+A non-DN group value must identify exactly one group under the group base: if a
+second group shares a mapped value, logins that depend on it fail closed until the
+duplicate is removed. This mode trades immutability for compatibility: a recreated
 `uid` inherits the previous Pabawi account and its role mappings, and a renamed or
 moved group loses its mappings while a new group at the old DN gains them. Changing
 the mode, or either identity attribute, on an existing installation changes every

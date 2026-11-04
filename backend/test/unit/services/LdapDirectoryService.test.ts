@@ -372,6 +372,35 @@ describe('attribute-mode LDAP identities', () => {
     await expect(service.resolveGroup(groupSubject)).rejects.toMatchObject({ code: 'INVALID_IDENTITY' });
   });
 
+  it('grants a non-unique attribute subject only to the one group that owns it', async () => {
+    const cnConfig = { ...attributeConfig, groupIdAttr: 'cn' };
+    const impostor: Entry = { ...group, dn: 'cn=operators,ou=other,ou=groups,dc=example,dc=test' };
+    const owned = fixture([[user], [user], [group], [group]]);
+    expect((await new LdapDirectoryService(cnConfig, owned.logger, owned.connect)
+      .authenticate('alice', fixturePassword, ['operators'])).groupSubjects).toEqual(['operators']);
+    expect(String(vi.mocked(owned.lookup.search).mock.calls[3][1].filter)).toContain('(cn=operators)');
+    const ambiguous = fixture([[user], [user], [impostor], [group, impostor]]);
+    await expect(new LdapDirectoryService(cnConfig, ambiguous.logger, ambiguous.connect)
+      .authenticate('alice', fixturePassword, ['operators'])).rejects.toMatchObject({ code: 'INVALID_IDENTITY' });
+    const moved = fixture([[user], [user], [impostor], [group]]);
+    await expect(new LdapDirectoryService(cnConfig, moved.logger, moved.connect)
+      .authenticate('alice', fixturePassword, ['operators'])).rejects.toMatchObject({ code: 'IDENTITY_CHANGED' });
+    const unmapped = fixture([[user], [user], [impostor]]);
+    expect((await new LdapDirectoryService(cnConfig, unmapped.logger, unmapped.connect)
+      .authenticate('alice', fixturePassword, ['admins'])).groupSubjects).toEqual([]);
+  });
+
+  it('applies the 1024-byte subject limit to canonical DNs, including escaping growth', () => {
+    const service = new LdapDirectoryService(attributeConfig, new LoggerService('error'));
+    const suffix = ',ou=groups,dc=example,dc=test';
+    const fits = 'cn=' + 'x'.repeat(1024 - 3 - suffix.length) + suffix;
+    expect(service.groupSubject(fits)).toBe(fits);
+    expect(() => service.groupSubject('cn=x' + fits.slice(3))).toThrow('INVALID_IDENTITY');
+    const grows = 'cn=' + '='.repeat(600) + suffix;
+    expect(Buffer.byteLength(grows)).toBeLessThan(1024);
+    expect(() => service.groupSubject(grows)).toThrow('INVALID_IDENTITY');
+  });
+
   it('keeps UUID mode strict for non-UUID values', async () => {
     const f = fixture([[{ ...user, entryUUID: 'alice' }]]);
     await expect(f.service.authenticate('alice', fixturePassword)).rejects.toMatchObject({ code: 'INVALID_IDENTITY' });
