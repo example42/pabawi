@@ -1,13 +1,24 @@
 # Changelog
 
-## [Unreleased]
+## [1.6.2] - 2026-11-04
 
 ### Added
 
 - `LDAP_IDENTITY_MODE=attribute` lets OpenLDAP directories without UUID-valued
   attributes use a stable value such as `uid`, or the entry `dn`, as the
-  identity of users and groups (#162). The default `uuid` mode is unchanged.
-  See `docs/configuration.md` for the immutability trade-off.
+  identity of users and groups (#162). The default `uuid` mode is unchanged and
+  Active Directory always uses `objectGUID`. See `docs/configuration.md` for the
+  immutability trade-off before enabling it.
+
+### Changed
+
+- The LDAP administration API accepts any group subject of up to 1024 UTF-8
+  bytes and lets the directory validate it; in the default mode a non-UUID
+  subject is still rejected with 400. The OpenAPI document describes the new
+  `LdapGroupSubject` schema.
+
+### Upgrade notes
+
 - Upgrading resets LDAP session freshness once, because the new setting is part
   of the configuration revision: every LDAP session revalidates on its next
   request, and fails closed if the directory is unreachable at that moment.

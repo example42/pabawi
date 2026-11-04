@@ -41,7 +41,7 @@ info:
     enabled sources. Subscribe to `/journal/global/stream` for a live SSE feed, or query
     `/journal/{nodeId}` for a node's history.
 
-  version: 1.6.1
+  version: 1.6.2
   contact:
     name: Pabawi Support
     url: https://pabawi.example42.com
@@ -4638,11 +4638,20 @@ components:
         default: false
 
   schemas:
+    LdapGroupSubject:
+      type: string
+      minLength: 1
+      maxLength: 1024
+      description: >-
+        Directory group identity. A lowercase UUID when LDAP_IDENTITY_MODE=uuid (default, always
+        for AD); in attribute mode the configured attribute value verbatim, or a canonical
+        RFC 4514 DN when LDAP_GROUP_ID_ATTR=dn. Maximum 1024 UTF-8 bytes.
+      example: 10112233-4455-6677-8899-aabbccddeeff
     LdapDirectoryGroup:
       type: object
       required: [subject, dn, name]
       properties:
-        subject: { type: string, format: uuid }
+        subject: { $ref: '#/components/schemas/LdapGroupSubject' }
         dn: { type: string }
         name: { type: string }
     LdapGroupPage:
@@ -4662,7 +4671,7 @@ components:
         id: { type: string, format: uuid }
         source: { type: string, enum: [ldap] }
         directoryId: { type: string }
-        groupSubject: { type: string, format: uuid }
+        groupSubject: { $ref: '#/components/schemas/LdapGroupSubject' }
         groupDn: { type: string }
         groupName: { type: string }
         roleId: { type: string }
@@ -4675,7 +4684,7 @@ components:
       additionalProperties: false
       required: [groupSubject, roleId]
       properties:
-        groupSubject: { type: string, format: uuid }
+        groupSubject: { $ref: '#/components/schemas/LdapGroupSubject' }
         roleId: { type: string, minLength: 1, maxLength: 128 }
     LdapMappingUpdate:
       type: object
@@ -4697,7 +4706,7 @@ components:
           type: array
           maxItems: 20
           description: Requires username and only enabled mapped immutable group subjects
-          items: { type: string, format: uuid }
+          items: { $ref: '#/components/schemas/LdapGroupSubject' }
     LdapDiagnosticReport:
       type: object
       required: [authenticated, stages]
@@ -4717,7 +4726,7 @@ components:
                 enum: [INVALID_CREDENTIALS, INELIGIBLE, IDENTITY_CHANGED, INVALID_IDENTITY, POLICY_UNREADABLE, INCOMPLETE_RESULT, LIMIT_EXCEEDED, BUSY, TIMEOUT, UNAVAILABLE]
         groupSubjects:
           type: array
-          items: { type: string, format: uuid }
+          items: { $ref: '#/components/schemas/LdapGroupSubject' }
 
     Node:
       type: object
