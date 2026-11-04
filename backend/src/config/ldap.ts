@@ -53,6 +53,7 @@ export const LdapConfigSchema = z.object({
   userRdn: relativeDn.default(''),
   userObjectClass: attribute,
   userLookupAttr: attribute,
+  identityMode: z.enum(['uuid', 'attribute']).default('uuid'),
   userIdAttr: attribute,
   userEmailAttr: attribute.default('mail'),
   userDisplayNameAttr: attribute.default('displayName'),
@@ -80,6 +81,14 @@ export const LdapConfigSchema = z.object({
   if (config.directoryType === 'openldap' && !config.userEligibilityFilter) {
     context.addIssue({ code: z.ZodIssueCode.custom, path: ['userEligibilityFilter'],
       message: 'OpenLDAP requires an explicit positive eligibility filter' });
+  }
+  if (config.directoryType === 'ad' && config.identityMode !== 'uuid') {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ['identityMode'], message: 'Active Directory identities are always objectGUID' });
+  }
+  for (const path of ['userIdAttr', 'groupIdAttr'] as const) {
+    if (config.identityMode === 'uuid' && config[path].toLowerCase() === 'dn') {
+      context.addIssue({ code: z.ZodIssueCode.custom, path: [path], message: 'dn identities require LDAP_IDENTITY_MODE=attribute' });
+    }
   }
   if (config.groupMemberAttr.toLowerCase() === 'memberuid') {
     context.addIssue({ code: z.ZodIssueCode.custom, path: ['groupMemberAttr'], message: 'Only DN-valued membership is supported' });
@@ -117,6 +126,7 @@ export function parseLdapConfig(env: NodeJS.ProcessEnv): LdapConfig | undefined 
     baseDn: env.LDAP_BASE_DN, userRdn: env.LDAP_USER_RDN,
     userObjectClass: env.LDAP_USER_OBJECT_CLASS ?? (ad ? 'user' : 'inetOrgPerson'),
     userLookupAttr: env.LDAP_USER_LOOKUP_ATTR ?? (ad ? 'sAMAccountName' : 'uid'),
+    identityMode: env.LDAP_IDENTITY_MODE,
     userIdAttr: env.LDAP_USER_ID_ATTR ?? (ad ? 'objectGUID' : 'entryUUID'),
     userEmailAttr: env.LDAP_USER_EMAIL_ATTR, userDisplayNameAttr: env.LDAP_USER_DISPLAY_NAME_ATTR,
     userGivenNameAttr: env.LDAP_USER_GIVEN_NAME_ATTR, userSurnameAttr: env.LDAP_USER_SURNAME_ATTR,

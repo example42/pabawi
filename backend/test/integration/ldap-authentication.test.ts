@@ -8,6 +8,8 @@ import { LdapMappingService } from '../../src/services/LdapMappingService';
 import { LdapAuthenticationService } from '../../src/services/LdapAuthenticationService';
 import { parseLdapConfig } from '../../src/config/ldap';
 import { createAuthRateLimitMiddleware } from '../../src/middleware/securityMiddleware';
+import type { Entry } from 'ldapts';
+import type { LdapConnection, LdapConnector } from '../../src/services/ldap/transport';
 
 describe('LDAP HTTP authentication and provider-bound tokens', () => {
   let harness: HttpHarness;
@@ -155,4 +157,38 @@ describe('LDAP HTTP authentication and provider-bound tokens', () => {
       await request(harness.use(ctx.app)).get('/protected').set('Authorization', `Bearer ${pair.body.token}`).expect(200);
       expect(ctx.directory.authenticate).not.toHaveBeenCalled();
     });
+  it('provisions, maps and revalidates non-UUID uid and dn identities in attribute mode', async () => {
+    const config = parseLdapConfig({ LDAP_ENABLED: 'true', LDAP_DIRECTORY_ID: 'directory', LDAP_DIRECTORY_TYPE: 'openldap',
+      LDAP_HOSTNAME: 'ldap.example.test', LDAP_ANONYMOUS_LOOKUP: 'true', LDAP_BASE_DN: 'dc=example,dc=test',
+      LDAP_USER_RDN: 'ou=people', LDAP_GROUP_RDN: 'ou=groups', LDAP_USER_ELIGIBILITY_FILTER: '(employeeType=active)',
+      LDAP_IDENTITY_MODE: 'attribute', LDAP_USER_ID_ATTR: 'uid', LDAP_GROUP_ID_ATTR: 'dn' })!;
+    const user: Entry = { dn: 'uid=alice,ou=people,dc=example,dc=test', uid: 'alice', displayName: 'Alice' };
+    const group: Entry = { dn: 'cn=Help Desk,ou=groups,dc=example,dc=test', cn: 'Help Desk', uniqueMember: user.dn };
+    const connection: LdapConnection = {
+      bind: vi.fn().mockResolvedValue(undefined), close: vi.fn(),
+      search: vi.fn().mockImplementation(async (base: string, options: { scope: string; filter: unknown }) => {
+        const filter = String(options.filter);
+        const entries = options.scope === 'base' ? [user, group].filter(entry => entry.dn === base)
+          : filter.includes('uniqueMember=') ? [group]
+            : [user].filter(entry => filter.includes('(uid=' + String(entry.uid) + ')'));
+        return { searchEntries: entries, searchReferences: [] };
+      }),
+    };
+    const directory = new LdapDirectoryService(config, ctx.container.resolve('logger'), vi.fn<LdapConnector>().mockResolvedValue(connection));
+    for (const mapping of await ctx.mappings.list()) await ctx.mappings.remove(mapping.id, { userId: ctx.administrator.id });
+    const mappings = new LdapMappingService(ctx.db, config.directoryId, directory);
+    const mapping = await mappings.create('CN=Help Desk,OU=groups,DC=example,DC=test', 'role-viewer-001', { userId: ctx.administrator.id });
+    expect(mapping.groupSubject).toBe(group.dn);
+    const ldap = new LdapAuthenticationService(ctx.db, config, directory, mappings, ctx.users);
+    await ldap.initialize();
+    ctx.container.register('ldapAuthentication', ldap);
+    vi.mocked(ctx.container.resolve('config').getLdapConfig).mockReturnValue(config);
+    const pair = await login('alice', ldapPassword);
+    expect(pair.status).toBe(200);
+    expect(await ctx.db.query("SELECT subject FROM federated_identities WHERE provider = 'ldap'")).toEqual([{ subject: 'alice' }]);
+    await request(harness.use(ctx.app)).post('/api/auth/refresh').send({ refreshToken: pair.body.refreshToken }).expect(200);
+    user.uid = 'alice-recreated';
+    await ctx.db.execute('UPDATE ldap_validation_state SET last_validated_at = 1');
+    await request(harness.use(ctx.app)).get('/protected').set('Authorization', `Bearer ${pair.body.token}`).expect(403);
+  });
 });

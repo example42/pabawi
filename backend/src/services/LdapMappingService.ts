@@ -2,7 +2,6 @@ import { randomUUID } from 'node:crypto';
 import type { DatabaseAdapter } from '../database/DatabaseAdapter';
 import type { LdapDirectoryService } from './LdapDirectoryService';
 import { AuditLoggingService } from './AuditLoggingService';
-import { canonicalUuid } from './ldap/identity';
 
 export class LdapAdministrationError extends Error {
   constructor(public readonly code: 'NOT_FOUND' | 'CONFLICT' | 'STALE_REVISION' | 'INVALID_CURSOR') {
@@ -74,7 +73,7 @@ export class LdapMappingService {
 
   public async create(groupSubject: string, roleId: string, actor: LdapAuditActor): Promise<LdapMapping> {
     const revision = await this.revision();
-    const group = await this.directory.resolveGroup(canonicalUuid(groupSubject));
+    const group = await this.directory.resolveGroup(groupSubject);
     return this.withRevision(revision, async () => {
       await this.checkRoleAndDuplicate(group.subject, roleId);
       const id = randomUUID();

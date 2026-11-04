@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import fc from 'fast-check';
-import { ldapDnEquals, ldapDnWithinScope, parseLdapDn } from '../../src/config/ldapDn';
+import { canonicalLdapDn, ldapDnEquals, ldapDnWithinScope, parseLdapDn } from '../../src/config/ldapDn';
 
 describe('project-owned RFC 4514 DN parsing and conservative comparison', () => {
   it('recognizes root, OIDs, empty values and unordered multi-valued RDNs', () => {
@@ -56,6 +56,19 @@ describe('project-owned RFC 4514 DN parsing and conservative comparison', () => 
       const literal = [...value].map(character => ['#', '"', '+', ',', ';', '<', '=', '>', String.fromCharCode(92)].includes(character) ? String.fromCharCode(92) + character : character).join('');
       expect(ldapDnEquals('cn=' + encoded, 'CN=' + literal)).toBe(true);
       expect(ldapDnWithinScope('uid=a,cn=' + encoded, 'cn=' + encoded)).toBe(true);
+    }), { numRuns: 200 });
+  });
+
+  it('renders one stable canonical string per parsed DN', () => {
+    expect(canonicalLdapDn('UID=a+CN=Help Desk,OU=Groups,DC=example')).toBe('cn=Help Desk+uid=a,ou=Groups,dc=example');
+    expect(canonicalLdapDn('cn=\\ x\\ ,dc=a')).toBe('cn=\\ x\\ ,dc=a');
+    expect(canonicalLdapDn('cn=#0403616263,dc=x')).toBe('cn=#0403616263,dc=x');
+    fc.assert(fc.property(fc.array(fc.integer({ min: 0, max: 0x10ffff })
+      .filter(code => code < 0xd800 || code > 0xdfff), { minLength: 1, maxLength: 20 }), codes => {
+      const encoded = [...Buffer.from(String.fromCodePoint(...codes))].map(byte => '\\' + byte.toString(16).padStart(2, '0')).join('');
+      const canonical = canonicalLdapDn('CN=' + encoded + ',DC=example');
+      expect(canonicalLdapDn(canonical)).toBe(canonical);
+      expect(ldapDnEquals(canonical, 'cn=' + encoded + ',dc=example')).toBe(true);
     }), { numRuns: 200 });
   });
 });

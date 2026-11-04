@@ -180,7 +180,8 @@ directory. Additional endpoints share schema, TLS and policy settings.
 | `LDAP_USER_RDN` | Empty | optional relative DN beneath base DN | no |
 | `LDAP_USER_OBJECT_CLASS` | See contract | `user` for AD, `inetOrgPerson` for OpenLDAP | no |
 | `LDAP_USER_LOOKUP_ATTR` | See contract | `sAMAccountName` for AD, `uid` for OpenLDAP | no |
-| `LDAP_USER_ID_ATTR` | `objectGUID` for AD, `entryUUID` for OpenLDAP | must be immutable and readable | no |
+| `LDAP_IDENTITY_MODE` | `uuid` | `uuid` requires UUID-valued identity attributes; `attribute` (OpenLDAP only) accepts any stable value or `dn`. See below | no |
+| `LDAP_USER_ID_ATTR` | `objectGUID` for AD, `entryUUID` for OpenLDAP | must be immutable and readable; `dn` allowed in attribute mode | no |
 | `LDAP_USER_EMAIL_ATTR` | `mail` | missing value becomes null, never a fabricated address | no |
 | `LDAP_USER_DISPLAY_NAME_ATTR` | `displayName` | fallback to current directory login name | no |
 | `LDAP_USER_GIVEN_NAME_ATTR` | `givenName` | missing value becomes an empty profile field | no |
@@ -189,7 +190,7 @@ directory. Additional endpoints share schema, TLS and policy settings.
 | `LDAP_GROUP_RDN` | Empty | optional relative DN beneath base DN | no |
 | `LDAP_GROUP_OBJECT_CLASS` | See contract | `group` for AD, `groupOfUniqueNames` for OpenLDAP | no |
 | `LDAP_GROUP_MEMBER_ATTR` | `member` for AD, `uniqueMember` for OpenLDAP | DN-valued memberships only | no |
-| `LDAP_GROUP_ID_ATTR` | See contract | `objectGUID` for AD, `entryUUID` for OpenLDAP | no |
+| `LDAP_GROUP_ID_ATTR` | See contract | `objectGUID` for AD, `entryUUID` for OpenLDAP; `dn` allowed in attribute mode | no |
 | `LDAP_GROUP_NAME_ATTR` | `name` for AD, `displayName` for OpenLDAP | display falls back to lookup attribute | no |
 | `LDAP_GROUP_LOOKUP_ATTR` | `cn` | used for administrative search, not persistent identity | no |
 | `LDAP_SEARCH_NESTED_GROUPS` | `false` | direct membership only unless enabled | no |
@@ -205,6 +206,25 @@ JSON and bounds are validated. OpenLDAP requires a deployment-specific positive
 eligibility filter, for example (employeeType=active). The lookup account must see
 all attributes used by that policy. Missing policy attributes do not match the
 example filter. The application cannot infer an operator's account-status schema.
+
+Identity mode. The identity attribute is both the stored subject and the key used to
+find the entry again on revalidation and mapping changes. The default `uuid` mode
+requires a UUID value (`entryUUID`, `nsUniqueId`, `objectGUID`). OpenLDAP maintains
+`entryUUID` as an operational attribute on every entry; if lookups do not return it,
+check the lookup account's ACLs before switching modes:
+
+```bash
+ldapsearch -H ldaps://ldap.example.com -D '<lookup DN>' -W -b '<user DN>' -s base entryUUID
+```
+
+`LDAP_IDENTITY_MODE=attribute` stores the configured value verbatim, for example
+`LDAP_USER_ID_ATTR=uid` and `LDAP_GROUP_ID_ATTR=dn`. A `dn` subject is stored in
+canonical RFC 4514 form and resolved with a base-scope read that must stay inside the
+user or group base. This mode trades immutability for compatibility: a recreated
+`uid` inherits the previous Pabawi account and its role mappings, and a renamed or
+moved group loses its mappings while a new group at the old DN gains them. Changing
+the mode, or either identity attribute, on an existing installation changes every
+subject: existing LDAP accounts no longer match and group mappings must be recreated.
 
 TLS 1.2 or later, CA verification, hostname validation and endpoint SNI are required
 for LDAPS and StartTLS. A configured PEM bundle adds certificates to Node's default

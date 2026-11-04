@@ -1,7 +1,7 @@
 import { ldapDnEquals, ldapDnWithinScope, parseLdapDn } from '../config/ldapDn';
 import {
   AndFilter, OrFilter, EqualityFilter, ExtensibleFilter, SubstringFilter,
-  InappropriateMatchingError, InvalidCredentialsError,
+  InappropriateMatchingError, InvalidCredentialsError, NoSuchObjectError,
   SizeLimitExceededError, TimeLimitExceededError, UnavailableCriticalExtensionError,
 } from 'ldapts';
 import type { Entry, Filter, SearchOptions } from 'ldapts';
@@ -9,7 +9,7 @@ import type { LdapConfig } from '../config/ldap';
 import { parseLdapFilter } from '../config/ldapFilter';
 import type { LoggerService } from './LoggerService';
 import { LdapDirectoryError } from './ldap/LdapDirectoryError';
-import { canonicalUuid, guidToSubject, subjectToGuid } from './ldap/identity';
+import { canonicalSubject, guidToSubject, isDnAttribute, subjectToGuid } from './ldap/identity';
 import { adPolicyAttributes, attributeValues, checkAdEligibility, textAttribute } from './ldap/policy';
 import { openLdapConnection } from './ldap/transport';
 import type { LdapConnection, LdapConnector, LdapEndpoint } from './ldap/transport';
@@ -29,6 +29,8 @@ export interface LdapDiagnosticStage {
 export interface LdapDiagnostics {
   authenticated: false; stages: LdapDiagnosticStage[]; groupSubjects?: string[];
 }
+/** Where a subject lives: a filter under a search base, or (dn identities) the entry itself. */
+interface Locator { base: string; scope: 'base' | 'sub'; filter?: Filter }
 interface Transaction {
   signal: AbortSignal; endpoint: LdapEndpoint; lookup: LdapConnection;
   connections: LdapConnection[];
@@ -63,7 +65,7 @@ export class LdapDirectoryService {
       throw new LdapDirectoryError('INVALID_CREDENTIALS');
     }
     return this.transaction('authenticate', async tx => {
-      const before = await this.user(tx, this.equality(this.config.userLookupAttr, loginName), true);
+      const before = await this.user(tx, { base: this.userBase, scope: 'sub', filter: this.equality(this.config.userLookupAttr, loginName) }, true);
       const userBind = await this.connect(this.config, tx.endpoint, tx.signal);
       if (tx.signal.aborted) { userBind.close(); throw new LdapDirectoryError('TIMEOUT'); }
       tx.connections.push(userBind);
@@ -72,7 +74,7 @@ export class LdapDirectoryService {
       userBind.close();
       // A reused login or moved locator must not substitute another immutable identity after bind.
       let after: LdapDirectoryUser;
-      try { after = await this.user(tx, this.subjectFilter(this.config.userIdAttr, before.subject), false); }
+      try { after = await this.user(tx, this.userLocator(before.subject), false); }
       catch (error) {
         if (error instanceof LdapDirectoryError && error.code === 'INELIGIBLE') throw new LdapDirectoryError('IDENTITY_CHANGED');
         throw error;
@@ -86,10 +88,10 @@ export class LdapDirectoryService {
   }
 
   public async revalidate(subject: string, mappedGroups: readonly string[] = []): Promise<LdapDirectoryResult> {
-    const identityFilter = this.subjectFilter(this.config.userIdAttr, subject);
+    const locator = this.userLocator(subject);
     return this.transaction('revalidate', async tx => {
-      const user = await this.user(tx, identityFilter, false);
-      if (user.subject !== canonicalUuid(subject)) throw new LdapDirectoryError('IDENTITY_CHANGED');
+      const user = await this.user(tx, locator, false);
+      if (user.subject !== this.subject(this.config.userIdAttr, subject)) throw new LdapDirectoryError('IDENTITY_CHANGED');
       return { user, groupSubjects: await this.memberships(tx, user.dn, mappedGroups) };
     });
   }
@@ -100,14 +102,19 @@ export class LdapDirectoryService {
       const filter = this.and(this.equality('objectClass', this.config.groupObjectClass),
         new OrFilter({ filters: [...new Set([this.config.groupLookupAttr, this.config.groupNameAttr])]
           .map(attribute => new SubstringFilter({ attribute, any: [query] })) }));
-      const entries = await this.search(tx, this.groupBase, filter, this.groupAttributes(), this.config.groupSearchLimit);
+      const entries = await this.search(tx, { base: this.groupBase, scope: 'sub', filter }, this.groupAttributes(), this.config.groupSearchLimit);
       return entries.map(entry => this.group(entry));
     });
   }
 
   public async resolveGroup(subject: string): Promise<LdapDirectoryGroup> {
-    const filter = this.subjectFilter(this.config.groupIdAttr, subject);
-    return this.transaction('resolveGroup', async tx => this.resolveGroupInTransaction(tx, filter));
+    const locator = this.groupLocator(subject);
+    return this.transaction('resolveGroup', async tx => this.resolveGroupInTransaction(tx, locator));
+  }
+
+  /** Normalizes an administrator-supplied group subject the way stored subjects are normalized. */
+  public groupSubject(value: string): string {
+    return this.subject(this.config.groupIdAttr, value);
   }
 
   public async diagnose(input: { username?: string; groupSubjects?: string[] }): Promise<LdapDiagnostics> {
@@ -120,18 +127,18 @@ export class LdapDirectoryService {
         if (username === undefined) return;
         if (!username || Buffer.byteLength(username) > 1024) throw new LdapDirectoryError('LIMIT_EXCEEDED');
         const subject = await this.diagnosticStage(stages, 'identity', async () => {
-          const entries = await this.search(tx, this.userBase,
-            this.and(this.equality('objectClass', this.config.userObjectClass), this.equality(this.config.userLookupAttr, username)),
+          const entries = await this.search(tx, { base: this.userBase, scope: 'sub',
+            filter: this.and(this.equality('objectClass', this.config.userObjectClass), this.equality(this.config.userLookupAttr, username)) },
             [this.config.userIdAttr], 2);
           if (entries.length !== 1) throw new LdapDirectoryError('INVALID_IDENTITY');
           if (!this.inScope(entries[0].dn, this.userBase)) throw new LdapDirectoryError('INCOMPLETE_RESULT');
           return this.identity(entries[0], this.config.userIdAttr);
         });
-        const user = await this.diagnosticStage(stages, 'eligibility', () => this.user(tx, this.subjectFilter(this.config.userIdAttr, subject), false));
+        const user = await this.diagnosticStage(stages, 'eligibility', () => this.user(tx, this.userLocator(subject), false));
         const groups = input.groupSubjects;
         if (groups?.length) {
           result.groupSubjects = await this.diagnosticStage(stages, 'groups', async () => {
-            for (const subject of groups) await this.resolveGroupInTransaction(tx, this.subjectFilter(this.config.groupIdAttr, subject));
+            for (const subject of groups) await this.resolveGroupInTransaction(tx, this.groupLocator(subject));
             return this.memberships(tx, user.dn, groups);
           });
         }
@@ -248,22 +255,49 @@ export class LdapDirectoryService {
     return new EqualityFilter({ attribute, value });
   }
 
-  private subjectFilter(attribute: string, subject: string): Filter {
-    return this.equality(attribute, this.config.directoryType === 'ad' ? subjectToGuid(subject) : canonicalUuid(subject));
+  private subject(attribute: string, value: string): string {
+    return canonicalSubject(this.config.identityMode, attribute, value);
+  }
+
+  private userLocator(subject: string): Locator {
+    return this.locator(this.config.userIdAttr, this.userBase, subject);
+  }
+
+  private groupLocator(subject: string): Locator {
+    return this.locator(this.config.groupIdAttr, this.groupBase, subject);
+  }
+
+  private locator(attribute: string, base: string, subject: string): Locator {
+    const value = this.subject(attribute, subject);
+    if (isDnAttribute(attribute)) {
+      // OpenLDAP has no dn equality filter; read the entry itself, and only inside the configured scope.
+      if (!this.inScope(value, base)) throw new LdapDirectoryError('INVALID_IDENTITY');
+      return { base: value, scope: 'base' };
+    }
+    return { base, scope: 'sub', filter: this.equality(attribute, this.config.directoryType === 'ad' ? subjectToGuid(value) : value) };
   }
 
   private and(...filters: (Filter | undefined)[]): Filter {
     return new AndFilter({ filters: filters.filter((filter): filter is Filter => filter !== undefined) });
   }
 
-  private async search(tx: Transaction, base: string, filter: Filter, attributes: string[], limit: number): Promise<Entry[]> {
+  private async search(tx: Transaction, locator: Required<Locator>, attributes: string[], limit: number): Promise<Entry[]> {
     tx.signal.throwIfAborted();
+    // dn is not an attribute; an empty list would mean "all attributes", so ask for none (RFC 4511 1.1).
+    const requested = attributes.filter(attribute => !isDnAttribute(attribute));
     const options: SearchOptions = {
-      scope: 'sub', derefAliases: 'never', filter, attributes, sizeLimit: limit,
+      scope: locator.scope, derefAliases: 'never', filter: locator.filter,
+      attributes: requested.length ? requested : ['1.1'], sizeLimit: limit,
       paged: false, timeLimit: this.config.operationTimeoutSeconds,
       explicitBufferAttributes: this.config.directoryType === 'ad' ? [this.config.userIdAttr, this.config.groupIdAttr] : [],
     };
-    const result = await tx.lookup.search(base, options);
+    let result;
+    try { result = await tx.lookup.search(locator.base, options); }
+    catch (error) {
+      // A vanished dn identity is an absent entry, not an outage.
+      if (locator.scope === 'base' && error instanceof NoSuchObjectError) return [];
+      throw error;
+    }
     tx.signal.throwIfAborted();
     if (result.searchReferences.length) throw new LdapDirectoryError('INCOMPLETE_RESULT');
     if (result.searchEntries.length > limit) throw new LdapDirectoryError('LIMIT_EXCEEDED');
@@ -271,6 +305,7 @@ export class LdapDirectoryService {
   }
 
   private identity(entry: Entry, attribute: string): string {
+    if (isDnAttribute(attribute) && this.config.identityMode === 'attribute') return this.subject(attribute, entry.dn);
     const values = attributeValues(entry, attribute);
     if (values.length !== 1) throw new LdapDirectoryError('INVALID_IDENTITY');
     const value = values[0];
@@ -279,13 +314,13 @@ export class LdapDirectoryService {
       return guidToSubject(value);
     }
     if (typeof value !== 'string') throw new LdapDirectoryError('INVALID_IDENTITY');
-    return canonicalUuid(value);
+    return this.subject(attribute, value);
   }
 
-  private async user(tx: Transaction, identityFilter: Filter, credentials: boolean): Promise<LdapDirectoryUser> {
+  private async user(tx: Transaction, locator: Locator, credentials: boolean): Promise<LdapDirectoryUser> {
     const c = this.config;
-    const entries = await this.search(tx, this.userBase,
-      this.and(this.equality('objectClass', c.userObjectClass), identityFilter, this.eligibilityFilter),
+    const entries = await this.search(tx, { ...locator,
+      filter: this.and(this.equality('objectClass', c.userObjectClass), locator.filter, this.eligibilityFilter) },
       [c.userIdAttr, c.userLookupAttr, c.userEmailAttr, c.userDisplayNameAttr, c.userGivenNameAttr, c.userSurnameAttr,
         ...(c.directoryType === 'ad' ? adPolicyAttributes : [])], 2);
     if (entries.length !== 1) throw new LdapDirectoryError(credentials ? 'INVALID_CREDENTIALS'
@@ -328,25 +363,25 @@ export class LdapDirectoryService {
     return { subject: this.identity(entry, this.config.groupIdAttr), dn: entry.dn, name };
   }
 
-  private async resolveGroupInTransaction(tx: Transaction, filter: Filter): Promise<LdapDirectoryGroup> {
-    const entries = await this.search(tx, this.groupBase,
-      this.and(this.equality('objectClass', this.config.groupObjectClass), filter), this.groupAttributes(), 2);
+  private async resolveGroupInTransaction(tx: Transaction, locator: Locator): Promise<LdapDirectoryGroup> {
+    const entries = await this.search(tx, { ...locator,
+      filter: this.and(this.equality('objectClass', this.config.groupObjectClass), locator.filter) }, this.groupAttributes(), 2);
     if (entries.length !== 1) throw new LdapDirectoryError('INVALID_IDENTITY');
     return this.group(entries[0]);
   }
 
   private async memberships(tx: Transaction, userDn: string, subjects: readonly string[]): Promise<string[]> {
     if (subjects.length > this.config.groupTraversalLimit) throw new LdapDirectoryError('LIMIT_EXCEEDED');
-    const mapped = new Set(subjects.map(canonicalUuid));
-    if (!mapped.size) return [];
     const c = this.config;
+    const mapped = new Set(subjects.map(subject => this.subject(c.groupIdAttr, subject)));
+    if (!mapped.size) return [];
     const visited: LdapDirectoryGroup[] = [];
     const visitedSubjects = new Set<string>();
     const frontier = [{ dn: userDn, depth: 0 }];
     // Reverse membership searches avoid downloading AD ranged member lists entirely.
     for (const current of frontier) {
-      const parents = await this.search(tx, this.groupBase,
-        this.and(this.equality('objectClass', c.groupObjectClass), this.equality(c.groupMemberAttr, current.dn)),
+      const parents = await this.search(tx, { base: this.groupBase, scope: 'sub',
+        filter: this.and(this.equality('objectClass', c.groupObjectClass), this.equality(c.groupMemberAttr, current.dn)) },
         this.groupAttributes(), c.groupTraversalLimit - visited.length + 1);
       for (const entry of parents) {
         const group = this.group(entry);
@@ -369,9 +404,9 @@ export class LdapDirectoryService {
     if (c.directoryType === 'ad' && c.searchNestedGroups && !c.disableMatchingRuleInChain) {
       // Bounded traversal proves scope and completeness first. The AD rule is only a checked optimization.
       try {
-        const entries = await this.search(tx, this.groupBase,
-          this.and(this.equality('objectClass', c.groupObjectClass),
-            new ExtensibleFilter({ matchType: c.groupMemberAttr, rule: '1.2.840.113556.1.4.1941', value: userDn })),
+        const entries = await this.search(tx, { base: this.groupBase, scope: 'sub',
+          filter: this.and(this.equality('objectClass', c.groupObjectClass),
+            new ExtensibleFilter({ matchType: c.groupMemberAttr, rule: '1.2.840.113556.1.4.1941', value: userDn })) },
           this.groupAttributes(), c.groupTraversalLimit);
         const chain = new Set(entries.map(entry => this.group(entry).subject));
         if (chain.size !== visitedSubjects.size || [...visitedSubjects].some(subject => !chain.has(subject))) {
