@@ -71,6 +71,8 @@ export default defineConfig({
     { name: "setup", testMatch: /auth\.setup\.ts/ },
     {
       name: "chromium",
+      // Execution tests share the server queue and deliberately occupy its only slot.
+      workers: 1,
       use: { ...devices["Desktop Chrome"], storageState: STORAGE_STATE },
       testIgnore: /auth\.setup\.ts/,
       testMatch: /.*\.authenticated\.spec\.ts/,

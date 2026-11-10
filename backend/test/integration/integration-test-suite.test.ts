@@ -16,6 +16,7 @@ import { IntegrationManager } from '../../src/integrations/IntegrationManager';
 import { LoggerService } from '../../src/services/LoggerService';
 import { BoltPlugin } from '../../src/integrations/bolt/BoltPlugin';
 import { BoltService } from '../../src/integrations/bolt/BoltService';
+import { PuppetDBClient } from '../../src/integrations/puppetdb/PuppetDBClient';
 import { PuppetDBService } from '../../src/integrations/puppetdb/PuppetDBService';
 import { PuppetserverService } from '../../src/integrations/puppetserver/PuppetserverService';
 import { NodeLinkingService } from '../../src/integrations/NodeLinkingService';
@@ -154,6 +155,16 @@ describe('Comprehensive Integration Test Suite', () => {
   });
 
   describe('PuppetDB API Integration with Mock Responses', () => {
+    beforeEach(() => {
+      vi.spyOn(PuppetDBClient.prototype, 'query').mockResolvedValue([
+        { certname: 'web01.example.com' },
+      ]);
+    });
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
     it('should initialize PuppetDB service with configuration', async () => {
       const puppetdbService = new PuppetDBService();
 
@@ -188,13 +199,11 @@ describe('Comprehensive Integration Test Suite', () => {
 
       await puppetdbService.initialize(config);
 
-      // Attempt to get inventory (will fail to connect but should handle gracefully)
-      try {
-        await puppetdbService.getInventory();
-      } catch (error) {
-        // Expected to fail in test environment
-        expect(error).toBeDefined();
-      }
+      const inventory = await puppetdbService.getInventory();
+      expect(inventory).toEqual([
+        expect.objectContaining({ id: 'web01.example.com', source: 'puppetdb' }),
+      ]);
+      expect(PuppetDBClient.prototype.query).toHaveBeenCalledWith('pdb/query/v4/nodes', undefined);
     });
 
     it('should validate PQL query format', async () => {
