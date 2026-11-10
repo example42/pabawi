@@ -4,9 +4,10 @@
  * Tests for PuppetDB integration service
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { PuppetDBService } from '../../src/integrations/puppetdb/PuppetDBService';
 import {
+  PuppetDBClient,
   PuppetDBConnectionError,
   PuppetDBQueryError,
 } from '../../src/integrations/puppetdb/PuppetDBClient';
@@ -16,7 +17,12 @@ describe('PuppetDBService', () => {
   let service: PuppetDBService;
 
   beforeEach(() => {
+    vi.spyOn(PuppetDBClient.prototype, 'query').mockResolvedValue([]);
     service = new PuppetDBService();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   describe('initialization', () => {
@@ -67,7 +73,6 @@ describe('PuppetDBService', () => {
         },
       };
 
-      // Note: This will fail to connect to the actual server, but should initialize the client
       await expect(service.initialize(config)).resolves.not.toThrow();
       expect(service.isInitialized()).toBe(true);
     });
@@ -106,8 +111,6 @@ describe('PuppetDBService', () => {
 
       await service.initialize(config);
 
-      // Test that PQL string queries are properly identified
-      // These will fail to connect, but should not fail validation
       const pqlStringQueries = [
         'nodes[certname]',
         'nodes[certname] { certname = "web01" }',
@@ -120,24 +123,10 @@ describe('PuppetDBService', () => {
         '["and", ["=", "certname", "web01"], ["=", "environment", "production"]]',
       ];
 
-      // PQL string queries should not throw validation errors
-      for (const query of pqlStringQueries) {
-        try {
-          await service.queryInventory(query);
-        } catch (error) {
-          // Should fail with connection error, not validation error
-          expect(error).not.toBeInstanceOf(PuppetDBQueryError);
-        }
-      }
-
-      // JSON queries should not throw validation errors either
-      for (const query of jsonQueries) {
-        try {
-          await service.queryInventory(query);
-        } catch (error) {
-          // Should fail with connection error, not validation error
-          expect(error).not.toBeInstanceOf(PuppetDBQueryError);
-        }
+      for (const query of [...pqlStringQueries, ...jsonQueries]) {
+        vi.mocked(PuppetDBClient.prototype.query).mockClear();
+        await expect(service.queryInventory(query)).resolves.toEqual([]);
+        expect(PuppetDBClient.prototype.query).toHaveBeenCalledOnce();
       }
     });
   });
@@ -234,17 +223,12 @@ describe('PuppetDBService', () => {
 
       await service.initialize(config);
 
-      // Verify getNodeData supports 'events' type
-      // This will fail to connect, but should not throw a "unsupported type" error
-      try {
-        await service.getNodeData('test-node', 'events');
-      } catch (error) {
-        // Should fail with connection error, not unsupported type error
-        expect(error).toBeDefined();
-        if (error instanceof Error) {
-          expect(error.message).not.toContain('Unsupported data type');
-        }
-      }
+      await expect(service.getNodeData('test-node', 'events')).resolves.toEqual([]);
+      expect(PuppetDBClient.prototype.query).toHaveBeenCalledWith(
+        'pdb/query/v4/events',
+        JSON.stringify(["=", "certname", "test-node"]),
+        expect.objectContaining({ order_by: '[{"field": "timestamp", "order": "desc"}]' }),
+      );
     });
   });
 
@@ -285,7 +269,9 @@ describe('PuppetDBService', () => {
 
       await service.initialize(config);
 
-      // This will fail to connect, but should return empty array instead of throwing
+      vi.mocked(PuppetDBClient.prototype.query).mockRejectedValue(
+        new PuppetDBConnectionError('PuppetDB is unavailable'),
+      );
       const groups = await service.getGroups();
       expect(Array.isArray(groups)).toBe(true);
       expect(groups.length).toBe(0);
@@ -303,12 +289,16 @@ describe('PuppetDBService', () => {
 
       await service.initialize(config);
 
+      vi.mocked(PuppetDBClient.prototype.query)
+        .mockResolvedValueOnce([{ certname: 'web01', catalog_environment: 'production' }])
+        .mockResolvedValueOnce([{ certname: 'web01', 'os.family': 'Debian' }]);
       const groups = await service.getGroups();
+      expect(groups).toHaveLength(2);
+      expect(groups.map(group => group.id)).toEqual(['puppetdb:env-production', 'puppetdb:os-Debian']);
+      expect(groups.every(group => group.nodes.includes('web01'))).toBe(true);
 
-      // Verify structure (even if empty)
       expect(Array.isArray(groups)).toBe(true);
 
-      // If groups exist, verify they have the correct structure
       groups.forEach(group => {
         expect(group).toHaveProperty('id');
         expect(group).toHaveProperty('name');
